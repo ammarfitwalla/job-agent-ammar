@@ -43,7 +43,7 @@ GOOGLE_SHEET_NAME = "Ammar Job Tracker"
 # ==============
 # EMAIL SETTINGS
 # ==============
-SENDER_EMAIL = "ammarfitwalla@gmail.com"
+SENDER_EMAIL = "yourmail@gmail.com"
 DAILY_EMAIL_SUBJECT = "Daily Job Application Summary"
 
 # ==============
