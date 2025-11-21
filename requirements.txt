@@ -1,0 +1,23 @@
+# Core
+requests
+beautifulsoup4
+lxml
+python-dotenv
+
+# Browser Automation
+playwright
+playwright-stealth
+
+# Google Sheets
+gspread
+oauth2client
+
+# Email
+yagmail
+
+# Utils
+pandas
+tqdm
+
+# Local LLM (Ollama)
+openai==1.40.0  # used in local mode for Ollama API compatibility
