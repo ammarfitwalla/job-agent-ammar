@@ -1,39 +1,19 @@
 # browser.py
 import time
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
+import undetected_chromedriver as uc
+from selenium.webdriver.common.by import By
 
 def get_browser():
-    options = Options()
-
-    # DO NOT USE HEADLESS
-    # options.add_argument("--headless=new")
-
+    options = uc.ChromeOptions()
+    
     # Anti-block flags
     options.add_argument("--start-maximized")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--disable-infobars")
-
-    # DNS fix flags
-    options.add_argument("--disable-features=UseDnsHttpsSvcb")
-    options.add_argument("--disable-features=EnforceDnsHttps")
-    options.add_argument("--disable-features=EncryptedClientHello")
-    options.add_argument("--disable-features=UseChromeOSDirectDNSConfig")
-    options.add_argument("--disable-features=UseDNSHTTPS")
-    options.add_argument("--dns-prefetch-disable")
-
-    # Safety
-    options.add_argument("--ignore-certificate-errors")
-    options.add_argument("--allow-running-insecure-content")
-
-    # IMPORTANT: Pass options
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
-    )
-
+    options.add_argument("--disable-popup-blocking")
+    
+    # Initialize undetected-chromedriver
+    # use_subprocess=True is often safer for avoiding zombie processes
+    driver = uc.Chrome(options=options, use_subprocess=True)
+    
     return driver
 
 
