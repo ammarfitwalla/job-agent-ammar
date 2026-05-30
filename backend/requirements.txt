@@ -19,5 +19,9 @@ yagmail
 pandas
 tqdm
 
-# Local LLM (Ollama)
-openai==1.40.0  # used in local mode for Ollama API compatibility
+# LLM
+groq
+
+# API
+fastapi
+uvicorn[standard]

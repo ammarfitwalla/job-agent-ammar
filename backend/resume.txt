@@ -1,0 +1,107 @@
+FITWALLA
+ AMMAR
+ Mumbai, India
+ (+91) 8356076630
+ ammarfitwalla@gmail.com
+ www.ammarf.com
+ linkedin.com/in/
+ ammarfitwalla
+ https://github.com/
+ ammarfitwalla/
+ Software Engineer with 6+ years of experience in AI, backend development, deep learning, forecasting, NLP,
+ and computer vision, specializing in automating ML solutions. 
+Passionate about solving complex business problems through innovative and efficient analytical solutions.
+ Holds a Master of Engineering in Information Technology from the University of Mumbai.
+ EDUCATION
+ Master of Engineering, Information Technology
+ University of Mumbai
+ Bachelor of Engineering, Computer Engineering
+ University of Mumbai- 2021- 2017
+ WORK EXPERIENCE
+ Senior Manager - Data and Analytics, WPP Media 
+September, 2025 - Present
+ Integrated OpenAI GPT-4o with a Flask backend to interpret user queries, generate structured intents
+ (metric, platform, time range), and dynamically build SQL queries for BigQuery.
+ Engineered structured prompts, JSON schema outputs, and error-handling logic to ensure accurate,
+ explainable, and low-latency GPT responses.
+ Developed scalable API endpoints and middleware to securely fetch analytics data from GCP, optimize
+ query performance, and manage user authentication with JWT.
+ Led end-to-end development of an automated campaign performance forecasting system using Google
+ Cloud Platform (GCP) and BigQuery, analysing large-scale advertising data and building XGBoost to
+ predict campaign performance for the next ‘n’ days.
+ Automated the prediction pipeline, enabling on-demand forecasting directly through the campaign portal
+ with no manual intervention.
+ System Engineer, Tata Consultancy Services 
+(Client - Ericsson)
+ March, 2022 - August 2025
+ Developed and optimized AI forecasting models (ARIMA, Prophet) to accurately predict business trends
+ and enhance operational efficiency.
+ Automated data pipelines using Jenkins to deliver high-quality data to our AI models, reducing manual
+ intervention by 80% ensuring timely and accurate predictions.
+ Developed REST APIs using Python Flask Framework to provide intuitive UI screens, making it easy for end
+ users to access and interpret predictive insights.
+ Led full Software Development Life Cycle, from ideation to deployment and ongoing operation, ensuring
+ timely delivery of software product.
+ Applied Agile/Scrum practices, participated in sprint planning, completed 5+ tasks per sprint, and
+ improved efficiency by 20% through process automation.
+ Utilized Git for version control and conducted peer code reviews via Gerrit to maintain clean, secure, and
+ high-quality code repositories.
+ Data Scientist, KernelSphere Technologies LLC
+ January, 2021 - February 2022
+ Developed a large-scale Machine Learning system to predict Forex trends by analyzing 30GB+ of historical
+ data. Trained LSTM neural network using TensorFlow alongside Prophet and XGBoost models, achieving
+ 60% back-tested accuracy on currency pairs like EUR/USD.
+ Moved the system to AWS for scalability: Automated weekly retraining of models with new data stored in
+ S3 buckets, deployed models as real-time APIs using SageMaker.
+ Created a Django web app hosted on an AWS EC2 instance, integrated with AWS services to display live
+ Forex trend predictions. Optimized dashboard performance by 35% using PostgreSQL with indexed tables.
+ Built NLP models to extract financial insights from unstructured PDFs, successfully achieving 80%
+ accuracy in extracting key financial data, improving analytical workflows.
+Machine Learning Engineer, KernelSphere Technologies LLC
+ June, 2019 - January 2021
+ Built Deep Learning models in the healthcare domain that classify various diseases with 90% accuracy
+ within a fraction of seconds, reducing the time for diagnosis and improving patient outcomes. 
+Applied CNN, R-CNN and YOLOv3 algorithms to detect objects in high-resolution civil engineering
+ drawings (~3000x3000 pixels) having accuracy of ~80%.
+ Wrote custom algorithms to extract and store information from drawings in a GraphQL database, reducing
+ time for data retrieval and improving accessibility to important information.
+ Innovative Projects, Ammar Fitwalla
+ Built a no-code ML pipeline automation platform using Django and React, enabling users to run EDA,
+ feature engineering, and model training with just button clicks.
+ Implemented ML workflows with Pandas, Scikit-Learn, and XGBoost, delivering automated reports and
+ insights via dynamic frontend components.
+ Managed datasets, models, and metadata using PostgreSQL (GCP Cloud SQL).
+ Deployed on GCP Compute Engine VM for scalable, production-grade performance.
+ SKILLS
+ AI, Machine Learning and Computer Vision
+ Python, Tensorflow, Scikit-Learn and Pytorch
+ LLM, RAG, Vector DB, Langchain and Langraph
+ Image Processing and Analysis
+ Deep Neural Network & Graph Neural Network
+ Web Development
+ Django, Flask & FastAPI
+ Back-End REST API development
+ React.js
+ Software Engineering
+ Software Development Life Cycle (SDLC)
+ Git and Gerrit
+ Agile Methodologies
+ Continuous Integration and Continuous Delivery
+ (CI/CD)
+ Cloud
+ AWS S3, SageMaker, EC2
+ Google Cloud Platform (GCP), BigQuery
+ Docker, Kubernetes (K8S)
+ LI CENSES AND CERTIFICATIONS
+ Python 101 for Data Science - Cognitive Class - 
+Credential Link
+ Business Intelligence and Data Analytics - The Sparks Foundation - 
+Artificial Intelligence Foundations: Machine Learning - LinkedIn
+ Credential Link
+ AWARDS
+ TCS Star of the Month Award - September 2022
+ ACTIVITIES
+ Published Research paper in INTERNATIONAL JOURNAL OF ENGINEERING RESEARCH & TECHNOLOGY
+ (IJERT).
+ Delivered a guest lecture on AI and IoT at Vidyalankar Institute of Technology, Mumbai, educating students
+ on real-world AI and ML workflows.

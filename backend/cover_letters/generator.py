@@ -1,5 +1,5 @@
 # Cover letter generation
-from llm.ollama_client import OllamaLLM
+from llm.llm_client import LLMClient
 from llm.prompts import cover_letter_prompt
 from utils.logger import log
 
@@ -20,7 +20,7 @@ def generate_cover_letter(job: dict) -> str:
             role=job["title"],
             jd=job["description"]
         )
-        cover_letter = OllamaLLM.chat(prompt, max_tokens=400)
+        cover_letter = LLMClient.chat(prompt, max_tokens=400)
         return cover_letter.strip()
     except Exception as e:
         log(f"[COVER LETTER ERROR] {e}")

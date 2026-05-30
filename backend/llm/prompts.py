@@ -1,5 +1,5 @@
 # Relevance + Cover Letter prompts
-from match_engine.resume_data import RESUME_TEXT
+from match_engine import resume_data as _resume_data
 
 
 # ================
@@ -7,25 +7,23 @@ from match_engine.resume_data import RESUME_TEXT
 # ================
 def relevance_prompt(job_title: str, jd: str):
     return f"""
-You are an expert AI/ML hiring manager.
-
-Your job:
-Rate how relevant this job is to the candidate's resume below.
+You are an expert hiring manager. Compare the job vs the candidate's resume.
 
 Resume:
-{RESUME_TEXT}
+{_resume_data.RESUME_TEXT}
 
 Job Title: {job_title}
 Job Description:
 {jd}
 
 Scoring Rules (0–100):
-- +40 if it's directly AI/ML/Data Science
-- +20 if requires Python, ML frameworks (TF, PyTorch)
-- +15 if backend Python/API experience is useful
-- +10 if cloud (AWS/GCP) matches resume
-- -20 if it's not technical
-- -40 if it's sales, HR, marketing or unrelated
+- Score based on how well skills, experience, and domain match the resume
+- +40 if the core role/domain matches the candidate's background
+- +20 if required tools, technologies, or methodologies match
+- +15 if the candidate has relevant experience level
+- +10 if secondary skills or nice-to-haves match
+- -20 if the role is in a different domain or seniority mismatch
+- -40 if the role is completely unrelated to the candidate's background
 
 Respond ONLY in JSON:
 {{
@@ -33,6 +31,8 @@ Respond ONLY in JSON:
   "reason": "<one-line explanation>",
   "is_relevant": true/false
 }}
+
+without using ```
 """
 
 
@@ -44,7 +44,7 @@ def cover_letter_prompt(company: str, role: str, jd: str):
 Write a concise 120–180 word cover letter.
 
 Candidate Resume:
-{RESUME_TEXT}
+{_resume_data.RESUME_TEXT}
 
 Job Role: {role}
 Company: {company}

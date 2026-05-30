@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Agent</title>
+  <script src="https://cdn.tailwindcss.com">
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen font-sans">
+
+  <!-- Header -->
+  <header class="bg-gradient-to-r from-indigo-700 to-purple-700 text-white">
+    <div class="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 bg-white/20 backdrop-blur rounded-lg flex items-center justify-center text-lg font-bold">J</div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight">Job Agent</h1>
+          <p class="text-xs text-indigo-200">Scrape &middot; Score &middot; Apply</p>
+        </div>
+      </div>
+      <div class="text-xs text-indigo-200 bg-white/10 px-3 py-1.5 rounded-full hidden sm:block">
+        <span id="resultCount">0</span> jobs found
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-4 sm:p-6">
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+
+      <!-- ===== LEFT PANEL ===== -->
+      <div class="lg:col-span-2 space-y-4">
+
+        <!-- Resume -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <label class="font-semibold text-sm">Resume</label>
+          </div>
+          <textarea id="resume" rows="8" class="w-full border border-slate-200 rounded-lg p-3 text-sm font-mono bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none transition" placeholder="Paste your resume text here..."></textarea>
+          <button id="extractBtn" class="mt-2 w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed">Extract Keywords</button>
+        </div>
+
+        <!-- Keywords -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+            <label class="font-semibold text-sm">Keywords</label>
+            <span class="text-xs text-slate-400 ml-auto" id="kwCount">0 selected</span>
+          </div>
+          <div id="keywords" class="flex flex-wrap gap-1.5 min-h-[32px]">
+            <span class="text-xs text-slate-400 italic">Paste a resume and click Extract Keywords</span>
+          </div>
+        </div>
+
+        <!-- Roles -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            <label class="font-semibold text-sm">Job Roles</label>
+            <span class="text-xs text-slate-400 ml-auto" id="roleCount">0 selected</span>
+          </div>
+          <div id="roles" class="space-y-1 max-h-56 overflow-y-auto"></div>
+          <div class="mt-3 flex gap-2">
+            <input id="customRoleInput" type="text" class="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-300" placeholder="Add custom role...">
+            <button id="addRoleBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium transition">+ Add</button>
+          </div>
+          <div id="customRoles" class="mt-2 flex flex-wrap gap-1.5"></div>
+        </div>
+
+        <!-- Sites -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <label class="font-semibold text-sm">Sites</label>
+          </div>
+          <div id="sites" class="flex flex-wrap gap-2 text-sm">
+            <label class="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full cursor-pointer hover:bg-indigo-100 transition"><input type="checkbox" value="remoteok" checked class="accent-indigo-600"><span>RemoteOK</span></label>
+            <label class="flex items-center gap-1.5 bg-slate-100 text-slate-400 px-3 py-1.5 rounded-full cursor-not-allowed"><input type="checkbox" value="weworkremotely" disabled class="accent-slate-400"><span>WeWorkRemotely</span></label>
+            <label class="flex items-center gap-1.5 bg-slate-100 text-slate-400 px-3 py-1.5 rounded-full cursor-not-allowed"><input type="checkbox" value="naukri" disabled class="accent-slate-400"><span>Naukri</span></label>
+            <label class="flex items-center gap-1.5 bg-slate-100 text-slate-400 px-3 py-1.5 rounded-full cursor-not-allowed"><input type="checkbox" value="gulftalent" disabled class="accent-slate-400"><span>GulfTalent</span></label>
+            <label class="flex items-center gap-1.5 bg-slate-100 text-slate-400 px-3 py-1.5 rounded-full cursor-not-allowed"><input type="checkbox" value="eurojobs" disabled class="accent-slate-400"><span>EuroJobs</span></label>
+          </div>
+        </div>
+
+        <!-- Threshold -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+          <div class="flex items-center gap-2 mb-1">
+            <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <label class="font-semibold text-sm">Min Score</label>
+            <span id="thresholdVal" class="text-indigo-600 font-bold text-sm ml-auto">50</span>
+            <div class="relative group">
+              <span class="cursor-help text-slate-400 hover:text-slate-500 text-xs border border-slate-300 rounded-full w-4 h-4 inline-flex items-center justify-center leading-none">i</span>
+              <div class="absolute bottom-full right-0 mb-2 hidden group-hover:block bg-slate-800 text-white text-xs rounded-lg px-3 py-2 w-56 text-center shadow-lg z-10">
+                Only show jobs with total score (keywords + AI) at or above this value
+                <span class="absolute top-full right-3 border-4 border-transparent border-t-slate-800"></span>
+              </div>
+            </div>
+          </div>
+          <input type="range" id="thresholdSlider" min="0" max="200" value="50" class="w-full accent-indigo-600 mt-1">
+          <div class="flex justify-between text-xs text-slate-400 mt-0.5">
+            <span>0</span><span>100</span><span>200</span>
+          </div>
+        </div>
+
+        <!-- Search / Stop -->
+        <div class="flex gap-2">
+          <button id="searchBtn" class="flex-1 bg-emerald-600 text-white py-3 rounded-xl hover:bg-emerald-700 font-semibold shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            Search Jobs
+          </button>
+          <button id="stopBtn" class="w-24 bg-red-500 text-white py-3 rounded-xl hover:bg-red-600 font-semibold shadow-md transition hidden items-center justify-center gap-1">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><rect x="4" y="4" width="12" height="12" rx="1"/></svg>
+            Stop
+          </button>
+        </div>
+      </div>
+
+      <!-- ===== RIGHT PANEL ===== -->
+      <div class="lg:col-span-3">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 min-h-[500px] flex flex-col">
+
+          <!-- Status bar -->
+          <div id="status" class="hidden px-5 py-3 text-sm border-b border-slate-100 flex items-center gap-2"></div>
+
+          <!-- Spinner (shown during loading) -->
+          <div id="spinner" class="hidden flex-col items-center justify-center py-20 text-slate-400">
+            <svg class="w-8 h-8 animate-spin mb-3 text-indigo-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <span class="text-sm" id="spinnerMsg">Processing...</span>
+          </div>
+
+          <!-- Results -->
+          <div id="results" class="flex-1 p-5 space-y-0">
+            <div class="flex flex-col items-center justify-center py-20 text-slate-300">
+              <svg class="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <p class="text-sm">Results will appear here</p>
+              <p class="text-xs text-slate-300 mt-1">Select keywords + roles and search</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ===== STATE =====
+    let pollTimer = null;
+    let hasRawJobs = false;
+    let allJobs = [];
+    let currentThreshold = 50;
+    let customRoles = [];
+    let scrapeAttempts = 0;
+
+    // ===== INIT =====
+    checkRawJobs();
+    loadRoles();
+
+    async function checkRawJobs() {
+      try { const r = await fetch("/scrape/status"); const d = await r.json(); hasRawJobs = d.last_scrape_raw > 0; } catch {}
+    }
+
+    // ===== HELPERS =====
+    function showElement(id) {
+      document.getElementById(id).classList.remove("hidden");
+    }
+    function hideElement(id) {
+      document.getElementById(id).classList.add("hidden");
+    }
+
+    function setStatus(msg, type) {
+      const el = document.getElementById("status");
+      el.classList.remove("hidden", "bg-blue-50", "text-blue-700", "bg-red-50", "text-red-700", "bg-emerald-50", "text-emerald-700");
+      if (type === "red") el.classList.add("bg-red-50", "text-red-700");
+      else if (type === "green") el.classList.add("bg-emerald-50", "text-emerald-700");
+      else el.classList.add("bg-blue-50", "text-blue-700");
+      el.innerHTML = `<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${type === "red" ? "M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" : type === "green" ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" : "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"}"/></svg><span>${msg}</span>`;
+    }
+
+    function showSpinner(msg) {
+      document.getElementById("spinnerMsg").textContent = msg;
+      showElement("spinner");
+    }
+    function hideSpinner() {
+      hideElement("spinner");
+    }
+
+    function showStopBtn(show) {
+      document.getElementById("stopBtn").classList.toggle("hidden", !show);
+    }
+
+    function resetSearchBtn() {
+      document.getElementById("searchBtn").innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Search Jobs';
+      document.getElementById("searchBtn").disabled = false;
+      showStopBtn(false);
+    }
+
+    // Enable search only when resume is filled
+    document.getElementById("resume").addEventListener("input", () => {
+      const has = document.getElementById("resume").value.trim().length > 0;
+      document.getElementById("searchBtn").disabled = !has;
+    });
+
+    // ===== THRESHOLD SLIDER =====
+    document.getElementById("thresholdSlider").addEventListener("input", function () {
+      currentThreshold = parseInt(this.value);
+      document.getElementById("thresholdVal").textContent = currentThreshold;
+      applyThreshold();
+    });
+
+    function applyThreshold() {
+      const filtered = currentThreshold > 0 ? allJobs.filter(j => (j.total_score || 0) >= currentThreshold) : allJobs;
+      renderJobs(filtered);
+      document.getElementById("resultCount").textContent = filtered.length;
+    }
+
+    // ===== RESUME -> KEYWORDS =====
+    document.getElementById("extractBtn").addEventListener("click", async () => {
+      const resume = document.getElementById("resume").value.trim();
+      if (!resume) return alert("Paste your resume first");
+      const btn = document.getElementById("extractBtn");
+      btn.textContent = "Extracting...";
+      btn.disabled = true;
+      try {
+        const r = await fetch("/resume/keywords", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resume_text: resume }) });
+        const d = await r.json();
+        renderKeywords(d.keywords);
+      } catch (e) { alert("Failed: " + e.message); }
+      finally { btn.textContent = "Extract Keywords"; btn.disabled = false; }
+    });
+
+    function renderKeywords(kws) {
+      const c = document.getElementById("keywords");
+      if (!kws.length) { c.innerHTML = '<span class="text-xs text-slate-400 italic">No keywords found</span>'; return; }
+      c.innerHTML = kws.map(k => `<label class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer transition ${k.selected ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}"><input type="checkbox" value="${k.word}" ${k.selected ? "checked" : ""} class="hidden" onchange="this.parentElement.classList.toggle('bg-indigo-100');this.parentElement.classList.toggle('text-indigo-700');this.parentElement.classList.toggle('bg-slate-100');this.parentElement.classList.toggle('text-slate-500');updateKwCount()"><span>${k.word}</span></label>`).join("");
+      updateKwCount();
+    }
+
+    function updateKwCount() {
+      const n = getSelectedKeywords().length;
+      document.getElementById("kwCount").textContent = n + " selected";
+    }
+
+    // ===== ROLES =====
+    async function loadRoles() {
+      try { const r = await fetch("/roles"); const d = await r.json(); renderRoles(d.categories); } catch {}
+    }
+
+    function renderRoles(categories) {
+      const c = document.getElementById("roles");
+      const labels = { tech: "Tech", sales: "Sales", media: "Media", healthcare: "Healthcare", finance: "Finance", admin: "Admin", legal: "Legal", education: "Education" };
+      c.innerHTML = Object.entries(categories).map(([cat, roles]) =>
+        `<details class="border border-slate-200 rounded-lg overflow-hidden text-sm">
+          <summary class="cursor-pointer px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-500 flex items-center gap-2">${labels[cat]||cat} <span class="text-slate-400 font-normal">(${roles.length})</span></summary>
+          <div class="p-2 space-y-0.5 max-h-40 overflow-y-auto">${roles.map(r => `<label class="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-slate-50 cursor-pointer text-xs"><input type="checkbox" class="role-cb accent-indigo-600" value="${r}" onchange="updateRoleCount()"><span>${r}</span></label>`).join("")}</div>
+        </details>`
+      ).join("");
+    }
+
+    document.getElementById("addRoleBtn").addEventListener("click", () => {
+      const i = document.getElementById("customRoleInput");
+      const r = i.value.trim();
+      if (!r || customRoles.includes(r)) return;
+      customRoles.push(r); i.value = ""; renderCustomRoles(); updateRoleCount();
+    });
+    document.getElementById("customRoleInput").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("addRoleBtn").click(); });
+
+    function renderCustomRoles() {
+      const c = document.getElementById("customRoles");
+      c.innerHTML = customRoles.map(r => `<span class="inline-flex items-center gap-1 bg-purple-100 text-purple-700 text-xs px-2.5 py-0.5 rounded-full"><span>${r}</span><button class="remove-role hover:text-red-500 font-bold leading-none" data-role="${r}">&times;</button></span>`).join("");
+      c.querySelectorAll(".remove-role").forEach(b => b.addEventListener("click", () => { customRoles = customRoles.filter(r => r !== b.dataset.role); renderCustomRoles(); updateRoleCount(); }));
+    }
+
+    function updateRoleCount() {
+      document.getElementById("roleCount").textContent = getSelectedRoles().length + " selected";
+    }
+
+    function getSelectedRoles() { return [...Array.from(document.querySelectorAll(".role-cb:checked")).map(e => e.value), ...customRoles]; }
+
+    // ===== SITES =====
+    function getSelectedSites() { return Array.from(document.querySelectorAll("#sites input:checked:not(:disabled)")).map(e => e.value); }
+    function getSelectedKeywords() { return Array.from(document.querySelectorAll("#keywords input:checked")).map(e => e.value); }
+
+    // ===== SEARCH =====
+    document.getElementById("searchBtn").addEventListener("click", async () => {
+      const resume = document.getElementById("resume").value.trim();
+      if (!resume) return alert("Paste your resume first");
+      const sites = getSelectedSites(), keywords = getSelectedKeywords(), roles = getSelectedRoles();
+      if (!sites.length) return alert("Select at least one site");
+
+      document.getElementById("searchBtn").innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Searching...';
+      document.getElementById("searchBtn").disabled = true;
+      showStopBtn(true);
+
+      if (hasRawJobs) {
+        try {
+          const r = await fetch("/scrape/reprocess", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sites, keywords, resume_text: resume, roles }) });
+          await r.json();
+          await loadResults();
+          return;
+        } catch {}
+      }
+
+      showSpinner("Contacting scrapers...");
+      hideElement("results");
+      setStatus("Starting scrape...");
+      try {
+        await fetch("/scrape", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sites, keywords, resume_text: resume, roles }) });
+        scrapeAttempts = 0;
+        pollResults();
+      } catch (e) { setStatus("Error: " + e.message, "red"); resetSearchBtn(); hideSpinner(); }
+    });
+
+    // ===== STOP =====
+    document.getElementById("stopBtn").addEventListener("click", async () => {
+      try { await fetch("/scrape/stop", { method: "POST" }); } catch {}
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      showStopBtn(false); resetSearchBtn(); hideSpinner(); setStatus("Scraping stopped", "red");
+    });
+
+    // ===== POLL =====
+    function pollResults() {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(async () => {
+        scrapeAttempts++;
+        try {
+          const r = await fetch("/scrape/status");
+          const d = await r.json();
+          showSpinner(`Scraping... ${d.last_scrape_raw} raw jobs found`);
+
+          if (d.status === "done" || d.status === "error" || scrapeAttempts > 60) {
+            clearInterval(pollTimer); pollTimer = null;
+            hideSpinner();
+            if (d.status === "error") setStatus("Scraping failed", "red");
+            await loadResults();
+          }
+        } catch {
+          clearInterval(pollTimer); pollTimer = null;
+          setStatus("Error polling results", "red");
+          resetSearchBtn(); hideSpinner();
+        }
+      }, 2000);
+    }
+
+    // ===== LOAD RESULTS =====
+    async function loadResults() {
+      try {
+        const r = await fetch("/jobs");
+        const d = await r.json();
+        allJobs = d.jobs || [];
+        hasRawJobs = true;
+        showElement("results");
+        applyThreshold();
+        const msg = allJobs.length ? `Found ${allJobs.length} relevant jobs` : "No relevant jobs found";
+        setStatus(msg, allJobs.length ? "green" : undefined);
+      } catch (e) { setStatus("Error loading results: " + e.message, "red"); }
+      resetSearchBtn();
+      document.getElementById("resultCount").textContent = allJobs.length;
+    }
+
+    // ===== RENDER JOBS =====
+    function renderJobs(jobs) {
+      const c = document.getElementById("results");
+      if (!jobs.length) {
+        c.innerHTML = `<div class="flex flex-col items-center justify-center py-20 text-slate-300">
+          <svg class="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <p class="text-sm">No matching jobs found</p>
+          <p class="text-xs text-slate-300 mt-1">Try lowering the score threshold or changing keywords</p>
+        </div>`;
+        return;
+      }
+      c.innerHTML = jobs.map(j => {
+        const sc = j.total_score || 0;
+        const barPct = Math.min(sc / 2, 100);
+        const barColor = sc >= 100 ? "bg-emerald-500" : sc >= 50 ? "bg-amber-400" : "bg-red-400";
+        const txtColor = sc >= 100 ? "text-emerald-600" : sc >= 50 ? "text-amber-600" : "text-red-500";
+        return `<div class="border border-slate-100 rounded-xl p-4 hover:shadow-md hover:border-slate-200 transition cursor-default">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h3 class="font-semibold text-slate-800 truncate">${j.title}</h3>
+              <p class="text-sm text-slate-400 truncate">${j.company} &middot; ${j.location}</p>
+            </div>
+            <div class="text-right shrink-0">
+              <div class="font-mono text-lg font-bold ${txtColor}">${sc}</div>
+              <div class="text-xs text-slate-400">AI ${j.ai_score || 0} / KW ${j.keyword_score || 0}</div>
+            </div>
+          </div>
+          <div class="mt-2 w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full ${barColor} rounded-full transition-all" style="width:${barPct}%"></div>
+          </div>
+          ${j.reason ? `<p class="text-xs text-slate-400 mt-2 leading-relaxed">${j.reason}</p>` : ""}
+          <a href="${j.url}" target="_blank" class="text-indigo-600 text-xs hover:text-indigo-700 hover:underline mt-2 inline-flex items-center gap-1">${j.url.replace(/^https?:\/\//, '').substring(0, 40)}${j.url.length > 40 ? '...' : ''} <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
+        </div>`;
+      }).join("");
+    }
+  </script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 # Main orchestrator
 import sys
+from utils.emailer import send_remoteok_batch_email
 from scrapers import (
     remoteok_scraper,
     weworkremotely_scraper,
@@ -26,19 +27,20 @@ def main():
     for scraper, name in [
         (remoteok_scraper.scrape_remoteok, "remoteok_scraper"),
         (weworkremotely_scraper.scrape_wwr, "weworkremotely_scraper"),
-        (naukri_scraper.scrape_naukri, "naukri_scraper"),
-        (gulftalent_scraper.scrape_gulftalent, "gulftalent_scraper"),
-        (eurojobs_scraper.scrape_eurojobs, "eurojobs_scraper")
+        # (naukri_scraper.scrape_naukri, "naukri_scraper"),
+        # (gulftalent_scraper.scrape_gulftalent, "gulftalent_scraper"),
+        # (eurojobs_scraper.scrape_eurojobs, "eurojobs_scraper")
     ]:
         try:
             jobs = scraper()
             all_jobs.extend(jobs)
         except Exception as e:
             log(f"[ERROR] {name} failed: {e}")
-
+    for job in all_jobs:
+        print(job['title'])
     log(f"[MAIN] Total scraped jobs: {len(all_jobs)}")
     print(f"Total scraped jobs: {len(all_jobs)}")
-    sys.exit(0)
+    # sys.exit(0)
     # --------------------
     # 2️⃣ FILTER RELEVANT JOBS
     # --------------------
@@ -49,36 +51,48 @@ def main():
         log(f"[ERROR] Filtering jobs failed: {e}")
         relevant_jobs = []
 
+    # sys.exit(0)
     # --------------------
     # 3️⃣ GENERATE COVER LETTERS & APPLY
     # --------------------
     applied_jobs = []
-    for job in relevant_jobs:
-        try:
-            cl = generate_cover_letter(job)
-            job["cover_letter"] = cl
-        except Exception as e:
-            log(f"[ERROR] Cover letter generation failed for job {job.get('url', '')}: {e}")
-            continue
+    remoteok_weworkremotely_jobs = []
 
-        try:
-            log_job(job)
-        except Exception as e:
-            log(f"[ERROR] Logging job to Google Sheets failed for job {job.get('url', '')}: {e}")
+    for job in relevant_jobs:
+        # try:
+        #     cl = generate_cover_letter(job)
+        #     print("Cover letter generated for job: ", job.get('url', ''))
+        #     print(cl)
+        #     job["cover_letter"] = cl
+        # except Exception as e:
+        #     log(f"[ERROR] Cover letter generation failed for job {job.get('url', '')}: {e}")
+        #     continue
+
+        # try:
+        #     log_job(job)
+        # except Exception as e:
+        #     log(f"[ERROR] Logging job to Google Sheets failed for job {job.get('url', '')}: {e}")
 
         # Auto-apply (currently demo with RemoteOK)
         # Extend for other sites by adding site-specific apply modules
-        if "remoteok.com" in job["url"]:
+        if "remoteok.com" in job["url"].lower() or "weworkremotely.com" in job["url"].lower():
             try:
-                apply_remoteok(job, RESUME_PATH, cl)
-                applied_jobs.append(job)
+                # print("Applying for job: ", job.get('url', ''))
+                # apply_remoteok(job, RESUME_PATH, cl)
+                remoteok_weworkremotely_jobs.append(job)
             except Exception as e:
                 log(f"[ERROR] Auto-apply failed for job {job.get('url', '')}: {e}")
+        
+        # else:
+        #     print("Auto apply is disabled")
+        # if AUTO_APPLY:
+        #     # Extend to other sites similarly
+        #     pass
+    # sys.exit(0)
 
-        if AUTO_APPLY:
-            # Extend to other sites similarly
-            pass
-
+    if remoteok_weworkremotely_jobs:
+        send_remoteok_batch_email(remoteok_weworkremotely_jobs)
+        log(f"[EMAIL SENT] Total RemoteOK jobs sent: {len(remoteok_weworkremotely_jobs)}")
     # --------------------
     # 4️⃣ SEND DAILY REPORT
     # --------------------
@@ -90,4 +104,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if "--api" in sys.argv:
+        import uvicorn
+        uvicorn.run("api.main:app", host="0.0.0.0", port=8000, reload=True)
+    else:
+        main()
