@@ -1,4 +1,5 @@
 # AI + keyword scoring engine
+import copy
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from llm.llm_client import LLMClient
@@ -7,82 +8,99 @@ import config
 from utils.logger import log
 from utils.json_parser import extract_json
 
-def keyword_score(job_title: str, job_desc: str, job_tags: Optional[list[str]] = None, keywords: Optional[list[str]] = None) -> int:
-    score = 0
-    combined_text = f"{job_title} {job_desc}".lower()
+
+def keyword_score(
+    job_title: str,
+    job_desc: str,
+    job_tags: Optional[list] = None,
+    keywords: Optional[list] = None,
+) -> int:
+    combined = f"{job_title} {job_desc}".lower()
     if job_tags:
-        combined_text += " " + " ".join(job_tags).lower()
+        combined += " " + " ".join(job_tags).lower()
 
     kw_list = keywords if keywords else config.KEYWORDS_INCLUDE
-    for kw in kw_list:
-        if kw.lower() in combined_text:
-            score += 10
-
-    for kw in config.KEYWORDS_EXCLUDE:
-        if kw.lower() in combined_text:
-            score -= 20
-
-    return score
+    return sum(10 for kw in kw_list if kw.lower() in combined)
 
 
-def _score_one(args):
-    """Score a single job and return it with AI fields if relevant."""
-    job, min_score, keywords = args
-    job_tags = job.get("tags")
-    kw_score = keyword_score(job["title"], job["description"], job_tags, keywords)
+def _score_one(
+    job: dict,
+    min_score: int,
+    keywords: Optional[list],
+    resume: Optional[str],
+    llm_weight: float,
+    kw_weight: float,
+) -> Optional[dict]:
+    kw_score = keyword_score(job["title"], job["description"], job.get("tags"), keywords)
 
-    # Skip LLM if no keywords match — job is almost certainly irrelevant
-    if kw_score == 0:
-        print(f"[SKIP] {job['title']}: kw=0, no LLM call needed")
-        return None
-
-    prompt = relevance_prompt(job["title"], job["description"], job_tags)
+    prompt = relevance_prompt(job["title"], job["description"], job.get("tags"), resume=resume)
     response = LLMClient.chat(prompt)
-    print(f"[AI] {job['title']} -> {response[:120]}...")
 
     ai_result = extract_json(response)
     if not isinstance(ai_result, dict):
-        ai_result = {"score": 0, "is_relevant": False}
+        log(f"[WARN] Unparseable AI response for: {job['title']}")
+        return None
 
-    total_score = kw_score + ai_result.get("score", 0)
-    print(f"[SCORE] {job['title']}: kw={kw_score} ai={ai_result.get('score')} total={total_score} relevant={ai_result.get('is_relevant')}")
+    ai_score = int(ai_result.get("score", 0))
+    kw_norm = min(kw_score, 100)
+    total_score = round(ai_score * llm_weight + kw_norm * kw_weight)
 
-    if total_score >= min_score and ai_result.get("is_relevant", False):
-        job["ai_score"] = ai_result.get("score", 0)
-        job["keyword_score"] = kw_score
-        job["total_score"] = total_score
-        job["reason"] = ai_result.get("reason", "")
-        return job
-    return None
+    log(f"[SCORE] {job['title']}: kw={kw_score}(norm={kw_norm}) ai={ai_score} "
+        f"total={total_score} relevant={ai_result.get('is_relevant')}")
+
+    if total_score < min_score or not ai_result.get("is_relevant", False):
+        return None
+
+    return {
+        **copy.copy(job),
+        "ai_score": ai_score,
+        "keyword_score": kw_score,
+        "total_score": total_score,
+        "reason": ai_result.get("reason", ""),
+        "matched_skills": ai_result.get("matched_skills", []),
+        "missing_skills": ai_result.get("missing_skills", []),
+    }
 
 
-def filter_jobs(jobs: list, min_score: int = 50, keywords: Optional[list[str]] = None) -> list:
-    log(f"[MATCH ENGINE] Scoring {len(jobs)} jobs...")
+def filter_jobs(
+    jobs: list,
+    min_score: int = 50,
+    keywords: Optional[list] = None,
+    resume: Optional[str] = None,
+    llm_candidate_limit: int = 10,
+    llm_weight: float = 0.7,
+    kw_weight: float = 0.3,
+    max_workers: int = 3,
+) -> list:
+    if not jobs:
+        return []
 
-    # Compute keyword scores first (fast, no LLM)
-    for job in jobs:
-        job["_kw_score"] = keyword_score(job["title"], job["description"], keywords)
+    log(f"[MATCH ENGINE] {len(jobs)} jobs received")
 
-    # Sort by keyword score desc, take top 5 for LLM
-    jobs_sorted = sorted(jobs, key=lambda j: j["_kw_score"], reverse=True)
-    llm_candidates = [j for j in jobs_sorted if j["_kw_score"] > 0][:5]
+    kw_scored = [
+        (job, keyword_score(job["title"], job["description"], job.get("tags"), keywords))
+        for job in jobs
+    ]
 
-    log(f"[MATCH ENGINE] {len(llm_candidates)}/{len(jobs)} jobs sent to LLM (top 5 by keyword match)")
+    candidates = sorted(kw_scored, key=lambda x: x[1], reverse=True)[:llm_candidate_limit]
+
+    log(f"[MATCH ENGINE] {len(candidates)}/{len(jobs)} sent to LLM (limit={llm_candidate_limit})")
 
     filtered = []
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        futures = [pool.submit(_score_one, (job, min_score, keywords)) for job in llm_candidates]
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(_score_one, job, min_score, keywords, resume, llm_weight, kw_weight): job["title"]
+            for job, _ in candidates
+        }
         for future in as_completed(futures):
+            title = futures[future]
             try:
                 result = future.result(timeout=60)
                 if result is not None:
                     filtered.append(result)
             except Exception as e:
-                log(f"[MATCH ENGINE] Job scoring error: {e}")
+                log(f"[MATCH ENGINE] Error scoring '{title}': {e}")
 
-    # Clean up temp key
-    for job in jobs:
-        job.pop("_kw_score", None)
-
-    log(f"[MATCH ENGINE] {len(filtered)} relevant jobs out of {len(jobs)}")
+    filtered.sort(key=lambda j: j["total_score"], reverse=True)
+    log(f"[MATCH ENGINE] {len(filtered)} relevant jobs returned")
     return filtered

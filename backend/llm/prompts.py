@@ -5,16 +5,18 @@ from match_engine import resume_data as _resume_data
 # ================
 # 1️⃣ RELEVANCE SCORING PROMPT
 # ================
-def relevance_prompt(job_title: str, jd: str, tags: list[str] = None):
+def relevance_prompt(job_title: str, jd: str, tags: list[str] = None, resume: str = None):
     tags_section = ""
     if tags:
         tags_section = f"Job Tags: {', '.join(tags)}\n"
+
+    resume_text = resume if resume else _resume_data.RESUME_TEXT
 
     return f"""
 You are an expert hiring manager. Compare the job vs the candidate's resume.
 
 Resume:
-{_resume_data.RESUME_TEXT}
+{resume_text}
 
 Job Title: {job_title}
 {tags_section}Job Description:
