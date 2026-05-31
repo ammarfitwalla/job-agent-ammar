@@ -6,6 +6,7 @@ router = APIRouter(prefix="/scrape", tags=["scrape"])
 
 SITE_MAP = {
     "remoteok": ("remoteok_scraper", "scrape_remoteok"),
+    "adzuna": ("adzuna_scraper", "scrape_adzuna"),
     "weworkremotely": ("weworkremotely_scraper", "scrape_wwr"),
     "naukri": ("naukri_scraper", "scrape_naukri"),
     "gulftalent": ("gulftalent_scraper", "scrape_gulftalent"),
