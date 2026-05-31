@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: job-agent-ammar
+    runtime: docker
+    repo: https://github.com/ammarfitwalla/job-agent-ammar
+    dockerfilePath: backend/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: EMAIL_TO
+        sync: false
+      - key: SENDER_EMAIL
+        sync: false
+      - key: OLLAMA_MODEL
+        sync: false
+      - key: OLLAMA_API_URL
+        sync: false
