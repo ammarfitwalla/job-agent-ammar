@@ -15,6 +15,12 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434/v1/chat/completions")
 
 # ==============
+# ADZUNA API
+# ==============
+ADZUNA_APP_ID = os.environ.get("ADZUNA_APP_ID", "your_adzuna_app_id")
+ADZUNA_KEY = os.environ.get("ADZUNA_KEY", "your_adzuna_key")
+
+# ==============
 # JOB SEARCH SETTINGS
 # ==============
 ROLES_BY_CATEGORY = {

@@ -54,7 +54,7 @@ app.include_router(roles.router)
 async def health():
     from api.schemas import HealthResponse
 
-    scrapers = ["remoteok_scraper", "weworkremotely_scraper"]
+    scrapers = ["adzuna", "remoteok"]
     return HealthResponse(status="ok", scrapers_configured=scrapers)
 
 
