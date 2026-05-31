@@ -1,5 +1,6 @@
 from fastapi import APIRouter, BackgroundTasks
 from api.schemas import ScrapeRequest, ScrapeResponse
+from utils.logger import log
 
 router = APIRouter(prefix="/scrape", tags=["scrape"])
 
@@ -13,17 +14,10 @@ SITE_MAP = {
 
 
 def _score_jobs(jobs: list, keywords: list[str], resume_text: str) -> list:
-    """Run relevance engine on a list of jobs with given keywords/resume."""
     from match_engine.relevance_engine import filter_jobs
 
-    if resume_text:
-        import config as cfg
-        cfg.RESUME_PATH = resume_text
-        from match_engine import resume_data
-        resume_data.RESUME_TEXT = resume_text
-
-    relevant = filter_jobs(jobs, keywords=keywords)
-    print(f"[SCORE] {len(relevant)} relevant out of {len(jobs)}")
+    relevant = filter_jobs(jobs, min_score=0, keywords=keywords, resume=resume_text, llm_candidate_limit=20)
+    log(f"[SCORE] {len(relevant)} relevant out of {len(jobs)}")
     return relevant
 
 
@@ -77,16 +71,6 @@ def run_scrape(sites: list[str], keywords: list[str], resume_text: str, roles=No
             job_store["filtered"] = []
             job_store["scrape_status"] = "done"
             return
-
-        # Filter by user's keywords — only keep jobs matching at least one
-        if keywords:
-            kw_lower = [k.lower() for k in keywords]
-            before = len(all_jobs)
-            all_jobs = [
-                j for j in all_jobs
-                if any(kw in f"{j['title']} {j['description']}".lower() for kw in kw_lower)
-            ]
-            print(f"[SCRAPE] Keyword filter: {before} → {len(all_jobs)} jobs (dropped {before - len(all_jobs)})")
 
         relevant = _score_jobs(all_jobs, keywords, resume_text)
         job_store["filtered"] = relevant

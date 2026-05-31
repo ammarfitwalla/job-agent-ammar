@@ -1,99 +1,98 @@
-# remoteok scraper (fixed using RemoteOK API)
 import re
 import requests
 from bs4 import BeautifulSoup
 from utils.logger import log
-from config import SCRAPE_LIMIT, TARGET_ROLES
+from config import SCRAPE_LIMIT, TARGET_ROLES  # removed ROLES_BY_CATEGORY
+
+GENERIC_WORDS = {"senior", "lead", "staff", "founding", "junior", "mid", "remote"}
+
+
+def _sig_words(role: str) -> set:
+    return {w for w in role.lower().split() if len(w) >= 3 and w not in GENERIC_WORDS}
+
+
+def _role_matches(position_lower: str, role: str) -> bool:
+    role_lower = role.lower()
+    sig = _sig_words(role)
+
+    # C1: Full phrase in title
+    if role_lower in position_lower:
+        return True
+
+    # C2: Word overlap in title (handles compound words e.g. "fullstack" → "full" + "stack")
+    if sig:
+        title_words = set(re.findall(r'[a-z]{3,}', position_lower))
+        matched_count = len(sig & title_words)
+        threshold = len(sig) if len(sig) <= 2 else max(2, len(sig) // 2)
+        if matched_count >= threshold:
+            return True
+        # compound-word fallback: check if any sig word is a substring of title tokens
+        for tw in title_words:
+            matched_count += sum(1 for w in sig if w not in title_words and w in tw)
+        if matched_count >= threshold:
+            return True
+
+    return False
 
 
 def scrape_remoteok(roles=None):
     log("[SCRAPER] RemoteOK started")
     jobs = []
+    seen_urls = set()
 
     try:
-        # RemoteOK Public API
         r = requests.get(
             "https://remoteok.com/api",
             headers={"User-Agent": "Mozilla/5.0"},
             timeout=20
         )
-
+        r.raise_for_status()
         data = r.json()
 
-        # API includes metadata in first element
-        postings = [job for job in data if isinstance(job, dict)]
-
-        # Use user-selected roles, fall back to config defaults
+        postings = [job for job in data if isinstance(job, dict) and job.get("position")]
         active_roles = roles if roles else TARGET_ROLES
-        print(f"[REMOTEOK] Matching against {len(active_roles)} roles: {active_roles[:5]}...")
-
-        # Build keyword sets from target roles
-        all_keywords = set()  # all individual words from all roles
-        tech_keywords = set()  # for tag matching (excludes generic words)
-        for role in active_roles:
-            for word in role.lower().split():
-                all_keywords.add(word)
-                if word not in ('engineer', 'developer', 'founding'):
-                    tech_keywords.add(word)
+        log(f"[REMOTEOK] {len(postings)} postings, matching {len(active_roles)} roles")
 
         for job in postings:
-            position_lower = (job.get('position', '') or '').lower()
-            tags_lower = [t.lower() for t in (job.get('tags', []) or [])]
+            position_lower = (job.get("position", "") or "").lower()
+            url = (job.get("url", "") or "").strip()
 
-            matched = False
-
-            # C1: Full target role phrase in position title (original exact match)
-            for role in active_roles:
-                if role.lower() in position_lower:
-                    matched = True
-                    break
-
-            # C2: Individual keywords in position title
-            if not matched:
-                for kw in all_keywords:
-                    if len(kw) < 3:
-                        if re.search(r'\b' + re.escape(kw) + r'\b', position_lower):
-                            matched = True
-                            break
-                    else:
-                        if kw in position_lower:
-                            matched = True
-                            break
-
-            # C3: Tech-specific keywords matched in tags (exact match)
-            if not matched and set(tags_lower) & tech_keywords:
-                matched = True
-
-            if not matched:
+            if url in seen_urls:
                 continue
 
-            title = job.get("position", "").strip()
-            company = job.get("company", "").strip()
-            url = job.get("url", "").strip()
-            location = "Remote"
-            tags = list(set(t.lower() for t in (job.get("tags", []) or []) if t))
+            matched_role = next(
+                (role for role in active_roles if _role_matches(position_lower, role)),
+                None
+            )
+            if not matched_role:
+                continue
 
-            # Description is HTML → strip tags
-            desc_html = job.get("description", "")
-            soup = BeautifulSoup(desc_html, "html.parser")
-            description = soup.get_text().strip()
+            seen_urls.add(url)
 
-            print(f"[REMOTEOK] Matched: {title} @ {company} tags={tags[:5]}")
+            desc_html = job.get("description", "") or ""
+            description = BeautifulSoup(desc_html, "html.parser").get_text().strip()
+
             jobs.append({
-                "title": title,
-                "company": company,
-                "location": location,
+                "title": job.get("position", "").strip(),
+                "company": job.get("company", "").strip(),
+                "location": "Remote",
                 "url": url,
                 "description": description,
-                "tags": tags
+                "tags": list({t.lower() for t in (job.get("tags", []) or []) if t}),
+                "matched_role": matched_role,
             })
+
+            log(f"[REMOTEOK] Match '{matched_role}': {jobs[-1]['title']} @ {jobs[-1]['company']}")
 
             if len(jobs) >= SCRAPE_LIMIT:
                 break
 
-        log(f"[SCRAPER] RemoteOK found: {len(jobs)} jobs")
+        log(f"[SCRAPER] RemoteOK done: {len(jobs)} jobs")
         return jobs
 
+    except requests.RequestException as e:
+        log(f"[RemoteOK ERROR] Network: {e}")
+        return []
     except Exception as e:
         log(f"[RemoteOK ERROR] {e}")
         return []
