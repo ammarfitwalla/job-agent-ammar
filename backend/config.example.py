@@ -7,12 +7,12 @@ import os
 LLM_PROVIDER = "groq"  # "groq" or "ollama"
 
 # Groq
-GROQ_API_KEY = "gsk_xxx"  # Replace with your Groq API key
-GROQ_MODEL = "llama-3.1-8b-instant"
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "gsk_xxx")  # Replace with your Groq API key
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
 
 # Ollama (fallback)
-OLLAMA_MODEL = "llama3.1:8b"
-OLLAMA_API_URL = "http://localhost:11434/v1/chat/completions"
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
+OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434/v1/chat/completions")
 
 # ==============
 # JOB SEARCH SETTINGS
@@ -85,7 +85,7 @@ GOOGLE_SHEET_NAME = "My Job Tracker"
 # ==============
 # EMAIL SETTINGS
 # ==============
-SENDER_EMAIL = "your@email.com"
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "your@email.com")
 DAILY_EMAIL_SUBJECT = "Daily Job Application Summary"
 
 # ==============
@@ -95,8 +95,8 @@ RESUME_PATH = "resume.txt"
 AUTO_APPLY = False
 CHROME_PROFILE_PATH = ""
 
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USER = "your@email.com"
-EMAIL_PASSWORD = "your-app-password"
-EMAIL_TO = "your@email.com"
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_USER = os.environ.get("EMAIL_USER", "your@email.com")
+EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "your-app-password")
+EMAIL_TO = os.environ.get("EMAIL_TO", "your@email.com")
