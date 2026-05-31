@@ -8,7 +8,7 @@ from email import encoders
 from datetime import datetime
 import config
 
-LOG_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "visitors.csv")
+LOG_FILE = os.path.join(os.path.sep, "tmp", "visitors.csv")
 MAX_ROWS = 5
 MAX_SIZE = 10 * 1024  # 10KB
 
