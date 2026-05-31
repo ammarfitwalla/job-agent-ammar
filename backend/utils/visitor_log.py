@@ -9,8 +9,8 @@ from datetime import datetime
 import config
 
 LOG_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "visitors.csv")
-MAX_ROWS = 100
-MAX_SIZE = 50 * 1024  # 50KB
+MAX_ROWS = 5
+MAX_SIZE = 10 * 1024  # 10KB
 
 
 def log_visitor(ip: str, path: str, user_agent: str, referer: str = ""):
