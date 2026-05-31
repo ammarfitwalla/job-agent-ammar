@@ -25,15 +25,17 @@ ENV CHROME_BIN=/usr/bin/chromium
 ENV PYTHONUNBUFFERED=1
 
 RUN useradd -m -u 1000 user
-USER user
-ENV PATH="/home/user/.local/bin:$PATH"
 
 WORKDIR /app
 
-COPY backend/ backend/
-COPY frontend/ frontend/
+COPY --chown=user backend/ backend/
+COPY --chown=user frontend/ frontend/
 
-RUN cp backend/config.example.py backend/config.py
+# config.py is gitignored, create from example
+RUN cp backend/config.example.py backend/config.py && chown user:user backend/config.py
+
+USER user
+ENV PATH="/home/user/.local/bin:$PATH"
 
 WORKDIR /app/backend
 
