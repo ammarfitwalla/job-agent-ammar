@@ -54,15 +54,18 @@ def run_scrape(sites: list[str], keywords: list[str], resume_text: str, roles=No
                 print(f"[SCRAPE] Unknown site: {site_key}")
                 continue
             try:
-                print(f"[SCRAPE] Running {site_key}...")
-                mod = importlib.import_module(f"scrapers.{module_name}")
-                scraper_fn = getattr(mod, func_name)
-                try:
-                    jobs = scraper_fn(roles=roles)
-                except TypeError:
-                    jobs = scraper_fn()
-                print(f"[SCRAPE] {site_key} returned {len(jobs)} jobs")
-                all_jobs.extend(jobs)
+                    print(f"[SCRAPE] Running {site_key}...")
+                    mod = importlib.import_module(f"scrapers.{module_name}")
+                    scraper_fn = getattr(mod, func_name)
+                    try:
+                        jobs = scraper_fn(roles=roles)
+                    except TypeError:
+                        jobs = scraper_fn()
+                    print(f"[SCRAPE] {site_key} returned {len(jobs)} jobs")
+                    all_jobs.extend(jobs)
+                    # Rate limit between sites
+                    from utils.rate_limiter import delay as _rd
+                    _rd(3, 6)
             except Exception as e:
                 print(f"[SCRAPE] {site_key} failed: {e}")
 

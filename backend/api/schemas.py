@@ -8,6 +8,7 @@ class Job(BaseModel):
     location: str
     url: str
     description: str
+    tags: list[str] = []
     ai_score: Optional[int] = None
     keyword_score: Optional[int] = None
     total_score: Optional[int] = None

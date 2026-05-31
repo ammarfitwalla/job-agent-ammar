@@ -23,10 +23,11 @@ def get_browser():
 
 
 def fetch_html(url, wait=5):
+    from utils.rate_limiter import delay
+    delay(2, 4)
     driver = get_browser()
     driver.get(url)
     time.sleep(wait)
     html = driver.page_source
-    # input("Press Enter to close browser...")
     driver.quit()
     return html

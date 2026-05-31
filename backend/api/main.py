@@ -5,9 +5,11 @@ import os
 # Ensure project root is on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.routing import Mount
 from api.routes import jobs, scrape, email, resume, roles
 
 # In-memory job store (lives as long as the server runs)
@@ -27,6 +29,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def log_visitors(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path not in ("/health", "/logs", "/favicon.ico") and not path.startswith("/static") and not path.startswith("/api"):
+        from utils.visitor_log import log_visitor
+        ip = request.client.host if request.client else "unknown"
+        ua = request.headers.get("user-agent", "")
+        ref = request.headers.get("referer", "")
+        log_visitor(ip, path, ua, ref)
+    return response
+
+
 app.include_router(jobs.router)
 app.include_router(scrape.router)
 app.include_router(email.router)
@@ -40,6 +56,15 @@ async def health():
 
     scrapers = ["remoteok_scraper", "weworkremotely_scraper"]
     return HealthResponse(status="ok", scrapers_configured=scrapers)
+
+
+@app.get("/logs")
+async def view_logs():
+    from utils.visitor_log import LOG_FILE
+    if os.path.isfile(LOG_FILE):
+        with open(LOG_FILE, encoding="utf-8") as f:
+            return PlainTextResponse(f.read())
+    return PlainTextResponse("(no visitors yet)")
 
 
 # Serve frontend (must be last — catches all unmatched routes)

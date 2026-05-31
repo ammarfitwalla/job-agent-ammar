@@ -7,9 +7,11 @@ import config
 from utils.logger import log
 from utils.json_parser import extract_json
 
-def keyword_score(job_title: str, job_desc: str, keywords: Optional[list[str]] = None) -> int:
+def keyword_score(job_title: str, job_desc: str, job_tags: Optional[list[str]] = None, keywords: Optional[list[str]] = None) -> int:
     score = 0
     combined_text = f"{job_title} {job_desc}".lower()
+    if job_tags:
+        combined_text += " " + " ".join(job_tags).lower()
 
     kw_list = keywords if keywords else config.KEYWORDS_INCLUDE
     for kw in kw_list:
@@ -26,14 +28,15 @@ def keyword_score(job_title: str, job_desc: str, keywords: Optional[list[str]] =
 def _score_one(args):
     """Score a single job and return it with AI fields if relevant."""
     job, min_score, keywords = args
-    kw_score = keyword_score(job["title"], job["description"], keywords)
+    job_tags = job.get("tags")
+    kw_score = keyword_score(job["title"], job["description"], job_tags, keywords)
 
     # Skip LLM if no keywords match — job is almost certainly irrelevant
     if kw_score == 0:
         print(f"[SKIP] {job['title']}: kw=0, no LLM call needed")
         return None
 
-    prompt = relevance_prompt(job["title"], job["description"])
+    prompt = relevance_prompt(job["title"], job["description"], job_tags)
     response = LLMClient.chat(prompt)
     print(f"[AI] {job['title']} -> {response[:120]}...")
 
