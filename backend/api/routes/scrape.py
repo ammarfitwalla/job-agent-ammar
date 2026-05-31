@@ -22,7 +22,7 @@ def _score_jobs(jobs: list, keywords: list[str], resume_text: str) -> list:
     return relevant
 
 
-def run_scrape(sites: list[str], keywords: list[str], resume_text: str, roles=None):
+def run_scrape(sites: list[str], keywords: list[str], resume_text: str, roles=None, adzuna_country="us"):
     import sys
     sys.path.insert(0, ".")
     from api.main import job_store
@@ -53,7 +53,10 @@ def run_scrape(sites: list[str], keywords: list[str], resume_text: str, roles=No
                     mod = importlib.import_module(f"scrapers.{module_name}")
                     scraper_fn = getattr(mod, func_name)
                     try:
-                        jobs = scraper_fn(roles=roles)
+                        kwargs = {"roles": roles}
+                        if site_key == "adzuna":
+                            kwargs["country"] = adzuna_country
+                        jobs = scraper_fn(**kwargs)
                     except TypeError:
                         jobs = scraper_fn()
                     print(f"[SCRAPE] {site_key} returned {len(jobs)} jobs")
@@ -86,7 +89,7 @@ def run_scrape(sites: list[str], keywords: list[str], resume_text: str, roles=No
 async def trigger_scrape(background_tasks: BackgroundTasks, req: ScrapeRequest):
     print(f"[TRIGGER] Search Jobs clicked — sites={req.sites}, keywords count={len(req.keywords)}")
     print(f"[TRIGGER] Adding background task...")
-    background_tasks.add_task(run_scrape, req.sites, req.keywords, req.resume_text, req.roles)
+    background_tasks.add_task(run_scrape, req.sites, req.keywords, req.resume_text, req.roles, req.adzuna_country)
     print(f"[TRIGGER] Background task added, returning immediately")
     return {"message": "Scrape started in background", "status": "running"}
 

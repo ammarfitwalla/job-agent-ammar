@@ -11,9 +11,25 @@ from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Mount
 from api.routes import jobs, scrape, email, resume, roles
+import json
 
 # In-memory job store (lives as long as the server runs)
 job_store: dict = {"raw": [], "filtered": []}
+
+VOTE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "votes.json")
+VOTE_THRESHOLD = 100
+
+def _load_votes() -> int:
+    if os.path.isfile(VOTE_FILE):
+        try:
+            with open(VOTE_FILE) as f:
+                return json.load(f).get("votes", 0)
+        except: pass
+    return 0
+
+def _save_votes(count: int):
+    with open(VOTE_FILE, "w") as f:
+        json.dump({"votes": count}, f)
 
 app = FastAPI(
     title="Job Agent API",
@@ -49,6 +65,23 @@ app.include_router(email.router)
 app.include_router(resume.router)
 app.include_router(roles.router)
 
+
+@app.get("/votes")
+async def get_votes():
+    count = _load_votes()
+    return {"votes": count, "threshold": VOTE_THRESHOLD}
+
+@app.post("/vote")
+async def cast_vote():
+    count = _load_votes() + 1
+    _save_votes(count)
+    return {"votes": count, "threshold": VOTE_THRESHOLD}
+
+@app.delete("/votes")
+async def reset_votes():
+    if os.path.isfile(VOTE_FILE):
+        os.remove(VOTE_FILE)
+    return {"votes": 0, "threshold": VOTE_THRESHOLD, "message": "Votes reset"}
 
 @app.get("/health")
 async def health():

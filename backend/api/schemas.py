@@ -31,3 +31,4 @@ class ScrapeRequest(BaseModel):
     keywords: list[str] = []
     resume_text: str = ""
     roles: list[str] = []
+    adzuna_country: str = "us"
