@@ -17,7 +17,7 @@ SITE_MAP = {
 def _score_jobs(jobs: list, keywords: list[str], resume_text: str) -> list:
     from match_engine.relevance_engine import filter_jobs
 
-    relevant = filter_jobs(jobs, min_score=0, keywords=keywords, resume=resume_text, llm_candidate_limit=20)
+    relevant = filter_jobs(jobs, min_score=0, keywords=keywords, resume=resume_text)
     log(f"[SCORE] {len(relevant)} relevant out of {len(jobs)}")
     return relevant
 
