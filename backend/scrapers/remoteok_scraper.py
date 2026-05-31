@@ -71,19 +71,21 @@ def scrape_remoteok(roles=None):
             company = job.get("company", "").strip()
             url = job.get("url", "").strip()
             location = "Remote"
+            tags = list(set(t.lower() for t in (job.get("tags", []) or []) if t))
 
             # Description is HTML → strip tags
             desc_html = job.get("description", "")
             soup = BeautifulSoup(desc_html, "html.parser")
             description = soup.get_text().strip()
 
-            print(f"[REMOTEOK] Matched: {title} @ {company}")
+            print(f"[REMOTEOK] Matched: {title} @ {company} tags={tags[:5]}")
             jobs.append({
                 "title": title,
                 "company": company,
                 "location": location,
                 "url": url,
-                "description": description
+                "description": description,
+                "tags": tags
             })
 
             if len(jobs) >= SCRAPE_LIMIT:
