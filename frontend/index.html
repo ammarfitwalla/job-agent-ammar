@@ -4,49 +4,201 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Job Agent</title>
-  <script src="https://cdn.tailwindcss.com">
-  </script>
-</head>
-<body class="bg-slate-50 text-slate-800 min-h-screen font-sans">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* ── Base ── */
+    * { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .font-mono, [class*="font-mono"] { font-family: 'JetBrains Mono', monospace !important; }
 
-  <!-- Header -->
-  <header class="bg-gradient-to-r from-indigo-700 to-purple-700 text-white">
-    <div class="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+    body {
+      background-color: #f1f5f9;
+      background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px);
+      background-size: 22px 22px;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 3px; height: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* ── Blur lock ── */
+    .blur-job {
+      filter: blur(4px); opacity: 0.5;
+      pointer-events: none; user-select: none;
+      transition: filter 0.3s, opacity 0.3s;
+    }
+
+    /* ── Panel card ── */
+    .panel-card {
+      background: #fff;
+      border-radius: 16px;
+      border: 1px solid #e8ecf0;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.04);
+      padding: 16px;
+    }
+
+    /* ── Section icon ── */
+    .sec-icon {
+      width: 28px; height: 28px;
+      background: #eef2ff;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* ── Card fade-in ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    #results > div { animation: fadeUp 0.22s ease forwards; }
+
+    /* ── Range input ── */
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%; height: 4px;
+      border-radius: 4px;
+      background: #e2e8f0;
+      outline: none;
+      margin-top: 8px;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: #4f46e5;
+      cursor: pointer;
+      box-shadow: 0 0 0 3px #eef2ff;
+      transition: box-shadow 0.15s;
+    }
+    input[type=range]::-webkit-slider-thumb:hover { box-shadow: 0 0 0 5px #e0e7ff; }
+
+    /* ── Details arrow ── */
+    details > summary { list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    details > summary::after {
+      content: '›';
+      margin-left: auto;
+      display: inline-block;
+      transform: rotate(90deg);
+      transition: transform 0.15s;
+      color: #94a3b8;
+      font-size: 16px;
+      line-height: 1;
+    }
+    details[open] > summary::after { transform: rotate(270deg); }
+
+    /* ── Search button ── */
+    #searchBtn:not(:disabled) {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      box-shadow: 0 2px 10px rgba(5,150,105,0.28);
+    }
+    #searchBtn:not(:disabled):hover {
+      box-shadow: 0 4px 16px rgba(5,150,105,0.38);
+      transform: translateY(-1px);
+    }
+    #searchBtn { transition: all 0.18s; }
+
+    /* ── Extract button ── */
+    #extractBtn:not(:disabled) {
+      background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+      box-shadow: 0 2px 8px rgba(79,70,229,0.25);
+    }
+    #extractBtn:not(:disabled):hover {
+      box-shadow: 0 4px 14px rgba(79,70,229,0.35);
+      transform: translateY(-1px);
+    }
+    #extractBtn { transition: all 0.18s; }
+
+    /* ── Add role button ── */
+    #addRoleBtn { transition: background 0.15s; }
+
+    /* ── Textarea ── */
+    #resume {
+      resize: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    #resume:focus {
+      border-color: #a5b4fc;
+      box-shadow: 0 0 0 3px #eef2ff;
+    }
+
+    /* ── Soon badge ── */
+    .soon-badge {
+      font-size: 9px; font-weight: 700;
+      letter-spacing: 0.06em;
+      background: #e2e8f0;
+      color: #94a3b8;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    /* ── Spinner ── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin-outer { animation: spin 1.2s linear infinite; }
+    .spin-inner { animation: spin 0.75s linear infinite; }
+  </style>
+</head>
+<body class="text-slate-800 min-h-screen">
+
+  <!-- ── Header ── -->
+  <header style="background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 45%, #6d28d9 100%); border-bottom: 1px solid rgba(255,255,255,0.08);">
+    <div class="max-w-screen-2xl mx-auto px-6 py-5 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 bg-white/20 backdrop-blur rounded-lg flex items-center justify-center text-lg font-bold">J</div>
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center text-base font-bold text-white"
+          style="background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); backdrop-filter: blur(8px);">J</div>
         <div>
-          <h1 class="text-xl font-bold tracking-tight">Job Agent</h1>
-          <p class="text-xs text-indigo-200">Scrape &middot; Score &middot; Apply</p>
+          <h1 class="text-xl font-bold tracking-tight text-white">Job Agent</h1>
+          <p class="text-xs tracking-widest uppercase" style="color: rgba(199,210,254,0.7); letter-spacing: 0.12em; font-size: 10px;">Scrape &middot; Score &middot; Apply</p>
         </div>
       </div>
-      <div class="text-xs text-indigo-200 bg-white/10 px-3 py-1.5 rounded-full hidden sm:block">
-        <span id="resultCount">0</span> jobs found
+      <div class="hidden sm:flex items-center gap-2 text-xs rounded-full px-4 py-2"
+        style="background: rgba(255,255,255,0.09); border: 1px solid rgba(255,255,255,0.14); backdrop-filter: blur(8px); color: rgba(199,210,254,0.9);">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" style="box-shadow: 0 0 6px #34d399;"></span>
+        <span id="resultCount">0</span>&nbsp;jobs found
       </div>
     </div>
   </header>
 
-  <main class="max-w-7xl mx-auto p-4 sm:p-6">
+  <main class="max-w-screen-2xl mx-auto p-4 sm:p-6">
     <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
 
       <!-- ===== LEFT PANEL ===== -->
       <div class="lg:col-span-2 space-y-4">
 
         <!-- Resume -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <div class="flex items-center gap-2 mb-2">
-            <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            <label class="font-semibold text-sm">Resume</label>
+        <div class="panel-card">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="sec-icon">
+              <svg class="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+            </div>
+            <label class="font-semibold text-sm text-slate-700">Resume</label>
           </div>
-          <textarea id="resume" rows="8" class="w-full border border-slate-200 rounded-lg p-3 text-sm font-mono bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none transition" placeholder="Paste your resume text here..."></textarea>
-          <button id="extractBtn" class="mt-2 w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed">Extract Keywords</button>
+          <textarea id="resume" rows="8"
+            class="w-full border border-slate-200 rounded-xl p-3 text-sm font-mono bg-slate-50 focus:bg-white outline-none"
+            placeholder="Paste your resume text here..."></textarea>
+          <button id="extractBtn"
+            class="mt-2.5 w-full text-white py-2 rounded-xl text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none">
+            Extract Keywords
+          </button>
         </div>
 
         <!-- Keywords -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <div class="flex items-center gap-2 mb-2">
-            <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
-            <label class="font-semibold text-sm">Keywords</label>
-            <span class="text-xs text-slate-400 ml-auto" id="kwCount">0 selected</span>
+        <div class="panel-card">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="sec-icon">
+              <svg class="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+              </svg>
+            </div>
+            <label class="font-semibold text-sm text-slate-700">Keywords</label>
+            <span class="text-xs text-slate-500 ml-auto bg-slate-100 px-2 py-0.5 rounded-full font-medium" id="kwCount">0 selected</span>
           </div>
           <div id="keywords" class="flex flex-wrap gap-1.5 min-h-[32px]">
             <span class="text-xs text-slate-400 italic">Paste a resume and click Extract Keywords</span>
@@ -54,92 +206,173 @@
         </div>
 
         <!-- Roles -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <div class="flex items-center gap-2 mb-2">
-            <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-            <label class="font-semibold text-sm">Job Roles</label>
-            <span class="text-xs text-slate-400 ml-auto" id="roleCount">0 selected</span>
+        <div class="panel-card">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="sec-icon">
+              <svg class="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+              </svg>
+            </div>
+            <label class="font-semibold text-sm text-slate-700">Job Roles</label>
+            <span class="text-xs text-slate-500 ml-auto bg-slate-100 px-2 py-0.5 rounded-full font-medium" id="roleCount">0 selected</span>
           </div>
-          <div id="roles" class="space-y-1 max-h-56 overflow-y-auto"></div>
+          <div id="roles" class="space-y-1 max-h-56 overflow-y-auto pr-0.5"></div>
           <div class="mt-3 flex gap-2">
-            <input id="customRoleInput" type="text" class="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-300" placeholder="Add custom role...">
-            <button id="addRoleBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium transition">+ Add</button>
+            <input id="customRoleInput" type="text"
+              class="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 transition"
+              placeholder="Add custom role...">
+            <button id="addRoleBtn"
+              class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-3 py-1.5 rounded-lg text-sm font-semibold">+ Add</button>
           </div>
           <div id="customRoles" class="mt-2 flex flex-wrap gap-1.5"></div>
         </div>
 
         <!-- Sites -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <div class="flex items-center gap-2 mb-2">
-            <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <label class="font-semibold text-sm">Sites</label>
+        <div class="panel-card">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="sec-icon">
+              <svg class="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+            </div>
+            <label class="font-semibold text-sm text-slate-700">Sites</label>
           </div>
-          <div id="sites" class="flex flex-wrap gap-2 text-sm">
-            <label class="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full cursor-pointer hover:bg-indigo-100 transition"><input type="checkbox" value="adzuna" checked class="accent-indigo-600"><span>Adzuna</span></label>
-            <label class="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full cursor-pointer hover:bg-indigo-100 transition"><input type="checkbox" value="remoteok" class="accent-indigo-600"><span>RemoteOK</span></label>
-            <label class="flex items-center gap-1.5 bg-slate-100 text-slate-400 px-3 py-1.5 rounded-full cursor-not-allowed"><input type="checkbox" value="weworkremotely" disabled class="accent-slate-400"><span>WeWorkRemotely</span></label>
-            <label class="flex items-center gap-1.5 bg-slate-100 text-slate-400 px-3 py-1.5 rounded-full cursor-not-allowed"><input type="checkbox" value="naukri" disabled class="accent-slate-400"><span>Naukri</span></label>
-            <label class="flex items-center gap-1.5 bg-slate-100 text-slate-400 px-3 py-1.5 rounded-full cursor-not-allowed"><input type="checkbox" value="gulftalent" disabled class="accent-slate-400"><span>GulfTalent</span></label>
-            <label class="flex items-center gap-1.5 bg-slate-100 text-slate-400 px-3 py-1.5 rounded-full cursor-not-allowed"><input type="checkbox" value="eurojobs" disabled class="accent-slate-400"><span>EuroJobs</span></label>
+          <div id="sites" class="flex flex-wrap gap-2">
+            <!-- Adzuna (active) -->
+            <span class="inline-flex items-center gap-1.5">
+              <label class="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full cursor-pointer hover:bg-indigo-100 transition text-xs font-semibold border border-indigo-100">
+                <input type="checkbox" value="adzuna" checked class="accent-indigo-600">
+                <span>Adzuna</span>
+              </label>
+              <select id="adzunaCountry"
+                class="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 outline-none focus:ring-2 focus:ring-indigo-200 transition">
+                <option value="us">🇺🇸 US</option>
+                <option value="gb">🇬🇧 UK</option>
+                <option value="ca">🇨🇦 Canada</option>
+                <option value="au">🇦🇺 Australia</option>
+                <option value="de">🇩🇪 Germany</option>
+                <option value="fr">🇫🇷 France</option>
+                <option value="nl">🇳🇱 Netherlands</option>
+                <option value="in">🇮🇳 India</option>
+                <option value="ae">🇦🇪 UAE</option>
+                <option value="sg">🇸🇬 Singapore</option>
+                <option value="br">🇧🇷 Brazil</option>
+                <option value="nz">🇳🇿 New Zealand</option>
+                <option value="za">🇿🇦 South Africa</option>
+                <option value="ie">🇮🇪 Ireland</option>
+                <option value="pl">🇵🇱 Poland</option>
+                <option value="at">🇦🇹 Austria</option>
+                <option value="ch">🇨🇭 Switzerland</option>
+                <option value="be">🇧🇪 Belgium</option>
+                <option value="my">🇲🇾 Malaysia</option>
+                <option value="ph">🇵🇭 Philippines</option>
+                <option value="qa">🇶🇦 Qatar</option>
+                <option value="sa">🇸🇦 Saudi Arabia</option>
+                <option value="se">🇸🇪 Sweden</option>
+                <option value="cn">🇨🇳 China</option>
+                <option value="hk">🇭🇰 Hong Kong</option>
+                <option value="lu">🇱🇺 Luxembourg</option>
+              </select>
+            </span>
+            <!-- Disabled sites -->
+            <label class="flex items-center gap-1.5 bg-slate-50 text-slate-400 px-3 py-1.5 rounded-full cursor-not-allowed text-xs border border-slate-200">
+              <input type="checkbox" value="remoteok" disabled class="accent-slate-300">
+              <span>RemoteOK</span><span class="soon-badge ml-1">SOON</span>
+            </label>
+            <label class="flex items-center gap-1.5 bg-slate-50 text-slate-400 px-3 py-1.5 rounded-full cursor-not-allowed text-xs border border-slate-200">
+              <input type="checkbox" value="weworkremotely" disabled class="accent-slate-300">
+              <span>WeWorkRemotely</span><span class="soon-badge ml-1">SOON</span>
+            </label>
+            <label class="flex items-center gap-1.5 bg-slate-50 text-slate-400 px-3 py-1.5 rounded-full cursor-not-allowed text-xs border border-slate-200">
+              <input type="checkbox" value="naukri" disabled class="accent-slate-300">
+              <span>Naukri</span><span class="soon-badge ml-1">SOON</span>
+            </label>
+            <label class="flex items-center gap-1.5 bg-slate-50 text-slate-400 px-3 py-1.5 rounded-full cursor-not-allowed text-xs border border-slate-200">
+              <input type="checkbox" value="gulftalent" disabled class="accent-slate-300">
+              <span>GulfTalent</span><span class="soon-badge ml-1">SOON</span>
+            </label>
+            <label class="flex items-center gap-1.5 bg-slate-50 text-slate-400 px-3 py-1.5 rounded-full cursor-not-allowed text-xs border border-slate-200">
+              <input type="checkbox" value="eurojobs" disabled class="accent-slate-300">
+              <span>EuroJobs</span><span class="soon-badge ml-1">SOON</span>
+            </label>
           </div>
         </div>
 
-        <!-- Threshold -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+        <!-- Min Score -->
+        <div class="panel-card">
           <div class="flex items-center gap-2 mb-1">
-            <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <label class="font-semibold text-sm">Min Score</label>
-            <span id="thresholdVal" class="text-indigo-600 font-bold text-sm ml-auto">50</span>
-            <div class="relative group">
-              <span class="cursor-help text-slate-400 hover:text-slate-500 text-xs border border-slate-300 rounded-full w-4 h-4 inline-flex items-center justify-center leading-none">i</span>
-              <div class="absolute bottom-full right-0 mb-2 hidden group-hover:block bg-slate-800 text-white text-xs rounded-lg px-3 py-2 w-56 text-center shadow-lg z-10">
-                Total score (0-100). AI weighted 70%, keyword match weighted 30%.
-                <span class="absolute top-full right-3 border-4 border-transparent border-t-slate-800"></span>
+            <div class="sec-icon">
+              <svg class="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"/>
+              </svg>
+            </div>
+            <label class="font-semibold text-sm text-slate-700">Min Score</label>
+            <div class="ml-auto flex items-center gap-2">
+              <span id="thresholdVal" class="font-mono text-sm font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">50</span>
+              <div class="relative group">
+                <span class="cursor-help text-slate-400 hover:text-slate-500 text-xs border border-slate-200 rounded-full w-4 h-4 inline-flex items-center justify-center leading-none">i</span>
+                <div class="absolute bottom-full right-0 mb-2 hidden group-hover:block bg-slate-800 text-white text-xs rounded-xl px-3 py-2 w-56 text-center shadow-xl z-10">
+                  Total score (0–100). AI weighted 70%, keyword match weighted 30%.
+                  <span class="absolute top-full right-3 border-4 border-transparent border-t-slate-800"></span>
+                </div>
               </div>
             </div>
           </div>
-          <input type="range" id="thresholdSlider" min="0" max="100" value="50" class="w-full accent-indigo-600 mt-1">
-          <div class="flex justify-between text-xs text-slate-400 mt-0.5">
+          <input type="range" id="thresholdSlider" min="0" max="100" value="50">
+          <div class="flex justify-between text-xs text-slate-400 mt-1">
             <span>0</span><span>50</span><span>100</span>
           </div>
         </div>
 
-        <!-- Search / Stop -->
+        <!-- Search button -->
         <div class="flex gap-2">
-          <button id="searchBtn" class="flex-1 bg-emerald-600 text-white py-3 rounded-xl hover:bg-emerald-700 font-semibold shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <button id="searchBtn"
+            class="flex-1 text-white py-3 rounded-xl font-semibold disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
             Search Jobs
-          </button>
-          <button id="stopBtn" class="w-24 bg-red-500 text-white py-3 rounded-xl hover:bg-red-600 font-semibold shadow-md transition hidden items-center justify-center gap-1">
-            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><rect x="4" y="4" width="12" height="12" rx="1"/></svg>
-            Stop
           </button>
         </div>
       </div>
 
       <!-- ===== RIGHT PANEL ===== -->
       <div class="lg:col-span-3">
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 min-h-[500px] flex flex-col">
+        <div class="bg-white rounded-2xl border border-slate-200 min-h-[500px] flex flex-col overflow-hidden"
+          style="box-shadow: 0 1px 4px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.04);">
 
           <!-- Status bar -->
           <div id="status" class="hidden px-5 py-3 text-sm border-b border-slate-100 flex items-center gap-2"></div>
 
-          <!-- Spinner (shown during loading) -->
-          <div id="spinner" class="hidden flex-col items-center justify-center py-20 text-slate-400">
-            <svg class="w-8 h-8 animate-spin mb-3 text-indigo-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-            <span class="text-sm" id="spinnerMsg">Processing...</span>
+          <!-- Spinner -->
+          <div id="spinner" class="hidden flex flex-col items-center justify-center py-20 text-slate-400">
+            <div class="relative w-10 h-10 mb-4">
+              <svg class="spin-outer w-10 h-10 text-indigo-100 absolute inset-0" fill="none" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/>
+              </svg>
+              <svg class="spin-inner w-10 h-10 text-indigo-500 absolute inset-0" fill="none" viewBox="0 0 24 24">
+                <path fill="currentColor" opacity="0.8" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+            </div>
+            <span class="text-sm font-medium text-slate-500" id="spinnerMsg">Processing...</span>
           </div>
 
           <!-- Results -->
-          <div id="results" class="flex-1 p-5 space-y-0">
-            <div class="flex flex-col items-center justify-center py-20 text-slate-300">
-              <svg class="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-              <p class="text-sm">Results will appear here</p>
+          <div id="results" class="flex-1 p-5 space-y-3 overflow-y-auto">
+            <div class="flex flex-col items-center justify-center py-24 text-slate-300">
+              <div class="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center mb-4">
+                <svg class="w-7 h-7 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+              </div>
+              <p class="text-sm font-medium text-slate-400">Results will appear here</p>
               <p class="text-xs text-slate-300 mt-1">Select keywords + roles and search</p>
             </div>
           </div>
+
         </div>
       </div>
+
     </div>
   </main>
 
@@ -151,13 +384,22 @@
     let currentThreshold = 50;
     let customRoles = [];
     let scrapeAttempts = 0;
+    let voteCount = 0;
+    let voteThreshold = 100;
+    let hasVoted = false;
 
     // ===== INIT =====
     checkRawJobs();
     loadRoles();
+    fetchVoteCount();
+    updateSearchBtn();
 
     async function checkRawJobs() {
       try { const r = await fetch("/scrape/status"); const d = await r.json(); hasRawJobs = d.last_scrape_raw > 0; } catch {}
+    }
+
+    async function fetchVoteCount() {
+      try { const r = await fetch("/votes"); const d = await r.json(); voteCount = d.votes; voteThreshold = d.threshold; } catch {}
     }
 
     // ===== HELPERS =====
@@ -185,14 +427,9 @@
       hideElement("spinner");
     }
 
-    function showStopBtn(show) {
-      document.getElementById("stopBtn").classList.toggle("hidden", !show);
-    }
-
     function resetSearchBtn() {
       document.getElementById("searchBtn").innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Search Jobs';
       document.getElementById("searchBtn").disabled = false;
-      showStopBtn(false);
     }
 
     function updateSearchBtn() {
@@ -291,27 +528,33 @@
       const sites = getSelectedSites(), keywords = getSelectedKeywords(), roles = getSelectedRoles();
       if (!sites.length) return alert("Select at least one site");
       if (!roles.length) return alert("Select at least one role category");
+      const adzunaCountry = document.getElementById("adzunaCountry").value;
 
       document.getElementById("searchBtn").innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Searching...';
       document.getElementById("searchBtn").disabled = true;
-      showStopBtn(true);
 
       showSpinner("Contacting scrapers...");
       hideElement("results");
       setStatus("Starting scrape...");
       try {
-        await fetch("/scrape", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sites, keywords, resume_text: resume, roles }) });
+        await fetch("/scrape", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sites, keywords, resume_text: resume, roles, adzuna_country: adzunaCountry }) });
         scrapeAttempts = 0;
         pollResults();
       } catch (e) { setStatus("Error: " + e.message, "red"); resetSearchBtn(); hideSpinner(); }
     });
 
-    // ===== STOP =====
-    document.getElementById("stopBtn").addEventListener("click", async () => {
-      try { await fetch("/scrape/stop", { method: "POST" }); } catch {}
-      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-      showStopBtn(false); resetSearchBtn(); hideSpinner(); setStatus("Scraping stopped", "red");
-    });
+    // ===== VOTE =====
+    async function handleVote(btn) {
+      if (hasVoted) return;
+      try {
+        const r = await fetch("/vote", { method: "POST" });
+        const d = await r.json();
+        voteCount = d.votes;
+        voteThreshold = d.threshold;
+        hasVoted = true;
+        applyThreshold();
+      } catch {}
+    }
 
     // ===== POLL =====
     function pollResults() {
@@ -358,13 +601,19 @@
       const c = document.getElementById("results");
       if (!jobs.length) {
         c.innerHTML = `<div class="flex flex-col items-center justify-center py-20 text-slate-300">
-          <svg class="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          <p class="text-sm">No matching jobs found</p>
+          <div class="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center mb-4">
+            <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+          <p class="text-sm font-medium text-slate-400">No matching jobs found</p>
           <p class="text-xs text-slate-300 mt-1">Try lowering the score threshold or changing keywords</p>
         </div>`;
         return;
       }
-      c.innerHTML = jobs.map(j => {
+
+      const showAll = voteCount >= voteThreshold;
+      const limit = 5;
+
+      function cardHtml(j) {
         const sc = j.total_score || 0;
         const barPct = Math.min(sc, 100);
         const barColor = sc >= 80 ? "bg-emerald-500" : sc >= 50 ? "bg-amber-400" : "bg-red-400";
@@ -387,7 +636,28 @@
           ${j.reason ? `<p class="text-xs text-slate-400 mt-2 leading-relaxed">${j.reason}</p>` : ""}
           <a href="${j.url}" target="_blank" class="text-indigo-600 text-xs hover:text-indigo-700 hover:underline mt-2 inline-flex items-center gap-1">${j.url.replace(/^https?:\/\//, '').substring(0, 40)}${j.url.length > 40 ? '...' : ''} <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
         </div>`;
-      }).join("");
+      }
+
+      if (jobs.length > limit && !showAll) {
+        const lockedCount = jobs.length - limit;
+        const voteBtnHtml = hasVoted
+          ? `<button class="vote-btn mt-3 bg-slate-300 text-slate-500 px-5 py-2 rounded-lg text-sm font-medium inline-flex items-center gap-1.5 shadow-sm cursor-not-allowed"><span>✓</span> Voted</button>`
+          : `<button class="vote-btn mt-3 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg text-sm font-medium transition inline-flex items-center gap-1.5 shadow-sm" onclick="handleVote(this)">👍 Vote (${voteCount}/${voteThreshold})</button>`;
+        c.innerHTML = jobs.slice(0, limit).map(j => cardHtml(j)).join("") + `
+          <div class="relative border border-slate-100 rounded-xl overflow-hidden mt-3">
+            <div class="blur-job">${jobs.slice(limit).map(j => cardHtml(j)).join("")}</div>
+            <div class="absolute inset-0 flex items-center justify-center">
+              <div class="bg-white/80 backdrop-blur-sm rounded-xl p-5 text-center shadow-lg mx-3 max-w-sm">
+                <div class="text-3xl mb-1">🔒</div>
+                <p class="font-semibold text-slate-800 text-sm">${lockedCount} more job${lockedCount > 1 ? 's' : ''} locked</p>
+                <p class="text-xs text-slate-500 mt-0.5">Support the project to unlock all</p>
+                ${voteBtnHtml}
+              </div>
+            </div>
+          </div>`;
+      } else {
+        c.innerHTML = jobs.map(j => cardHtml(j)).join("");
+      }
     }
   </script>
 </body>

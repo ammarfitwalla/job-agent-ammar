@@ -42,8 +42,21 @@ def _role_matches(position_lower: str, role: str) -> bool:
     return False
 
 
-def scrape_adzuna(roles=None):
-    log("[SCRAPER] Adzuna started")
+ADZUNA_COUNTRIES = {
+    "us": "United States", "gb": "United Kingdom", "ca": "Canada",
+    "au": "Australia", "de": "Germany", "fr": "France",
+    "nl": "Netherlands", "in": "India", "ae": "UAE",
+    "sg": "Singapore", "br": "Brazil", "nz": "New Zealand",
+    "za": "South Africa", "ie": "Ireland", "pl": "Poland",
+    "at": "Austria", "ch": "Switzerland", "be": "Belgium",
+    "my": "Malaysia", "ph": "Philippines", "qa": "Qatar",
+    "sa": "Saudi Arabia", "se": "Sweden", "cn": "China",
+    "hk": "Hong Kong", "lu": "Luxembourg",
+}
+
+
+def scrape_adzuna(roles=None, country="us"):
+    log(f"[SCRAPER] Adzuna started (country: {country})")
     jobs = []
     seen_urls = set()
 
@@ -66,13 +79,13 @@ def scrape_adzuna(roles=None):
         if len(jobs) >= SCRAPE_LIMIT:
             break
 
-        for page in range(1, 4):
+        for page in range(1, 10):
             if len(jobs) >= SCRAPE_LIMIT:
                 break
 
             try:
                 r = requests.get(
-                    f"https://api.adzuna.com/v1/api/jobs/us/search/{page}",
+                    f"https://api.adzuna.com/v1/api/jobs/{country}/search/{page}",
                     params={
                         "app_id": ADZUNA_APP_ID,
                         "app_key": ADZUNA_KEY,
