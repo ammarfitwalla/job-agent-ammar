@@ -1,0 +1,59 @@
+timestamp,ip,path,user_agent,referer
+2026-05-31T08:17:09.577415,127.0.0.1,/,curl/8.19.0,
+2026-05-31T08:17:09.619049,127.0.0.1,/roles,curl/8.19.0,
+2026-05-31T08:17:16.858142,127.0.0.1,/,curl/8.19.0,
+2026-05-31T08:17:17.122590,127.0.0.1,/,curl/8.19.0,
+2026-05-31T08:17:24.563350,127.0.0.1,/jobs,curl/8.19.0,
+2026-05-31T08:17:24.732802,127.0.0.1,/scrape/status,curl/8.19.0,
+2026-05-31T08:21:20.727533,127.0.0.1,/resume/keywords,curl/8.19.0,
+2026-05-31T08:23:30.424250,127.0.0.1,/,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.122.1 Chrome/142.0.7444.265 Electron/39.8.8 Safari/537.36",
+2026-05-31T08:23:33.941249,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.122.1 Chrome/142.0.7444.265 Electron/39.8.8 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:23:34.029251,127.0.0.1,/roles,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.122.1 Chrome/142.0.7444.265 Electron/39.8.8 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:23:45.729392,127.0.0.1,/,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+2026-05-31T08:23:49.994472,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:23:52.441412,127.0.0.1,/roles,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:24:12.525200,127.0.0.1,/resume/keywords,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:24:30.455139,127.0.0.1,/scrape,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:24:35.089197,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:24:37.567126,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:24:40.146708,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:24:42.701067,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:24:45.270707,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:24:47.846496,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:24:50.340777,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:24:52.835763,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:24:55.465842,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:24:57.996827,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:00.438945,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:02.999686,127.0.0.1,/resume/keywords,curl/8.19.0,
+2026-05-31T08:25:05.536249,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:08.133458,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:10.794453,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:13.378956,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:15.953520,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:18.518523,127.0.0.1,/resume/keywords,curl/8.19.0,
+2026-05-31T08:25:21.072531,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:23.738642,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:26.336635,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:28.998638,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:31.459658,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:33.901518,127.0.0.1,/jobs,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:36.429662,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:39.437600,127.0.0.1,/resume/keywords,Mozilla/5.0 (Windows NT; Windows NT 10.0; en-IN) WindowsPowerShell/5.1.26100.8457,
+2026-05-31T08:25:41.912576,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:44.484371,127.0.0.1,/jobs,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:46.944371,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:49.499055,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:52.062045,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:54.605583,127.0.0.1,/jobs,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:57.154620,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:25:59.693482,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:26:02.449948,127.0.0.1,/scrape/status,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:26:05.145543,127.0.0.1,/jobs,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:26:08.044513,127.0.0.1,/resume/keywords,Mozilla/5.0 (Windows NT; Windows NT 10.0; en-IN) WindowsPowerShell/5.1.26100.8457,
+2026-05-31T08:26:09.254540,127.0.0.1,/jobs,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:26:10.478566,127.0.0.1,/jobs,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:26:11.644098,127.0.0.1,/jobs,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:26:12.892099,127.0.0.1,/jobs,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:26:14.079751,127.0.0.1,/jobs,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/
+2026-05-31T08:26:15.271716,127.0.0.1,/jobs,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",http://127.0.0.1:8000/

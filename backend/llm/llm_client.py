@@ -26,7 +26,7 @@ class LLMClient:
             completion = client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.25,
+                temperature=0.1,
                 max_completion_tokens=max_tokens,
                 top_p=0.95,
                 stream=False,
