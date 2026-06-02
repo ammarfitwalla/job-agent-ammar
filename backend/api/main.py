@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Mount
-from api.routes import jobs, scrape, email, resume, roles
+from api.routes import jobs, scrape, email, resume, roles, states
 import json
 
 # In-memory job store (lives as long as the server runs)
@@ -64,6 +64,7 @@ app.include_router(scrape.router)
 app.include_router(email.router)
 app.include_router(resume.router)
 app.include_router(roles.router)
+app.include_router(states.router)
 
 
 @app.get("/votes")
@@ -87,7 +88,7 @@ async def reset_votes():
 async def health():
     from api.schemas import HealthResponse
 
-    scrapers = ["adzuna", "remoteok"]
+    scrapers = ["adzuna", "remoteok", "indeed"]
     return HealthResponse(status="ok", scrapers_configured=scrapers)
 
 

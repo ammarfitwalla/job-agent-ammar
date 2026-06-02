@@ -71,6 +71,7 @@ def filter_jobs(
     llm_weight: float = 0.7,
     kw_weight: float = 0.3,
     max_workers: int = 3,
+    progress_callback=None,
 ) -> list:
     if not jobs:
         return []
@@ -98,6 +99,8 @@ def filter_jobs(
                 result = future.result(timeout=60)
                 if result is not None:
                     filtered.append(result)
+                    if progress_callback:
+                        progress_callback(result)
             except Exception as e:
                 log(f"[MATCH ENGINE] Error scoring '{title}': {e}")
 

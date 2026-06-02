@@ -19,9 +19,17 @@ yagmail
 pandas
 tqdm
 
+# Resume parsing
+pdfplumber
+python-docx
+
 # LLM
 groq
 
 # API
 fastapi
 uvicorn[standard]
+countrystatecity-countries
+
+# Job scraping (Indeed via JobSpy)
+python-jobspy

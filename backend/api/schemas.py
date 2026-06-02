@@ -32,3 +32,5 @@ class ScrapeRequest(BaseModel):
     resume_text: str = ""
     roles: list[str] = []
     adzuna_country: str = "us"
+    location: str = ""
+    indeed_country: str = "USA"
