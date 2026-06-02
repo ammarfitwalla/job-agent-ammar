@@ -33,3 +33,6 @@ countrystatecity-countries
 
 # Job scraping (Indeed via JobSpy)
 python-jobspy
+python-multipart
+pdfplumber
+python-docx
