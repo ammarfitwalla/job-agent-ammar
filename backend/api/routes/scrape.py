@@ -7,6 +7,7 @@ router = APIRouter(prefix="/scrape", tags=["scrape"])
 SITE_MAP = {
     "remoteok": ("remoteok_scraper", "scrape_remoteok"),
     "adzuna": ("adzuna_scraper", "scrape_adzuna"),
+    "indeed": ("indeed_scraper", "scrape_indeed"),
     "weworkremotely": ("weworkremotely_scraper", "scrape_wwr"),
     "naukri": ("naukri_scraper", "scrape_naukri"),
     "gulftalent": ("gulftalent_scraper", "scrape_gulftalent"),
@@ -14,15 +15,19 @@ SITE_MAP = {
 }
 
 
-def _score_jobs(jobs: list, keywords: list[str], resume_text: str) -> list:
+def _score_jobs(jobs: list, keywords: list[str], resume_text: str, job_store: dict = None) -> list:
     from match_engine.relevance_engine import filter_jobs
 
-    relevant = filter_jobs(jobs, min_score=0, keywords=keywords, resume=resume_text)
+    def on_scored(job):
+        if job_store is not None:
+            job_store["filtered"].append(job)
+
+    relevant = filter_jobs(jobs, min_score=0, keywords=keywords, resume=resume_text, progress_callback=on_scored if job_store else None)
     log(f"[SCORE] {len(relevant)} relevant out of {len(jobs)}")
     return relevant
 
 
-def run_scrape(sites: list[str], keywords: list[str], resume_text: str, roles=None, adzuna_country="us"):
+def run_scrape(sites: list[str], keywords: list[str], resume_text: str, roles=None, adzuna_country="us", location="", indeed_country="USA"):
     import sys
     sys.path.insert(0, ".")
     from api.main import job_store
@@ -56,6 +61,9 @@ def run_scrape(sites: list[str], keywords: list[str], resume_text: str, roles=No
                         kwargs = {"roles": roles}
                         if site_key == "adzuna":
                             kwargs["country"] = adzuna_country
+                        if site_key == "indeed":
+                            kwargs["location"] = location
+                            kwargs["country_indeed"] = indeed_country
                         jobs = scraper_fn(**kwargs)
                     except TypeError:
                         jobs = scraper_fn()
@@ -76,7 +84,7 @@ def run_scrape(sites: list[str], keywords: list[str], resume_text: str, roles=No
             job_store["scrape_status"] = "done"
             return
 
-        relevant = _score_jobs(all_jobs, keywords, resume_text)
+        relevant = _score_jobs(all_jobs, keywords, resume_text, job_store)
         job_store["filtered"] = relevant
         job_store["scrape_status"] = "done"
         print(f"[SCRAPE] Pipeline complete — {len(all_jobs)} raw → {len(relevant)} relevant")
@@ -89,7 +97,7 @@ def run_scrape(sites: list[str], keywords: list[str], resume_text: str, roles=No
 async def trigger_scrape(background_tasks: BackgroundTasks, req: ScrapeRequest):
     print(f"[TRIGGER] Search Jobs clicked — sites={req.sites}, keywords count={len(req.keywords)}")
     print(f"[TRIGGER] Adding background task...")
-    background_tasks.add_task(run_scrape, req.sites, req.keywords, req.resume_text, req.roles, req.adzuna_country)
+    background_tasks.add_task(run_scrape, req.sites, req.keywords, req.resume_text, req.roles, req.adzuna_country, req.location, req.indeed_country)
     print(f"[TRIGGER] Background task added, returning immediately")
     return {"message": "Scrape started in background", "status": "running"}
 
