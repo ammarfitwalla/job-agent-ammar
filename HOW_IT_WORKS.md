@@ -3,29 +3,18 @@
 ## End-to-End Workflow
 
 ```
- ┌────────────┐
- │ Upload     │ ──→ PDF/DOCX/TXT parsed → text editable in textarea
- │ Resume     │
- └─────┬──────┘
-       │  click "Extract Keywords"
-       ↓
- ┌────────────┐
- │ AI Keyword │ ──→ LLM reads resume, returns top 20 skills/tools
- │ Extraction │     (only literally-written terms, no hallucination)
- └─────┬──────┘
-       │
-       ↓
- ┌────────────────────┐
- │ Select Job Roles   │ ← choose from categories or add custom roles
- └─────────┬──────────┘
-           ↓
- ┌────────────────────┐     ┌───────────────────┐
- │ Pick Sites         │     │ Choose State/     │ ← Nominatim autocomplete
- │ (Adzuna / Indeed)  │     │ Region            │    (offline, instant)
- └─────────┬──────────┘     └────────┬──────────┘
-           │                        │
-           └──────────┬─────────────┘
-                      ↓
+               ┌────────────┐
+               │ Upload     │ ──→ PDF/DOCX/TXT parsed → text editable in textarea
+               │ Resume     │
+               └─────┬──────┘
+                     │  click "Extract Keywords"
+                     ↓
+               ┌────────────┐
+               │ AI Keyword │ ──→ LLM reads resume, returns top 20 skills/tools
+               │ Extraction │     (only literally-written terms, no hallucination)
+               └─────┬──────┘
+                     │
+                     ↓
              ┌────────────────┐
              │  Search Jobs   │
              └───────┬────────┘
@@ -34,14 +23,6 @@
              │ Scrape Boards  │ ← each role scraped individually
              │ (rate-limited) │    Adzuna + Indeed
              └───────┬────────┘
-                     ↓
-             ┌────────────────┐
-             │ Raw Jobs Pool  │ ← all collected jobs
-             └───────┬────────┘
-                     ↓
-             ┌──────────────────────┐
-             │ Keyword Pre-Filter   │ ← top 10 by keyword match
-             └───────┬──────────────┘
                      ↓
              ┌──────────────────────┐
              │ AI Scoring (Groq)    │ ← compares each job vs resume
@@ -54,8 +35,8 @@
              └───────┬──────────────┘
                      ↓
              ┌──────────────────────┐
-             │ Show Results         │ ← top 5 visible
-             │ (vote to unlock all) │    rest locked until 100 votes
+             │ Show Jobs            │ ← top Jobs visible
+             │                      │
              └──────────────────────┘
 ```
 
