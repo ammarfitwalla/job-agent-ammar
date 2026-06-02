@@ -3,7 +3,12 @@
 ## End-to-End Workflow
 
 ```
-Upload Resume → Extract Keywords → Select Roles → Pick Sites → Choose State/Region
+Upload Resume → AI Keyword Extraction → Review/Edit → Add Custom → Select Roles
+                 (LLM reads resume,    Keywords       Keywords
+                  extracts top 20)
+
+                                                                                       
+                                  Pick Sites → Choose State/Region
                                                                                        
                                           ↓                                             
                                                                                        
@@ -41,6 +46,19 @@ Upload Resume → Extract Keywords → Select Roles → Pick Sites → Choose St
                               │  (vote to unlock)  │   until 100 votes                 
                               └───────────────────┘                                   
 ```
+
+## AI Keyword Extraction
+
+When you upload a resume (PDF/DOCX/TXT) or paste text, clicking **Extract Keywords** sends it to the LLM with this instruction:
+
+> *"Extract the top 20 most relevant keywords from this resume. Only include skills, tools, software, concepts, certifications, and domain expertise that explicitly appear in the resume text. Do NOT guess, infer, or add related terms."*
+
+The LLM returns only keywords literally written in the resume — no hallucinated or inferred terms. You can then:
+- ✅ Toggle suggested keywords on/off
+- ➕ Add custom keywords manually (purple chips)
+- ❌ Remove any keyword
+
+These keywords are used for both the **keyword pre-filter** (step 1 of scoring) and the **keyword score component**.
 
 ## How Scoring Works
 
