@@ -15,13 +15,6 @@
  └─────┬──────┘
        │
        ↓
- ┌────────────┐     ┌──────────────┐
- │ Toggle /   │     │ Add Custom   │ ← type your own keywords
- │ Review     │     │ Keywords     │    (purple chips, removable)
- └─────┬──────┘     └──────┬───────┘
-       │                   │
-       └──────┬────────────┘
-              ↓
  ┌────────────────────┐
  │ Select Job Roles   │ ← choose from categories or add custom roles
  └─────────┬──────────┘
