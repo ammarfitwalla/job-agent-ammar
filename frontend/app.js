@@ -150,7 +150,7 @@ async function loadRoles() {
 
 function renderRoles(categories) {
   const c = document.getElementById("roles");
-  const labels = { tech: "Tech", sales: "Sales", media: "Media", healthcare: "Healthcare", finance: "Finance", admin: "Admin", legal: "Legal", education: "Education" };
+  const labels = { tech: "Tech", sales: "Sales", media: "Media", healthcare: "Healthcare", finance: "Finance", admin: "Admin", legal: "Legal", education: "Education", civil: "Civil (Construction)" };
   c.innerHTML = Object.entries(categories).map(([cat, roles]) =>
     `<details class="border border-slate-200 rounded-lg overflow-hidden text-sm">
       <summary class="cursor-pointer px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-500 flex items-center gap-2">${labels[cat]||cat} <span class="text-slate-400 font-normal">(${roles.length})</span></summary>
@@ -195,7 +195,7 @@ async function fetchCountries() {
   } catch {}
 }
 
-let LOCATION_OVERRIDE = { us: "USA", gb: "UK", ae: "UAE" };
+let LOCATION_OVERRIDE = { us: "usa", gb: "uk", ae: "united arab emirates" };
 
 async function loadStates() {
   try {
@@ -277,7 +277,7 @@ function getAdzunaCountry() {
 function getIndeedCountry() {
   if (!selectedLocation) return "USA";
   const cc = selectedLocation.country_code;
-  return LOCATION_OVERRIDE[cc] || countriesMap[cc] || "USA";
+  return LOCATION_OVERRIDE[cc] || countriesMap[cc] || "usa";
 }
 function getLocation() {
   if (!selectedLocation) return "";
@@ -422,6 +422,7 @@ function renderJobs(jobs) {
           <p class="text-sm text-slate-400 truncate">${j.company} &middot; ${j.location}</p>
         </div>
         <div class="text-right shrink-0">
+          ${j.salary ? `<div class="text-xs font-semibold text-emerald-600 whitespace-nowrap">${j.salary}</div>` : ""}
           <div class="font-mono text-lg font-bold ${txtColor}">${sc}</div>
           <div class="text-xs text-slate-400">AI ${j.ai_score || 0} / KW ${j.keyword_score || 0}</div>
         </div>

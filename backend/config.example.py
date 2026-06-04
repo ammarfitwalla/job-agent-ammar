@@ -63,6 +63,12 @@ ROLES_BY_CATEGORY = {
         "Teacher", "Professor", "Tutor", "Instructional Designer",
         "Curriculum Designer", "Education Administrator",
     ],
+    "civil": [
+        "Civil Engineer", "Structural Engineer", "Construction Manager",
+        "Site Engineer", "Quantity Surveyor", "Infrastructure Engineer",
+        "Urban Planner", "Surveyor", "Civil Engineering Technician",
+        "Construction Project Manager",
+    ],
 }
 
 # Flat list of all roles (for scraper fallback if user picks none)

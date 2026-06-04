@@ -5,6 +5,14 @@ from config import SCRAPE_LIMIT, ADZUNA_APP_ID, ADZUNA_KEY, ROLES_BY_CATEGORY
 
 GENERIC_WORDS = {"senior", "lead", "staff", "founding", "junior", "mid", "remote"}
 
+
+def _fmt_k(val):
+    if val is None:
+        return "0"
+    if val >= 1000:
+        return f"{int(val // 1000)}K"
+    return str(int(val))
+
 CATEGORY_QUERIES = {
     "tech": "software engineer developer data",
     "sales": "sales account executive business development",
@@ -14,6 +22,7 @@ CATEGORY_QUERIES = {
     "admin": "administrative assistant office manager hr",
     "legal": "legal lawyer paralegal compliance",
     "education": "teacher professor education tutor",
+    "civil": "civil engineer structural construction infrastructure",
 }
 
 
@@ -147,8 +156,15 @@ def scrape_adzuna(roles=None, country="us"):
                         tags.append(category.lower())
                     salary_min = job.get("salary_min")
                     salary_max = job.get("salary_max")
-                    if salary_min and salary_max:
-                        tags.append(f"${int(salary_min):,}-${int(salary_max):,}")
+                    salary = None
+                    if salary_min is not None or salary_max is not None:
+                        sym = "$"
+                        if salary_min is not None and salary_max is not None:
+                            salary = f"{sym}{_fmt_k(salary_min)} - {sym}{_fmt_k(salary_max)}/yr"
+                        elif salary_min is not None:
+                            salary = f"From {sym}{_fmt_k(salary_min)}/yr"
+                        elif salary_max is not None:
+                            salary = f"Up to {sym}{_fmt_k(salary_max)}/yr"
 
                     jobs.append({
                         "title": title,
@@ -158,6 +174,7 @@ def scrape_adzuna(roles=None, country="us"):
                         "description": description,
                         "tags": tags,
                         "matched_role": matched_role,
+                        "salary": salary,
                     })
 
                     log(f"[ADZUNA] Match '{matched_role}': {title} @ {company}")

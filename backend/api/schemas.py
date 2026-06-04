@@ -13,6 +13,7 @@ class Job(BaseModel):
     keyword_score: Optional[int] = None
     total_score: Optional[int] = None
     reason: Optional[str] = None
+    salary: Optional[str] = None
 
 
 class ScrapeResponse(BaseModel):
