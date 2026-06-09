@@ -17,6 +17,74 @@ let lastFilteredGen = 0;
 let lastPassNum = 0;
 let allStates = [];
 let internshipMode = false;
+let activeFilters = { site: '', experience_level: '' };
+
+function getFilteredJobs() {
+  let jobs = allJobs;
+  if (activeFilters.site)
+    jobs = jobs.filter(j => siteFromUrl(j.url).toLowerCase() === activeFilters.site.toLowerCase());
+  if (activeFilters.experience_level)
+    jobs = jobs.filter(j => j.experience_level === activeFilters.experience_level);
+  return jobs;
+}
+
+function siteFromUrl(url) {
+  if (!url) return '';
+  if (url.includes('adzuna')) return 'Adzuna';
+  if (url.includes('linkedin')) return 'LinkedIn';
+  if (url.includes('indeed')) return 'Indeed';
+  if (url.includes('remoteok')) return 'RemoteOK';
+  if (url.includes('weworkremotely')) return 'WWR';
+  return new URL(url).hostname.replace('www.', '').split('.')[0];
+}
+
+function renderFilterBar() {
+  const bar = document.getElementById("filterBar");
+  if (!allJobs.length) { bar.classList.add("hidden"); return; }
+  bar.classList.remove("hidden");
+
+  const sites = [...new Set(allJobs.map(j => siteFromUrl(j.url)).filter(Boolean))];
+  const exps = [...new Set(allJobs.map(j => j.experience_level).filter(Boolean))];
+
+  const breakdown = sites.map(s => {
+    const count = allJobs.filter(j => siteFromUrl(j.url) === s).length;
+    return `${count} ${s}`;
+  }).join(" · ");
+
+  let html = `<span id="breakdownText">${breakdown}</span>`;
+
+  const allActive = !activeFilters.site && !activeFilters.experience_level;
+  html += `<span class="filter-chip${allActive ? ' active' : ''}" data-filter="all">All</span>`;
+
+  sites.forEach(s => {
+    const active = activeFilters.site.toLowerCase() === s.toLowerCase();
+    html += `<span class="filter-chip${active ? ' active' : ''}" data-filter="site" data-value="${s}">${s}${active ? '<span class="chip-remove">✕</span>' : ''}</span>`;
+  });
+
+  exps.forEach(e => {
+    const active = activeFilters.experience_level === e;
+    const label = e === "internship" ? "🎓 Internship" : e === "entry_level" ? "🌱 Entry" : e;
+    html += `<span class="filter-chip${active ? ' active' : ''}" data-filter="exp" data-value="${e}">${label}${active ? '<span class="chip-remove">✕</span>' : ''}</span>`;
+  });
+
+  bar.innerHTML = html;
+
+  bar.querySelectorAll(".filter-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      const filter = chip.dataset.filter;
+      const value = chip.dataset.value;
+      if (filter === "all") {
+        activeFilters = { site: '', experience_level: '' };
+      } else if (filter === "site") {
+        activeFilters.site = activeFilters.site === value ? '' : value;
+      } else if (filter === "exp") {
+        activeFilters.experience_level = activeFilters.experience_level === value ? '' : value;
+      }
+      applyThreshold();
+      renderFilterBar();
+    });
+  });
+}
 
 // ===== INIT =====
 checkRawJobs();
@@ -68,6 +136,14 @@ function resetSearchBtn() {
   document.getElementById("extractBtn").disabled = false;
 }
 
+function updateCountBadge(n) {
+  const el = document.getElementById("resultCount");
+  el.textContent = n;
+  el.classList.remove("count-pop");
+  void el.offsetWidth;
+  el.classList.add("count-pop");
+}
+
 function updateSearchBtn() {
   const hasResume = document.getElementById("resume").value.trim().length > 0;
   const hasRoles = getSelectedRoles().length > 0;
@@ -100,8 +176,10 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
 });
 
 function applyThreshold() {
-  renderJobs(allJobs);
-  document.getElementById("resultCount").textContent = allJobs.length;
+  const displayJobs = getFilteredJobs();
+  renderJobs(displayJobs);
+  updateCountBadge(displayJobs.length);
+  renderFilterBar();
 }
 
 // ===== RESUME -> KEYWORDS =====
@@ -293,14 +371,22 @@ document.getElementById("internshipToggle").addEventListener("click", () => {
   const toggle = document.getElementById("internshipToggle");
   const knob = document.getElementById("toggleKnob");
   const btn = document.getElementById("searchBtn");
+  const header = document.getElementById("mainHeader");
+  const panel = document.getElementById("internshipPanel");
   if (internshipMode) {
-    toggle.style.background = "#059669";
+    document.body.classList.add("internship-mode");
+    toggle.style.background = "#0d9488";
     knob.style.left = "22px";
     btn.innerHTML = '<span class="text-base">🎓</span> Find Internships';
+    header.style.background = "linear-gradient(135deg, #0f766e 0%, #0d9488 45%, #14b8a6 100%)";
+    if (panel) { panel.style.background = "#f0fdfa"; panel.style.borderColor = "#99f6e4"; }
   } else {
+    document.body.classList.remove("internship-mode");
     toggle.style.background = "#cbd5e1";
     knob.style.left = "2px";
     btn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Search Jobs';
+    header.style.background = "linear-gradient(135deg, #1e1b4b 0%, #3730a3 45%, #6d28d9 100%)";
+    if (panel) { panel.style.background = "#f0fdf4"; panel.style.borderColor = "#bbf7d0"; }
   }
 });
 
@@ -319,6 +405,9 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   lastRenderedCount = 0;
   lastFilteredGen = 0;
   lastPassNum = 0;
+  allJobs = [];
+  activeFilters = { site: '', experience_level: '' };
+  document.getElementById("filterBar").classList.add("hidden");
   showSpinner("Contacting scrapers...");
   hideElement("results");
   setStatus("Starting scrape...");
@@ -370,14 +459,14 @@ function pollResults() {
             } else if (countChanged) {
               setStatus(`Scoring${inPass ? ` Pass ${d.pass_num}/${d.max_passes}` : ""} jobs with AI... (${d.last_scrape_relevant} relevant)`);
             } else if (d.pass_num > lastPassNum && lastPassNum > 0) {
-              setStatus(`Searching for more (Pass ${d.pass_num}/${d.max_passes}) \u2014 ${d.last_scrape_relevant} found so far`);
+              setStatus(`${d.last_scrape_relevant} relevant so far, searching for more (Pass ${d.pass_num}/${d.max_passes})...`);
             } else {
               setStatus(`${d.last_scrape_relevant} relevant so far${inPass ? ` (Pass ${d.pass_num}/${d.max_passes})` : ""}`);
             }
             await loadResultsIncremental(d.filtered_gen);
           } else {
             if (d.pass_num > lastPassNum && lastPassNum > 0) {
-              setStatus(`Searching for more (Pass ${d.pass_num}/${d.max_passes})...`);
+              setStatus(`No matches yet, searching for more (Pass ${d.pass_num}/${d.max_passes})...`);
             } else if (genChanged && inPass) {
               setStatus(`\u2713 Pass ${d.pass_num}/${d.max_passes} complete \u2014 no matches yet`);
             } else {
@@ -419,7 +508,7 @@ async function loadResultsIncremental(filteredGen) {
       jobs.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
       showElement("results");
       renderJobs(jobs);
-      document.getElementById("resultCount").textContent = jobs.length;
+      updateCountBadge(jobs.length);
     }
   } catch {}
 }
@@ -443,7 +532,6 @@ async function loadResults(statusData) {
     setStatus(msg, allJobs.length ? "green" : undefined);
   } catch (e) { setStatus("Error loading results: " + e.message, "red"); }
   resetSearchBtn();
-  document.getElementById("resultCount").textContent = allJobs.length;
 }
 
 // ===== RENDER JOBS =====
@@ -489,7 +577,7 @@ function renderJobs(jobs) {
         </div>
       </div>
       <div class="mt-2 w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-        <div class="h-full ${barColor} rounded-full transition-all" style="width:${barPct}%"></div>
+        <div class="score-fill h-full ${barColor} rounded-full" style="width:0" data-w="${barPct}"></div>
       </div>
       ${j.tags && j.tags.length ? `<div class="flex flex-wrap gap-1 mt-2">${j.tags.slice(0, 6).map(t => `<span class="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">${t}</span>`).join('')}</div>` : ""}
       ${j.reason ? `<p class="text-xs text-slate-400 mt-2 leading-relaxed">${j.reason}</p>` : ""}
@@ -517,4 +605,9 @@ function renderJobs(jobs) {
   } else {
     c.innerHTML = jobs.map(j => cardHtml(j)).join("");
   }
+  requestAnimationFrame(() => {
+    c.querySelectorAll('.score-fill').forEach(el => {
+      el.style.width = el.dataset.w + '%';
+    });
+  });
 }
