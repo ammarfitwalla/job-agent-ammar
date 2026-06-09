@@ -1,8 +1,32 @@
 from fastapi import APIRouter, BackgroundTasks
 from api.schemas import ScrapeRequest, ScrapeResponse
 from utils.logger import log
+import threading
+from collections import deque
 
 router = APIRouter(prefix="/scrape", tags=["scrape"])
+
+_scrape_lock = threading.Lock()
+_scrape_queue = deque()
+
+
+def _process_queue():
+    if _scrape_queue:
+        next_req = _scrape_queue.popleft()
+        from api.main import job_store
+        job_store["queue_position"] = len(_scrape_queue)
+        print(f"[SCRAPE] Starting next queued scrape ({len(_scrape_queue) + 1} remaining in queue)")
+        t = threading.Thread(target=_run_scrape_wrapper, args=(next_req,), daemon=True)
+        t.start()
+    else:
+        _scrape_lock.release()
+
+
+def _run_scrape_wrapper(req: ScrapeRequest):
+    try:
+        run_scrape(req.sites, req.keywords, req.resume_text, req.roles, req.adzuna_country, req.location, req.indeed_country, req.internship_mode, req.min_relevant, req.max_passes)
+    finally:
+        _process_queue()
 
 SITE_MAP = {
     "remoteok": ("remoteok_scraper", "scrape_remoteok"),
@@ -66,6 +90,7 @@ def run_scrape(sites: list[str], keywords: list[str], resume_text: str, roles=No
     job_store["pass_num"] = 0
     job_store["max_passes"] = max_passes
     job_store["filtered_gen"] = 0
+    job_store["queue_position"] = 0
 
     try:
         if internship_mode:
@@ -244,8 +269,17 @@ def _scrape_internship(sites, keywords, resume_text, roles, adzuna_country, loca
 @router.post("")
 async def trigger_scrape(background_tasks: BackgroundTasks, req: ScrapeRequest):
     print(f"[SCRAPE] Search triggered — sites={req.sites}, mode={'internship' if req.internship_mode else 'normal'}")
-    background_tasks.add_task(run_scrape, req.sites, req.keywords, req.resume_text, req.roles, req.adzuna_country, req.location, req.indeed_country, req.internship_mode, req.min_relevant, req.max_passes)
-    return {"message": "Scrape started in background", "status": "running"}
+    from api.main import job_store
+    if _scrape_lock.acquire(blocking=False):
+        job_store["queue_position"] = 0
+        background_tasks.add_task(_run_scrape_wrapper, req)
+        return {"message": "Scrape started", "status": "running"}
+    else:
+        _scrape_queue.append(req)
+        pos = len(_scrape_queue)
+        job_store["queue_position"] = pos
+        print(f"[SCRAPE] Queued at position {pos}")
+        return {"message": f"Another scrape in progress — queued at position {pos}", "status": "queued", "queue_position": pos}
 
 
 @router.post("/stop")
@@ -254,6 +288,8 @@ async def stop_scrape():
     print(f"[STOP] Stop requested by user")
     job_store["cancel"] = True
     job_store["scrape_status"] = "done"
+    _scrape_queue.clear()
+    print(f"[STOP] Cleared queue ({len(_scrape_queue)} pending)")
     return {"message": "Scrape cancelled", "status": "done"}
 
 
@@ -289,6 +325,7 @@ async def scrape_status():
     pass_num = job_store.get("pass_num", 0)
     max_passes = job_store.get("max_passes", 0)
     filtered_gen = job_store.get("filtered_gen", 0)
+    queue_position = job_store.get("queue_position", 0)
     return {
         "status": status,
         "last_scrape_raw": raw_count,
@@ -296,4 +333,5 @@ async def scrape_status():
         "pass_num": pass_num,
         "max_passes": max_passes,
         "filtered_gen": filtered_gen,
+        "queue_position": queue_position,
     }

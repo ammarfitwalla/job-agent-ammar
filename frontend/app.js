@@ -446,6 +446,11 @@ function pollResults() {
       const r = await fetch("/scrape/status");
       const d = await r.json();
 
+      if (d.queue_position > 0) {
+        showSpinner(`Queued at position ${d.queue_position}...`);
+        return;
+      }
+
       if (d.status === "running") {
         const inPass = d.max_passes > 0 && d.pass_num > 0;
         const genChanged = d.filtered_gen !== lastFilteredGen;
