@@ -23,7 +23,11 @@ MID_LEVEL_INDICATORS = [
 ]
 
 
-def detect_experience_level(title: str, description: str = "") -> str | None:
+def detect_experience_level(title: str, description: str | None = "") -> str | None:
+    if not isinstance(title, str):
+        title = ""
+    if not isinstance(description, str):
+        description = ""
     title_lower = title.lower()
     desc_lower = description.lower() if description else ""
     combined = f"{title_lower} {desc_lower}"
