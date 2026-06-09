@@ -117,7 +117,27 @@
       <!-- ===== RIGHT PANEL ===== -->
       <div class="lg:col-span-3 space-y-4">
 
-        <!-- Sites (moved beside Resume) -->
+        <!-- Location -->
+        <div class="panel-card">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="sec-icon">
+              <svg class="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+            </div>
+            <label class="font-semibold text-sm text-slate-700">Location <span class="text-red-400">*</span></label>
+          </div>
+          <div class="relative">
+            <input id="locationInput" type="text" autocomplete="off"
+              class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200 transition"
+              placeholder="Search state or region...">
+            <div id="locationResults" class="hidden absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto"></div>
+            <div id="selectedLocation" class="hidden mt-1.5 flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg"></div>
+          </div>
+        </div>
+
+        <!-- Sites -->
         <div class="panel-card">
           <div class="flex items-center gap-2 mb-3">
             <div class="sec-icon">
@@ -128,25 +148,18 @@
             <label class="font-semibold text-sm text-slate-700">Sites <span class="text-red-400">*</span></label>
           </div>
           <div id="sites" class="flex flex-wrap gap-2">
-            <!-- State autocomplete -->
-            <div class="w-full mb-1 relative" id="locationWrap">
-              <label class="text-xs text-slate-500 font-medium mb-1 block">📍 State / Region <span class="text-red-400">*</span></label>
-              <input id="locationInput" type="text" autocomplete="off"
-                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200 transition"
-                placeholder="Search state or region...">
-              <div id="locationResults" class="hidden absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto"></div>
-              <div id="selectedLocation" class="hidden mt-1.5 flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg"></div>
-            </div>
-            <!-- Adzuna (country only) -->
             <label class="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full cursor-pointer hover:bg-indigo-100 transition text-xs font-semibold border border-indigo-100">
               <input type="checkbox" value="adzuna" checked class="accent-indigo-600">
               <span>Adzuna</span>
+            </label>
+            <label class="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full cursor-pointer hover:bg-blue-100 transition text-xs font-semibold border border-blue-100">
+              <input type="checkbox" value="linkedin" class="accent-blue-600">
+              <span>LinkedIn</span>
             </label>
             <label class="flex items-center gap-1.5 bg-sky-50 text-sky-700 px-3 py-1.5 rounded-full cursor-pointer hover:bg-sky-100 transition text-xs font-semibold border border-sky-100">
               <input type="checkbox" value="indeed" class="accent-sky-600">
               <span>Indeed</span>
             </label>
-            <!-- Disabled sites -->
             <label class="flex items-center gap-1.5 bg-slate-50 text-slate-400 px-3 py-1.5 rounded-full cursor-not-allowed text-xs border border-slate-200">
               <input type="checkbox" value="remoteok" disabled class="accent-slate-300">
               <span>RemoteOK</span><span class="soon-badge ml-1">SOON</span>
@@ -168,6 +181,25 @@
               <span>EuroJobs</span><span class="soon-badge ml-1">SOON</span>
             </label>
           </div>
+        </div>
+
+        <!-- Internship Mode Toggle -->
+        <div class="panel-card" style="background: #f0fdf4; border-color: #bbf7d0;">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-base">🎓</span>
+              <div class="min-w-0">
+                <label class="font-semibold text-sm text-slate-700">Internship Mode</label>
+                <p class="text-xs text-slate-400 truncate">Only intern & entry-level jobs</p>
+              </div>
+            </div>
+            <button id="internshipToggle"
+              class="relative w-11 h-6 rounded-full transition shrink-0 ml-3"
+              style="background: #cbd5e1;">
+              <span id="toggleKnob" class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition"></span>
+            </button>
+          </div>
+
         </div>
 
         <!-- Search button (moved below Sites) -->

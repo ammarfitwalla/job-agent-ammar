@@ -14,7 +14,7 @@ from api.routes import jobs, scrape, email, resume, roles, states
 import json
 
 # In-memory job store (lives as long as the server runs)
-job_store: dict = {"raw": [], "filtered": []}
+job_store: dict = {"raw": [], "filtered": [], "internship_mode": False}
 
 VOTE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "votes.json")
 VOTE_THRESHOLD = 100
