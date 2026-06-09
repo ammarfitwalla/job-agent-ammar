@@ -14,6 +14,7 @@ class Job(BaseModel):
     total_score: Optional[int] = None
     reason: Optional[str] = None
     salary: Optional[str] = None
+    experience_level: Optional[str] = None
 
 
 class ScrapeResponse(BaseModel):
@@ -35,3 +36,6 @@ class ScrapeRequest(BaseModel):
     adzuna_country: str = "us"
     location: str = ""
     indeed_country: str = "USA"
+    internship_mode: bool = False
+    min_relevant: int = 5
+    max_passes: int = 3

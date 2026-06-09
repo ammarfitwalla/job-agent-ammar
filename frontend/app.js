@@ -13,7 +13,10 @@ let selectedLocation = null;
 let searchTimeout = null;
 let lastQuery = "";
 let lastRenderedCount = 0;
+let lastFilteredGen = 0;
+let lastPassNum = 0;
 let allStates = [];
+let internshipMode = false;
 
 // ===== INIT =====
 checkRawJobs();
@@ -284,6 +287,23 @@ function getLocation() {
   return [selectedLocation.state, selectedLocation.country].filter(Boolean).join(", ");
 }
 
+// ===== INTERNSHIP MODE TOGGLE =====
+document.getElementById("internshipToggle").addEventListener("click", () => {
+  internshipMode = !internshipMode;
+  const toggle = document.getElementById("internshipToggle");
+  const knob = document.getElementById("toggleKnob");
+  const btn = document.getElementById("searchBtn");
+  if (internshipMode) {
+    toggle.style.background = "#059669";
+    knob.style.left = "22px";
+    btn.innerHTML = '<span class="text-base">🎓</span> Find Internships';
+  } else {
+    toggle.style.background = "#cbd5e1";
+    knob.style.left = "2px";
+    btn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Search Jobs';
+  }
+});
+
 // ===== SEARCH =====
 document.getElementById("searchBtn").addEventListener("click", async () => {
   const resume = document.getElementById("resume").value.trim();
@@ -297,6 +317,8 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   document.getElementById("extractBtn").disabled = true;
 
   lastRenderedCount = 0;
+  lastFilteredGen = 0;
+  lastPassNum = 0;
   showSpinner("Contacting scrapers...");
   hideElement("results");
   setStatus("Starting scrape...");
@@ -305,7 +327,8 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
       sites, keywords, resume_text: resume, roles,
       adzuna_country: getAdzunaCountry(),
       indeed_country: getIndeedCountry(),
-      location: getLocation()
+      location: getLocation(),
+      internship_mode: internshipMode
     })});
     scrapeAttempts = 0;
     pollResults();
@@ -335,22 +358,44 @@ function pollResults() {
       const d = await r.json();
 
       if (d.status === "running") {
-        if (d.last_scrape_raw > 0 && d.last_scrape_relevant > 0) {
+        const inPass = d.max_passes > 0 && d.pass_num > 0;
+        const genChanged = d.filtered_gen !== lastFilteredGen;
+        const countChanged = d.last_scrape_relevant !== lastRenderedCount;
+
+        if (d.last_scrape_raw > 0) {
           hideSpinner();
-          setStatus(`Scoring jobs with AI... (${d.last_scrape_relevant} relevant so far)`);
-          await loadResultsIncremental();
-        } else if (d.last_scrape_raw > 0) {
-          showSpinner(`Scraping done — scoring ${d.last_scrape_raw} jobs with AI...`);
+          if (d.last_scrape_relevant > 0) {
+            if (genChanged && inPass) {
+              setStatus(`\u2713 Pass ${d.pass_num}/${d.max_passes} complete \u2014 ${d.last_scrape_relevant} relevant so far`);
+            } else if (countChanged) {
+              setStatus(`Scoring${inPass ? ` Pass ${d.pass_num}/${d.max_passes}` : ""} jobs with AI... (${d.last_scrape_relevant} relevant)`);
+            } else if (d.pass_num > lastPassNum && lastPassNum > 0) {
+              setStatus(`Searching for more (Pass ${d.pass_num}/${d.max_passes}) \u2014 ${d.last_scrape_relevant} found so far`);
+            } else {
+              setStatus(`${d.last_scrape_relevant} relevant so far${inPass ? ` (Pass ${d.pass_num}/${d.max_passes})` : ""}`);
+            }
+            await loadResultsIncremental(d.filtered_gen);
+          } else {
+            if (d.pass_num > lastPassNum && lastPassNum > 0) {
+              setStatus(`Searching for more (Pass ${d.pass_num}/${d.max_passes})...`);
+            } else if (genChanged && inPass) {
+              setStatus(`\u2713 Pass ${d.pass_num}/${d.max_passes} complete \u2014 no matches yet`);
+            } else {
+              setStatus(`Scoring${inPass ? ` Pass ${d.pass_num}/${d.max_passes}` : ""} jobs with AI... (no matches yet)`);
+            }
+          }
         } else {
-          showSpinner(`Scraping job boards... (rate-limit delays active to avoid being blocked)`);
+          showSpinner(`Scraping job boards${inPass ? ` (Pass ${d.pass_num}/${d.max_passes})` : ""}... (rate-limit delays active)`);
         }
+        lastFilteredGen = d.filtered_gen;
+        lastPassNum = d.pass_num;
       }
 
       if (d.status === "done" || d.status === "error") {
         clearInterval(pollTimer); pollTimer = null;
         hideSpinner();
         if (d.status === "error") setStatus("Scraping failed", "red");
-        await loadResults();
+        await loadResults(d);
       } else if (scrapeAttempts > 90) {
         setStatus("Scraping is taking longer than expected — still processing...", undefined);
       }
@@ -362,13 +407,15 @@ function pollResults() {
   }, 2000);
 }
 
-async function loadResultsIncremental() {
+async function loadResultsIncremental(filteredGen) {
   try {
     const r = await fetch("/jobs");
     const d = await r.json();
     const jobs = d.jobs || [];
-    if (jobs.length > 0 && jobs.length !== lastRenderedCount) {
+    const gen = filteredGen !== undefined ? filteredGen : lastFilteredGen;
+    if (jobs.length > 0 && (jobs.length !== lastRenderedCount || gen !== lastFilteredGen)) {
       lastRenderedCount = jobs.length;
+      lastFilteredGen = gen;
       jobs.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
       showElement("results");
       renderJobs(jobs);
@@ -378,7 +425,7 @@ async function loadResultsIncremental() {
 }
 
 // ===== LOAD RESULTS =====
-async function loadResults() {
+async function loadResults(statusData) {
   try {
     const r = await fetch("/jobs");
     const d = await r.json();
@@ -386,7 +433,13 @@ async function loadResults() {
     hasRawJobs = true;
     showElement("results");
     applyThreshold();
-    const msg = allJobs.length ? `Found ${allJobs.length} relevant jobs` : "No relevant jobs found";
+    let msg;
+    if (allJobs.length) {
+      const passSummary = statusData && statusData.max_passes > 0 && statusData.pass_num > 0 ? ` after ${statusData.pass_num}/${statusData.max_passes} passes` : "";
+      msg = `Found ${allJobs.length} relevant jobs${passSummary}`;
+    } else {
+      msg = "No relevant jobs found";
+    }
     setStatus(msg, allJobs.length ? "green" : undefined);
   } catch (e) { setStatus("Error loading results: " + e.message, "red"); }
   resetSearchBtn();
@@ -415,10 +468,18 @@ function renderJobs(jobs) {
     const barPct = Math.min(sc, 100);
     const barColor = sc >= 80 ? "bg-emerald-500" : sc >= 50 ? "bg-amber-400" : "bg-red-400";
     const txtColor = sc >= 80 ? "text-emerald-600" : sc >= 50 ? "text-amber-600" : "text-red-500";
-    return `<div class="border border-slate-100 rounded-xl p-4 hover:shadow-md hover:border-slate-200 transition cursor-default">
+    const expBadge = j.experience_level === "internship"
+      ? '<span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">🎓 Internship</span>'
+      : j.experience_level === "entry_level"
+        ? '<span class="text-xs bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-medium">🌱 Entry Level</span>'
+        : "";
+    return `<div class="border border-slate-100 rounded-xl p-4 hover:shadow-md hover:border-slate-200 transition cursor-default ${j.experience_level ? 'border-l-4 ' + (j.experience_level === 'internship' ? 'border-l-emerald-400' : 'border-l-sky-400') : ''}">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
-          <h3 class="font-semibold text-slate-800 truncate">${j.title}</h3>
+          <div class="flex items-center gap-2 flex-wrap">
+            <h3 class="font-semibold text-slate-800 truncate">${j.title}</h3>
+            ${expBadge}
+          </div>
           <p class="text-sm text-slate-400 truncate">${j.company} &middot; ${j.location}</p>
         </div>
         <div class="text-right shrink-0">

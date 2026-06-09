@@ -64,8 +64,8 @@ ADZUNA_COUNTRIES = {
 }
 
 
-def scrape_adzuna(roles=None, country="us"):
-    log(f"[SCRAPER] Adzuna started (country: {country})")
+def scrape_adzuna(roles=None, country="us", internship_mode=False):
+    log(f"[SCRAPER] Adzuna started (country: {country}, internship_mode={internship_mode})")
     jobs = []
     seen_urls = set()
 
@@ -83,6 +83,8 @@ def scrape_adzuna(roles=None, country="us"):
             active_cats.add(cat)
 
     queries = [CATEGORY_QUERIES.get(c, c) for c in active_cats] or ["job"]
+    if internship_mode:
+        queries = [f"{q} intern" for q in queries]
 
     for query in queries:
         if len(jobs) >= SCRAPE_LIMIT:
