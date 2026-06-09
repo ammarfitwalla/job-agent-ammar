@@ -1,3 +1,12 @@
+---
+title: Job Agent
+emoji: 🤖
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 # Job Agent
 
 Automated job scraper + AI scoring + web dashboard.
@@ -18,3 +27,8 @@ Automated job scraper + AI scoring + web dashboard.
 ## Configuration
 
 Copy `config.example.py` to `config.py` and set API keys, email credentials, and search preferences. Supports both remote and location-based job searches.
+
+## Deploy
+
+- **Render** — auto-deploys from GitHub via `render.yaml`
+- **Hugging Face Spaces** — uses root `Dockerfile`, port 7860
