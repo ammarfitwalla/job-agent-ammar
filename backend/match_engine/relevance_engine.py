@@ -76,9 +76,6 @@ def _score_one(
     kw_norm = min(kw_score, 100)
     total_score = round(ai_score * llm_weight + kw_norm * kw_weight)
 
-    log(f"[SCORE] {job['title']}: kw={kw_score}(norm={kw_norm}) ai={ai_score} "
-        f"total={total_score} relevant={ai_relevant} verified={verified}")
-
     if total_score < min_score or not ai_relevant:
         return None
 

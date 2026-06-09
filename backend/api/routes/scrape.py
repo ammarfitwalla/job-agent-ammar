@@ -130,6 +130,7 @@ def _scrape_normal(sites, keywords, resume_text, roles, adzuna_country, location
     job_store["filtered"] = relevant
     job_store["scrape_status"] = "done"
     print(f"[SCRAPE] Pipeline complete — {len(all_jobs)} raw → {len(relevant)} relevant")
+    print(f"[SCRAPE] Relevant jobs: {[j.get('title', '?') for j in relevant]}")
 
 
 def _scrape_internship(sites, keywords, resume_text, roles, adzuna_country, location, indeed_country, min_relevant, max_passes):
@@ -237,14 +238,13 @@ def _scrape_internship(sites, keywords, resume_text, roles, adzuna_country, loca
     job_store["filtered_gen"] += 1
     job_store["scrape_status"] = "done"
     print(f"[SCRAPE] Pipeline complete — {len(all_jobs)} raw → {len(all_relevant)} relevant")
+    print(f"[SCRAPE] Relevant jobs: {[j.get('title', '?') for j in all_relevant]}")
 
 
 @router.post("")
 async def trigger_scrape(background_tasks: BackgroundTasks, req: ScrapeRequest):
-    print(f"[TRIGGER] Search Jobs clicked — sites={req.sites}, keywords count={len(req.keywords)}")
-    print(f"[TRIGGER] Adding background task...")
+    print(f"[SCRAPE] Search triggered — sites={req.sites}, mode={'internship' if req.internship_mode else 'normal'}")
     background_tasks.add_task(run_scrape, req.sites, req.keywords, req.resume_text, req.roles, req.adzuna_country, req.location, req.indeed_country, req.internship_mode, req.min_relevant, req.max_passes)
-    print(f"[TRIGGER] Background task added, returning immediately")
     return {"message": "Scrape started in background", "status": "running"}
 
 
@@ -254,7 +254,6 @@ async def stop_scrape():
     print(f"[STOP] Stop requested by user")
     job_store["cancel"] = True
     job_store["scrape_status"] = "done"
-    print(f"[STOP] Cancel flag set, status set to done")
     return {"message": "Scrape cancelled", "status": "done"}
 
 
@@ -290,7 +289,6 @@ async def scrape_status():
     pass_num = job_store.get("pass_num", 0)
     max_passes = job_store.get("max_passes", 0)
     filtered_gen = job_store.get("filtered_gen", 0)
-    print(f"[STATUS] Polled — status={status}, raw={raw_count}, filtered={filtered_count}, pass={pass_num}/{max_passes}")
     return {
         "status": status,
         "last_scrape_raw": raw_count,
