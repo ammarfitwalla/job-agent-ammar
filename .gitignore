@@ -1,4 +1,5 @@
 backend/config.py
+frontend/backup/
 __pycache__/
 *.pyc
 .env
