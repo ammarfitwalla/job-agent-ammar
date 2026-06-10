@@ -29,6 +29,7 @@ class HealthResponse(BaseModel):
 
 
 class ScrapeRequest(BaseModel):
+    search_id: str = ""
     sites: list[str] = ["remoteok", "weworkremotely"]
     keywords: list[str] = []
     resume_text: str = ""

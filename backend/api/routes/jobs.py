@@ -1,26 +1,24 @@
-from fastapi import APIRouter, HTTPException
-from api.schemas import Job
+from fastapi import APIRouter, HTTPException, Query
+from db import get_filtered_jobs
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
 @router.get("")
-async def list_jobs(min_score: int = 0, site: str = "", experience_level: str = ""):
-    from api.main import job_store
-    all_jobs = job_store.get("filtered", [])
-    if min_score:
-        all_jobs = [j for j in all_jobs if (j.get("total_score") or 0) >= min_score]
-    if site:
-        all_jobs = [j for j in all_jobs if site.lower() in j.get("url", "").lower()]
-    if experience_level:
-        all_jobs = [j for j in all_jobs if j.get("experience_level") == experience_level]
-    return {"total": len(all_jobs), "jobs": all_jobs}
+async def list_jobs(search_id: str = Query(""), min_score: int = 0,
+                    site: str = "", experience_level: str = ""):
+    if not search_id:
+        return {"total": 0, "jobs": []}
+    jobs = get_filtered_jobs(search_id, min_score=min_score, site=site,
+                             experience_level=experience_level)
+    return {"total": len(jobs), "jobs": jobs}
 
 
 @router.get("/{index}")
-async def get_job(index: int):
-    from api.main import job_store
-    jobs = job_store.get("filtered", [])
+async def get_job(search_id: str = Query(""), index: int = 0):
+    if not search_id:
+        raise HTTPException(404, "Job not found")
+    jobs = get_filtered_jobs(search_id)
     if index < 0 or index >= len(jobs):
         raise HTTPException(404, "Job not found")
     return jobs[index]

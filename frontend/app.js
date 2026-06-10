@@ -18,6 +18,19 @@ let lastPassNum = 0;
 let allStates = [];
 let internshipMode = false;
 let activeFilters = { site: '', experience_level: '' };
+let _searchId = crypto.randomUUID();
+
+function logEvent(event, data = {}, elapsed = 0) {
+  try {
+    const body = JSON.stringify({ session_id: _searchId, event, data, elapsed });
+    const blob = new Blob([body], { type: "application/json" });
+    navigator.sendBeacon("/api/events", blob);
+  } catch {}
+}
+
+window.addEventListener("beforeunload", () => {
+  logEvent("tab_closed", { url: window.location.href });
+});
 
 function getFilteredJobs() {
   let jobs = allJobs;
@@ -410,6 +423,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   document.getElementById("searchBtn").disabled = true;
   document.getElementById("extractBtn").disabled = true;
 
+  _searchId = crypto.randomUUID();
   lastRenderedCount = 0;
   lastFilteredGen = 0;
   lastPassNum = 0;
@@ -420,17 +434,19 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   document.title = "🔍 Searching... - AI Job Agent";
   hideElement("results");
   setStatus("Starting scrape...");
+  logEvent("search_started", { sites, keywords_count: keywords.length, roles_count: roles.length });
   try {
     await fetch("/scrape", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
       sites, keywords, resume_text: resume, roles,
       adzuna_country: getAdzunaCountry(),
       indeed_country: getIndeedCountry(),
       location: getLocation(),
-      internship_mode: internshipMode
+      internship_mode: internshipMode,
+      search_id: _searchId
     })});
     scrapeAttempts = 0;
     pollResults();
-  } catch (e) { document.title = "⚠️ Error - AI Job Agent"; setStatus("Error: " + e.message, "red"); resetSearchBtn(); hideSpinner(); }
+  } catch (e) { document.title = "⚠️ Error - AI Job Agent"; setStatus("Error: " + e.message, "red"); logEvent("search_error", { error: e.message }); resetSearchBtn(); hideSpinner(); }
 });
 
 // ===== VOTE =====
@@ -452,7 +468,7 @@ function pollResults() {
   pollTimer = setInterval(async () => {
     scrapeAttempts++;
     try {
-      const r = await fetch("/scrape/status");
+      const r = await fetch(`/scrape/status?search_id=${_searchId}`);
       const d = await r.json();
 
       if (d.queue_position > 0) {
@@ -499,7 +515,7 @@ function pollResults() {
       if (d.status === "done" || d.status === "error") {
         clearInterval(pollTimer); pollTimer = null;
         hideSpinner();
-        if (d.status === "error") { document.title = "⚠️ Error - AI Job Agent"; setStatus("Scraping failed", "red"); }
+        if (d.status === "error") { document.title = "⚠️ Error - AI Job Agent"; setStatus("Scraping failed", "red"); logEvent("search_error", { status: "error" }); }
         await loadResults(d);
       } else if (scrapeAttempts > 90) {
         setStatus("Scraping is taking longer than expected — still processing...", undefined);
@@ -515,7 +531,7 @@ function pollResults() {
 
 async function loadResultsIncremental(filteredGen) {
   try {
-    const r = await fetch("/jobs");
+    const r = await fetch(`/jobs?search_id=${_searchId}`);
     const d = await r.json();
     const jobs = d.jobs || [];
     const gen = filteredGen !== undefined ? filteredGen : lastFilteredGen;
@@ -535,7 +551,7 @@ async function loadResultsIncremental(filteredGen) {
 // ===== LOAD RESULTS =====
 async function loadResults(statusData) {
   try {
-    const r = await fetch("/jobs");
+    const r = await fetch(`/jobs?search_id=${_searchId}`);
     const d = await r.json();
     allJobs = d.jobs || [];
     hasRawJobs = true;
@@ -546,9 +562,11 @@ async function loadResults(statusData) {
       const passSummary = statusData && statusData.max_passes > 0 && statusData.pass_num > 0 ? ` after ${statusData.pass_num}/${statusData.max_passes} passes` : "";
       msg = `Found ${allJobs.length} relevant jobs${passSummary}`;
       document.title = `✅ ${allJobs.length} jobs found - AI Job Agent`;
+      logEvent("search_completed", { jobs_count: allJobs.length });
     } else {
       msg = "No relevant jobs found";
       document.title = "❌ No jobs found - AI Job Agent";
+      logEvent("search_completed", { jobs_count: 0 });
     }
     setStatus(msg, allJobs.length ? "green" : undefined);
   } catch (e) { setStatus("Error loading results: " + e.message, "red"); }
