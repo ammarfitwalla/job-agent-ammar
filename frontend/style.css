@@ -82,6 +82,9 @@ details[open] > summary::after { transform: rotate(270deg); }
   transform: translateY(-1px);
 }
 #searchBtn { transition: all 0.18s; }
+#searchBtn:disabled {
+  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+}
 
 #extractBtn:not(:disabled) {
   background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
@@ -134,6 +137,9 @@ body.internship-mode {
 body.internship-mode #searchBtn:not(:disabled) {
   background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
   box-shadow: 0 2px 10px rgba(217,119,6,0.28);
+}
+body.internship-mode #searchBtn:disabled {
+  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
 }
 
 body.internship-mode #searchBtn:not(:disabled):hover {

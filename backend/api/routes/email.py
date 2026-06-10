@@ -1,15 +1,16 @@
-from fastapi import APIRouter
-from api.schemas import Job
+from fastapi import APIRouter, Query
+from db import get_filtered_jobs
 
 router = APIRouter(prefix="/email", tags=["email"])
 
 
 @router.post("/report")
-async def send_report():
-    from api.main import job_store
+async def send_report(search_id: str = Query("")):
     from utils.emailer import send_remoteok_batch_email
 
-    jobs = job_store.get("filtered", [])
+    if not search_id:
+        return {"message": "Missing search_id", "sent": False}
+    jobs = get_filtered_jobs(search_id)
     if not jobs:
         return {"message": "No jobs to report", "sent": False}
 

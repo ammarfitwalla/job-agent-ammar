@@ -7,14 +7,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Mount
-from api.routes import jobs, scrape, email, resume, roles, states
+from api.routes import jobs, scrape, email, resume, roles, states, events
 import json
-
-# In-memory job store (lives as long as the server runs)
-job_store: dict = {"raw": [], "filtered": [], "internship_mode": False}
+from db import init_db
 
 VOTE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "votes.json")
 VOTE_THRESHOLD = 100
@@ -65,6 +63,12 @@ app.include_router(email.router)
 app.include_router(resume.router)
 app.include_router(roles.router)
 app.include_router(states.router)
+app.include_router(events.router)
+
+
+@app.on_event("startup")
+async def startup():
+    init_db()
 
 
 @app.get("/votes")
@@ -103,5 +107,13 @@ async def view_logs():
 
 # Serve frontend (must be last — catches all unmatched routes)
 _frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "frontend")
+
+
+@app.get("/db")
+async def download_db():
+    from db import _DB_PATH
+    if os.path.isfile(_DB_PATH):
+        return FileResponse(_DB_PATH, filename="job_agent.db", media_type="application/octet-stream")
+    return PlainTextResponse("Database not found", status_code=404)
 if os.path.isdir(_frontend_dir):
     app.mount("/", StaticFiles(directory=_frontend_dir, html=True), name="frontend")

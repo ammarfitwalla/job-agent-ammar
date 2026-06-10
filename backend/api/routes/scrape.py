@@ -1,21 +1,23 @@
-from fastapi import APIRouter, BackgroundTasks
-from api.schemas import ScrapeRequest, ScrapeResponse
+from fastapi import APIRouter, BackgroundTasks, Query
+from api.schemas import ScrapeRequest
 from utils.logger import log
 import threading
 from collections import deque
+from db import create_session, update_session, get_session, set_filtered_jobs, add_filtered_job, count_filtered_jobs
 
 router = APIRouter(prefix="/scrape", tags=["scrape"])
 
 _scrape_lock = threading.Lock()
-_scrape_queue = deque()
+_scrape_queue: deque[ScrapeRequest] = deque()
 
 
 def _process_queue():
     if _scrape_queue:
         next_req = _scrape_queue.popleft()
-        from api.main import job_store
-        job_store["queue_position"] = len(_scrape_queue)
-        print(f"[SCRAPE] Starting next queued scrape ({len(_scrape_queue) + 1} remaining in queue)")
+        sid = next_req.search_id
+        if sid:
+            update_session(sid, queue_position=len(_scrape_queue))
+        print(f"[SCRAPE] Starting next queued scrape ({len(_scrape_queue)} remaining in queue)")
         t = threading.Thread(target=_run_scrape_wrapper, args=(next_req,), daemon=True)
         t.start()
     else:
@@ -24,9 +26,12 @@ def _process_queue():
 
 def _run_scrape_wrapper(req: ScrapeRequest):
     try:
-        run_scrape(req.sites, req.keywords, req.resume_text, req.roles, req.adzuna_country, req.location, req.indeed_country, req.internship_mode, req.min_relevant, req.max_passes)
+        run_scrape(req.search_id, req.sites, req.keywords, req.resume_text, req.roles,
+                   req.adzuna_country, req.location, req.indeed_country,
+                   req.internship_mode, req.min_relevant, req.max_passes)
     finally:
         _process_queue()
+
 
 SITE_MAP = {
     "remoteok": ("remoteok_scraper", "scrape_remoteok"),
@@ -38,7 +43,6 @@ SITE_MAP = {
     "gulftalent": ("gulftalent_scraper", "scrape_gulftalent"),
     "eurojobs": ("eurojobs_scraper", "scrape_eurojobs"),
 }
-
 
 _TECH_KEYWORDS = {
     "python", "docker", "kubernetes", "aws", "azure", "gcp", "linux",
@@ -54,66 +58,74 @@ _TECH_KEYWORDS = {
 }
 
 
-def _score_jobs(jobs: list, keywords: list[str], resume_text: str, job_store: dict = None, internship_mode: bool = False) -> list:
+def _score_jobs(jobs: list, keywords: list[str], resume_text: str,
+                sid: str = None, internship_mode: bool = False) -> list:
     from match_engine.relevance_engine import filter_jobs
 
     def on_scored(job):
-        if job_store is not None:
-            job_store["filtered"].append(job)
+        if sid:
+            add_filtered_job(sid, job)
 
     if internship_mode:
         has_tech = any(kw.lower() in _TECH_KEYWORDS for kw in keywords)
         min_threshold = 30 if not has_tech else 50
     else:
         min_threshold = 0
-    relevant = filter_jobs(jobs, min_score=min_threshold, keywords=keywords, resume=resume_text, progress_callback=on_scored if job_store else None, internship_mode=internship_mode)
+    relevant = filter_jobs(jobs, min_score=min_threshold, keywords=keywords, resume=resume_text,
+                           progress_callback=on_scored if sid else None,
+                           internship_mode=internship_mode)
     log(f"[SCORE] {len(relevant)} relevant out of {len(jobs)}")
     return relevant
 
 
-def run_scrape(sites: list[str], keywords: list[str], resume_text: str, roles=None, adzuna_country="us", location="", indeed_country="USA", internship_mode=False, min_relevant=5, max_passes=3):
+def run_scrape(sid: str, sites: list[str], keywords: list[str], resume_text: str,
+               roles=None, adzuna_country="us", location="", indeed_country="USA",
+               internship_mode=False, min_relevant=5, max_passes=3):
     import sys
     sys.path.insert(0, ".")
-    from api.main import job_store
-    import importlib
 
-    print(f"[SCRAPE] Starting scrape for sites: {sites}")
+    if not sid:
+        print(f"[SCRAPE] No search_id provided, aborting")
+        return
+
+    create_session(sid, sites=sites, keywords_count=len(keywords),
+                   roles_count=len(roles or []), resume_length=len(resume_text),
+                   internship_mode=internship_mode)
+    update_session(sid, status="running", cancel=False, pass_num=0,
+                   max_passes=max_passes, filtered_gen=0, queue_position=0, scraped=0)
+
+    print(f"[SCRAPE] Starting scrape (sid={sid}) for sites: {sites}")
     print(f"[SCRAPE] Selected keywords: {keywords}")
     if roles:
         print(f"[SCRAPE] Selected roles: {len(roles)} — {roles[:5]}...")
     print(f"[SCRAPE] Internship mode: {internship_mode}, min_relevant={min_relevant}")
-    job_store["internship_mode"] = internship_mode
-    job_store["scrape_status"] = "running"
-    job_store["cancel"] = False
-    job_store["raw"] = []
-    job_store["filtered"] = []
-    job_store["pass_num"] = 0
-    job_store["max_passes"] = max_passes
-    job_store["filtered_gen"] = 0
-    job_store["queue_position"] = 0
 
     try:
         if internship_mode:
-            _scrape_internship(sites, keywords, resume_text, roles, adzuna_country, location, indeed_country, min_relevant, max_passes)
+            _scrape_internship(sid, sites, keywords, resume_text, roles,
+                               adzuna_country, location, indeed_country,
+                               min_relevant, max_passes)
         else:
-            _scrape_normal(sites, keywords, resume_text, roles, adzuna_country, location, indeed_country)
+            _scrape_normal(sid, sites, keywords, resume_text, roles,
+                           adzuna_country, location, indeed_country)
     except Exception as e:
         print(f"[SCRAPE] Pipeline error: {e}")
         import traceback
         traceback.print_exc()
-        job_store["scrape_status"] = "error"
+        update_session(sid, status="error")
 
 
-def _scrape_normal(sites, keywords, resume_text, roles, adzuna_country, location, indeed_country):
-    from api.main import job_store
+def _scrape_normal(sid, sites, keywords, resume_text, roles,
+                   adzuna_country, location, indeed_country):
     import importlib
 
     all_jobs = []
 
     for site_key in sites:
-        if job_store.get("cancel"):
+        s = get_session(sid)
+        if s and s.get("cancel"):
             print(f"[SCRAPE] Cancelled by user")
-            job_store["scrape_status"] = "done"
+            update_session(sid, status="done")
             return
 
         module_name, func_name = SITE_MAP.get(site_key, (None, None))
@@ -143,23 +155,24 @@ def _scrape_normal(sites, keywords, resume_text, roles, adzuna_country, location
             print(f"[SCRAPE] {site_key} failed: {e}")
 
     print(f"[SCRAPE] Total raw jobs: {len(all_jobs)}")
-    job_store["raw"] = all_jobs
+    update_session(sid, scraped=1)
 
     if not all_jobs:
         print(f"[SCRAPE] No jobs found, skipping relevance engine")
-        job_store["filtered"] = []
-        job_store["scrape_status"] = "done"
+        set_filtered_jobs(sid, [])
+        update_session(sid, status="done")
         return
 
-    relevant = _score_jobs(all_jobs, keywords, resume_text, job_store, internship_mode=False)
-    job_store["filtered"] = relevant
-    job_store["scrape_status"] = "done"
+    relevant = _score_jobs(all_jobs, keywords, resume_text, sid=sid, internship_mode=False)
+    set_filtered_jobs(sid, relevant)
+    update_session(sid, status="done", filtered_gen=1)
     print(f"[SCRAPE] Pipeline complete — {len(all_jobs)} raw → {len(relevant)} relevant")
     print(f"[SCRAPE] Relevant jobs: {[j.get('title', '?') for j in relevant]}")
 
 
-def _scrape_internship(sites, keywords, resume_text, roles, adzuna_country, location, indeed_country, min_relevant, max_passes):
-    from api.main import job_store
+def _scrape_internship(sid, sites, keywords, resume_text, roles,
+                       adzuna_country, location, indeed_country,
+                       min_relevant, max_passes):
     import importlib
     from utils.experience_level import detect_experience_level
     from match_engine.relevance_engine import filter_jobs
@@ -172,17 +185,19 @@ def _scrape_internship(sites, keywords, resume_text, roles, adzuna_country, loca
 
     while pass_num < max_passes:
         pass_num += 1
-        job_store["pass_num"] = pass_num
+        update_session(sid, pass_num=pass_num)
 
-        if job_store.get("cancel"):
+        s = get_session(sid)
+        if s and s.get("cancel"):
             print(f"[SCRAPE] Cancelled by user")
-            job_store["scrape_status"] = "done"
+            update_session(sid, status="done")
             return
 
         for site_key in sites:
-            if job_store.get("cancel"):
+            s = get_session(sid)
+            if s and s.get("cancel"):
                 print(f"[SCRAPE] Cancelled by user")
-                job_store["scrape_status"] = "done"
+                update_session(sid, status="done")
                 return
 
             module_name, func_name = SITE_MAP.get(site_key, (None, None))
@@ -228,110 +243,97 @@ def _scrape_internship(sites, keywords, resume_text, roles, adzuna_country, loca
             except Exception as e:
                 print(f"[SCRAPE] {site_key} failed: {e}")
 
-        job_store["raw"] = list(all_jobs)
+        update_session(sid, scraped=1)
 
-        # Experience filter + score new candidates
         for job in all_jobs:
             if "experience_level" not in job:
-                job["experience_level"] = detect_experience_level(job.get("title", ""), job.get("description", ""))
+                job["experience_level"] = detect_experience_level(
+                    job.get("title", ""), job.get("description", ""))
 
-        candidates = [j for j in all_jobs if j.get("experience_level") in ("internship", "entry_level")]
+        candidates = [j for j in all_jobs
+                      if j.get("experience_level") in ("internship", "entry_level")]
         new_candidates = [j for j in candidates if id(j) not in scored_ids]
         for j in new_candidates:
             scored_ids.add(id(j))
 
         if new_candidates:
-            print(f"[SCRAPE] Pass {pass_num}: {len(new_candidates)} new candidates to score (total {len(all_relevant)} relevant so far)")
+            print(f"[SCRAPE] Pass {pass_num}: {len(new_candidates)} new candidates "
+                  f"to score (total {len(all_relevant)} relevant so far)")
             has_tech = any(kw.lower() in _TECH_KEYWORDS for kw in keywords)
             min_threshold = 30 if not has_tech else 50
-            batch = filter_jobs(new_candidates, min_score=min_threshold, keywords=keywords, resume=resume_text,
-                                progress_callback=lambda j: job_store.setdefault("filtered", []).append(j),
+            batch = filter_jobs(new_candidates, min_score=min_threshold,
+                                keywords=keywords, resume=resume_text,
+                                progress_callback=lambda j: add_filtered_job(sid, j),
                                 internship_mode=True)
 
             all_relevant.extend(batch)
             all_relevant.sort(key=lambda j: j.get("total_score", 0), reverse=True)
-            job_store["filtered"] = list(all_relevant)
-            job_store["filtered_gen"] += 1
+            set_filtered_jobs(sid, all_relevant)
+            s = get_session(sid)
+            update_session(sid, filtered_gen=(s.get("filtered_gen", 0) if s else 0) + 1)
 
-        print(f"[SCRAPE] Pass {pass_num}: {len(all_jobs)} raw, {len(candidates)} experience-filtered, {len(all_relevant)} relevant")
+        print(f"[SCRAPE] Pass {pass_num}: {len(all_jobs)} raw, "
+              f"{len(candidates)} exp-filtered, {len(all_relevant)} relevant")
         if len(all_relevant) >= min_relevant:
             print(f"[SCRAPE] Enough relevant ({len(all_relevant)} >= {min_relevant}), stopping")
             break
 
-    job_store["raw"] = all_jobs
-    job_store["filtered"] = list(all_relevant)
-    job_store["filtered_gen"] += 1
-    job_store["scrape_status"] = "done"
+    set_filtered_jobs(sid, all_relevant)
+    s = get_session(sid)
+    update_session(sid, filtered_gen=(s.get("filtered_gen", 0) if s else 0) + 1,
+                   status="done")
     print(f"[SCRAPE] Pipeline complete — {len(all_jobs)} raw → {len(all_relevant)} relevant")
     print(f"[SCRAPE] Relevant jobs: {[j.get('title', '?') for j in all_relevant]}")
 
 
 @router.post("")
 async def trigger_scrape(background_tasks: BackgroundTasks, req: ScrapeRequest):
-    print(f"[SCRAPE] Search triggered — sites={req.sites}, mode={'internship' if req.internship_mode else 'normal'}")
-    from api.main import job_store
+    print(f"[SCRAPE] Search triggered — sid={req.search_id}, sites={req.sites}, "
+          f"mode={'internship' if req.internship_mode else 'normal'}")
+    if not req.search_id:
+        return {"message": "Missing search_id", "status": "error"}
+
     if _scrape_lock.acquire(blocking=False):
-        job_store["queue_position"] = 0
+        if req.search_id:
+            update_session(req.search_id, queue_position=0)
         background_tasks.add_task(_run_scrape_wrapper, req)
         return {"message": "Scrape started", "status": "running"}
     else:
         _scrape_queue.append(req)
         pos = len(_scrape_queue)
-        job_store["queue_position"] = pos
+        if req.search_id:
+            update_session(req.search_id, queue_position=pos)
         print(f"[SCRAPE] Queued at position {pos}")
-        return {"message": f"Another scrape in progress — queued at position {pos}", "status": "queued", "queue_position": pos}
+        return {"message": f"Another scrape in progress — queued at position {pos}",
+                "status": "queued", "queue_position": pos}
 
 
 @router.post("/stop")
-async def stop_scrape():
-    from api.main import job_store
-    print(f"[STOP] Stop requested by user")
-    job_store["cancel"] = True
-    job_store["scrape_status"] = "done"
+async def stop_scrape(search_id: str = Query("")):
+    if not search_id:
+        return {"message": "Missing search_id", "status": "error"}
+    print(f"[STOP] Stop requested for session {search_id}")
+    update_session(search_id, cancel=True, status="done")
     _scrape_queue.clear()
-    print(f"[STOP] Cleared queue ({len(_scrape_queue)} pending)")
+    print(f"[STOP] Cleared queue")
     return {"message": "Scrape cancelled", "status": "done"}
 
 
-@router.post("/reprocess")
-async def reprocess_jobs(req: ScrapeRequest):
-    from api.main import job_store
-    print(f"[REPROCESS] Re-scoring {len(job_store.get('raw', []))} raw jobs with keywords={req.keywords}")
-    job_store["scrape_status"] = "running"
-
-    raw = job_store.get("raw", [])
-    if not raw:
-        print(f"[REPROCESS] No raw jobs to reprocess")
-        job_store["scrape_status"] = "done"
-        return {"message": "No raw jobs to reprocess", "status": "done", "total": 0}
-
-    if req.internship_mode:
-        raw = [j for j in raw if j.get("experience_level") in ("internship", "entry_level")]
-        print(f"[REPROCESS] Internship filter: {len(raw)} jobs remaining")
-
-    relevant = _score_jobs(raw, req.keywords, req.resume_text, internship_mode=req.internship_mode)
-    job_store["filtered"] = relevant
-    job_store["scrape_status"] = "done"
-    print(f"[REPROCESS] Done — {len(relevant)} relevant")
-    return {"message": "Reprocessed", "status": "done", "total": len(relevant)}
-
-
 @router.get("/status")
-async def scrape_status():
-    from api.main import job_store
-    status = job_store.get("scrape_status", "idle")
-    raw_count = len(job_store.get("raw", []))
-    filtered_count = len(job_store.get("filtered", []))
-    pass_num = job_store.get("pass_num", 0)
-    max_passes = job_store.get("max_passes", 0)
-    filtered_gen = job_store.get("filtered_gen", 0)
-    queue_position = job_store.get("queue_position", 0)
+async def scrape_status(search_id: str = Query("")):
+    if not search_id:
+        return {"status": "idle", "last_scrape_raw": 0, "last_scrape_relevant": 0,
+                "pass_num": 0, "max_passes": 0, "filtered_gen": 0, "queue_position": 0}
+    s = get_session(search_id)
+    if s is None:
+        return {"status": "idle", "last_scrape_raw": 0, "last_scrape_relevant": 0,
+                "pass_num": 0, "max_passes": 0, "filtered_gen": 0, "queue_position": 0}
     return {
-        "status": status,
-        "last_scrape_raw": raw_count,
-        "last_scrape_relevant": filtered_count,
-        "pass_num": pass_num,
-        "max_passes": max_passes,
-        "filtered_gen": filtered_gen,
-        "queue_position": queue_position,
+        "status": s.get("status", "idle"),
+        "last_scrape_raw": 1 if s.get("scraped") else 0,
+        "last_scrape_relevant": count_filtered_jobs(search_id),
+        "pass_num": s.get("pass_num", 0),
+        "max_passes": s.get("max_passes", 0),
+        "filtered_gen": s.get("filtered_gen", 0),
+        "queue_position": s.get("queue_position", 0),
     }
