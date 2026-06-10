@@ -125,6 +125,14 @@ function setStatus(msg, type) {
 function showSpinner(msg) {
   document.getElementById("spinnerMsg").textContent = msg;
   showElement("spinner");
+  const skeletons = document.querySelector("#spinner > .space-y-3");
+  if (skeletons) skeletons.classList.add("hidden");
+}
+function showSkeleton(msg) {
+  document.getElementById("spinnerMsg").textContent = msg;
+  showElement("spinner");
+  const skeletons = document.querySelector("#spinner > .space-y-3");
+  if (skeletons) skeletons.classList.remove("hidden");
 }
 function hideSpinner() {
   hideElement("spinner");
@@ -409,6 +417,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   activeFilters = { site: '', experience_level: '' };
   document.getElementById("filterBar").classList.add("hidden");
   showSpinner("Contacting scrapers...");
+  document.title = "🔍 Searching... - AI Job Agent";
   hideElement("results");
   setStatus("Starting scrape...");
   try {
@@ -421,7 +430,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
     })});
     scrapeAttempts = 0;
     pollResults();
-  } catch (e) { setStatus("Error: " + e.message, "red"); resetSearchBtn(); hideSpinner(); }
+  } catch (e) { document.title = "⚠️ Error - AI Job Agent"; setStatus("Error: " + e.message, "red"); resetSearchBtn(); hideSpinner(); }
 });
 
 // ===== VOTE =====
@@ -448,6 +457,7 @@ function pollResults() {
 
       if (d.queue_position > 0) {
         showSpinner(`Queued at position ${d.queue_position}...`);
+        document.title = "⏳ Queued... - AI Job Agent";
         return;
       }
 
@@ -457,7 +467,6 @@ function pollResults() {
         const countChanged = d.last_scrape_relevant !== lastRenderedCount;
 
         if (d.last_scrape_raw > 0) {
-          hideSpinner();
           if (d.last_scrape_relevant > 0) {
             if (genChanged && inPass) {
               setStatus(`\u2713 Pass ${d.pass_num}/${d.max_passes} complete \u2014 ${d.last_scrape_relevant} relevant so far`);
@@ -470,16 +479,18 @@ function pollResults() {
             }
             await loadResultsIncremental(d.filtered_gen);
           } else {
+            document.title = "🤖 Scoring... - AI Job Agent";
             if (d.pass_num > lastPassNum && lastPassNum > 0) {
-              setStatus(`No matches yet, searching for more (Pass ${d.pass_num}/${d.max_passes})...`);
+              showSkeleton(`Scoring: ${d.last_scrape_raw} jobs analyzed, no matches yet \u2014 searching for more (Pass ${d.pass_num}/${d.max_passes})...`);
             } else if (genChanged && inPass) {
-              setStatus(`\u2713 Pass ${d.pass_num}/${d.max_passes} complete \u2014 no matches yet`);
+              showSkeleton(`\u2713 Pass ${d.pass_num}/${d.max_passes} complete \u2014 ${d.last_scrape_raw} jobs analyzed, scoring...`);
             } else {
-              setStatus(`Scoring${inPass ? ` Pass ${d.pass_num}/${d.max_passes}` : ""} jobs with AI... (no matches yet)`);
+              showSkeleton(`Scoring ${d.last_scrape_raw} jobs with AI... (no matches yet)`);
             }
           }
         } else {
           showSpinner(`Scraping job boards${inPass ? ` (Pass ${d.pass_num}/${d.max_passes})` : ""}... (rate-limit delays active)`);
+          document.title = "📡 Scraping... - AI Job Agent";
         }
         lastFilteredGen = d.filtered_gen;
         lastPassNum = d.pass_num;
@@ -488,13 +499,14 @@ function pollResults() {
       if (d.status === "done" || d.status === "error") {
         clearInterval(pollTimer); pollTimer = null;
         hideSpinner();
-        if (d.status === "error") setStatus("Scraping failed", "red");
+        if (d.status === "error") { document.title = "⚠️ Error - AI Job Agent"; setStatus("Scraping failed", "red"); }
         await loadResults(d);
       } else if (scrapeAttempts > 90) {
         setStatus("Scraping is taking longer than expected — still processing...", undefined);
       }
     } catch {
       clearInterval(pollTimer); pollTimer = null;
+      document.title = "⚠️ Error - AI Job Agent";
       setStatus("Error polling results", "red");
       resetSearchBtn(); hideSpinner();
     }
@@ -512,6 +524,8 @@ async function loadResultsIncremental(filteredGen) {
       lastFilteredGen = gen;
       jobs.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
       showElement("results");
+      hideSpinner();
+      document.title = `✅ ${jobs.length} job${jobs.length > 1 ? "s" : ""} found - AI Job Agent`;
       renderJobs(jobs);
       updateCountBadge(jobs.length);
     }
@@ -531,8 +545,10 @@ async function loadResults(statusData) {
     if (allJobs.length) {
       const passSummary = statusData && statusData.max_passes > 0 && statusData.pass_num > 0 ? ` after ${statusData.pass_num}/${statusData.max_passes} passes` : "";
       msg = `Found ${allJobs.length} relevant jobs${passSummary}`;
+      document.title = `✅ ${allJobs.length} jobs found - AI Job Agent`;
     } else {
       msg = "No relevant jobs found";
+      document.title = "❌ No jobs found - AI Job Agent";
     }
     setStatus(msg, allJobs.length ? "green" : undefined);
   } catch (e) { setStatus("Error loading results: " + e.message, "red"); }
