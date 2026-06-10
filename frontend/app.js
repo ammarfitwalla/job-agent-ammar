@@ -22,9 +22,12 @@ let _searchId = crypto.randomUUID();
 
 function logEvent(event, data = {}, elapsed = 0) {
   try {
-    const body = JSON.stringify({ session_id: _searchId, event, data, elapsed });
-    const blob = new Blob([body], { type: "application/json" });
-    navigator.sendBeacon("/api/events", blob);
+    fetch("/api/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: _searchId, event, data, elapsed }),
+      keepalive: true
+    });
   } catch {}
 }
 
@@ -59,30 +62,23 @@ function renderFilterBar() {
   const sites = [...new Set(allJobs.map(j => siteFromUrl(j.url)).filter(Boolean))];
   const exps = [...new Set(allJobs.map(j => j.experience_level).filter(Boolean))];
 
-  const breakdown = sites.map(s => {
-    const count = allJobs.filter(j => siteFromUrl(j.url) === s).length;
-    return `${count} ${s}`;
-  }).join(" · ");
-
-  let html = `<span id="breakdownText">${breakdown}</span>`;
-
   const allActive = !activeFilters.site && !activeFilters.experience_level;
-  html += `<span class="filter-chip${allActive ? ' active' : ''}" data-filter="all">All</span>`;
+  let html = `<span class="cursor-pointer px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${allActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-filter="all">All Results</span>`;
 
   sites.forEach(s => {
     const active = activeFilters.site.toLowerCase() === s.toLowerCase();
-    html += `<span class="filter-chip${active ? ' active' : ''}" data-filter="site" data-value="${s}">${s}${active ? '<span class="chip-remove">✕</span>' : ''}</span>`;
+    html += `<span class="cursor-pointer px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors flex items-center gap-1 ${active ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-filter="site" data-value="${s}">${s}${active ? '<svg class="w-3 h-3 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>' : ''}</span>`;
   });
 
   exps.forEach(e => {
     const active = activeFilters.experience_level === e;
-    const label = e === "internship" ? "🎓 Internship" : e === "entry_level" ? "🌱 Entry" : e;
-    html += `<span class="filter-chip${active ? ' active' : ''}" data-filter="exp" data-value="${e}">${label}${active ? '<span class="chip-remove">✕</span>' : ''}</span>`;
+    const label = e === "internship" ? "Internship" : e === "entry_level" ? "Entry Level" : e;
+    html += `<span class="cursor-pointer px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors flex items-center gap-1 ${active ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-filter="exp" data-value="${e}">${label}${active ? '<svg class="w-3 h-3 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>' : ''}</span>`;
   });
 
   bar.innerHTML = html;
 
-  bar.querySelectorAll(".filter-chip").forEach(chip => {
+  bar.querySelectorAll("span[data-filter]").forEach(chip => {
     chip.addEventListener("click", () => {
       const filter = chip.dataset.filter;
       const value = chip.dataset.value;
@@ -119,57 +115,61 @@ async function fetchVoteCount() {
 }
 
 // ===== HELPERS =====
-function showElement(id) {
-  document.getElementById(id).classList.remove("hidden");
-}
-function hideElement(id) {
-  document.getElementById(id).classList.add("hidden");
-}
+function showElement(id) { document.getElementById(id).classList.remove("hidden"); }
+function hideElement(id) { document.getElementById(id).classList.add("hidden"); }
 
-function setStatus(msg, type) {
+function setStatus(msg, type = "blue") {
   const el = document.getElementById("status");
-  el.classList.remove("hidden", "bg-blue-50", "text-blue-700", "bg-red-50", "text-red-700", "bg-emerald-50", "text-emerald-700");
-  if (type === "red") el.classList.add("bg-red-50", "text-red-700");
-  else if (type === "green") el.classList.add("bg-emerald-50", "text-emerald-700");
-  else el.classList.add("bg-blue-50", "text-blue-700");
-  el.innerHTML = `<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${type === "red" ? "M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" : type === "green" ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" : "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"}"/></svg><span>${msg}</span>`;
+  el.classList.remove("hidden", "bg-indigo-50", "text-indigo-700", "border-indigo-100", "bg-red-50", "text-red-700", "border-red-100", "bg-emerald-50", "text-emerald-700", "border-emerald-100", "bg-amber-50", "text-amber-700", "border-amber-100");
+
+  let icon = '';
+  if (type === "red") {
+    el.classList.add("bg-red-50", "text-red-700", "border-red-100");
+    icon = '<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+  } else if (type === "green") {
+    el.classList.add("bg-emerald-50", "text-emerald-700", "border-emerald-100");
+    icon = '<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+  } else if (type === "amber") {
+    el.classList.add("bg-amber-50", "text-amber-700", "border-amber-100");
+    icon = '<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+  } else {
+    el.classList.add("bg-indigo-50", "text-indigo-700", "border-indigo-100");
+    icon = '<svg class="w-4 h-4 shrink-0 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>';
+  }
+
+  el.innerHTML = `${icon}<span>${msg}</span>`;
 }
 
 function showSpinner(msg) {
   document.getElementById("spinnerMsg").textContent = msg;
   showElement("spinner");
-  const skeletons = document.querySelector("#spinner > .space-y-3");
-  if (skeletons) skeletons.classList.add("hidden");
+  hideElement("results");
 }
 function showSkeleton(msg) {
   document.getElementById("spinnerMsg").textContent = msg;
   showElement("spinner");
-  const skeletons = document.querySelector("#spinner > .space-y-3");
-  if (skeletons) skeletons.classList.remove("hidden");
+  hideElement("results");
 }
 function hideSpinner() {
   hideElement("spinner");
 }
 
 function resetSearchBtn() {
-  document.getElementById("searchBtn").innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Search Jobs';
-  document.getElementById("searchBtn").disabled = false;
+  const btn = document.getElementById("searchBtn");
+  btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Start Search';
+  btn.disabled = false;
   document.getElementById("extractBtn").disabled = false;
 }
 
 function updateCountBadge(n) {
   const el = document.getElementById("resultCount");
   el.textContent = n;
-  el.classList.remove("count-pop");
-  void el.offsetWidth;
-  el.classList.add("count-pop");
+  el.parentElement.classList.remove("count-pop");
+  void el.parentElement.offsetWidth;
+  el.parentElement.classList.add("count-pop");
 }
 
-function updateSearchBtn() {
-  const hasResume = document.getElementById("resume").value.trim().length > 0;
-  const hasRoles = getSelectedRoles().length > 0;
-  document.getElementById("searchBtn").disabled = !(hasResume && hasRoles);
-}
+function updateSearchBtn() {}
 
 document.getElementById("resume").addEventListener("input", updateSearchBtn);
 
@@ -189,7 +189,7 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
     updateSearchBtn();
     document.getElementById("extractBtn").click();
   } catch (err) {
-    alert("Upload failed: " + err.message);
+    setStatus("Upload failed: " + err.message, "red");
   } finally {
     lbl.textContent = orig;
     e.target.value = "";
@@ -206,7 +206,7 @@ function applyThreshold() {
 // ===== RESUME -> KEYWORDS =====
 document.getElementById("extractBtn").addEventListener("click", async () => {
   const resume = document.getElementById("resume").value.trim();
-  if (!resume) return alert("Paste your resume first");
+  if (!resume) { setStatus("Please paste or upload your resume first.", "red"); return; }
   const btn = document.getElementById("extractBtn");
   btn.textContent = "Extracting...";
   btn.disabled = true;
@@ -214,20 +214,25 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
     const r = await fetch("/resume/keywords", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resume_text: resume }) });
     const d = await r.json();
     renderKeywords(d.keywords);
-  } catch (e) { alert("Failed: " + e.message); }
-  finally { btn.textContent = "Extract Keywords"; btn.disabled = false; }
+    setStatus("Keywords successfully extracted.", "green");
+  } catch (e) { setStatus("Failed to extract keywords.", "red"); }
+  finally { btn.textContent = "Auto-Extract Keywords"; btn.disabled = false; }
 });
 
 function renderKeywords(kws) {
   const c = document.getElementById("keywords");
   if (!kws.length) { c.innerHTML = '<span class="text-xs text-slate-400 italic">No keywords found</span>'; return; }
-  c.innerHTML = kws.map(k => `<label class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer transition ${k.selected ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}"><input type="checkbox" value="${k.word}" ${k.selected ? "checked" : ""} class="hidden" onchange="this.parentElement.classList.toggle('bg-indigo-100');this.parentElement.classList.toggle('text-indigo-700');this.parentElement.classList.toggle('bg-slate-100');this.parentElement.classList.toggle('text-slate-500');updateKwCount()"><span>${k.word}</span></label>`).join("");
+  c.innerHTML = kws.map(k => `
+    <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-[11px] font-medium cursor-pointer transition-colors ${k.selected ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">
+      <input type="checkbox" value="${k.word}" ${k.selected ? "checked" : ""} class="hidden" onchange="this.parentElement.classList.toggle('bg-slate-900');this.parentElement.classList.toggle('text-white');this.parentElement.classList.toggle('border-slate-900');this.parentElement.classList.toggle('bg-white');this.parentElement.classList.toggle('text-slate-600');this.parentElement.classList.toggle('border-slate-200');updateKwCount()">
+      <span>${k.word}</span>
+    </label>`).join("");
   updateKwCount();
 }
 
 function updateKwCount() {
   const n = getSelectedKeywords().length;
-  document.getElementById("kwCount").textContent = n + " selected";
+  document.getElementById("kwCount").textContent = n;
 }
 
 // ===== CUSTOM KEYWORDS =====
@@ -241,7 +246,13 @@ document.getElementById("customKeywordInput").addEventListener("keydown", e => {
 
 function renderCustomKeywords() {
   const c = document.getElementById("customKeywords");
-  c.innerHTML = customKeywords.map(kw => `<span class="inline-flex items-center gap-1 bg-purple-100 text-purple-700 text-xs px-2.5 py-0.5 rounded-full"><span>${kw}</span><button class="remove-kw hover:text-red-500 font-bold leading-none" data-kw="${kw}">&times;</button></span>`).join("");
+  c.innerHTML = customKeywords.map(kw => `
+    <span class="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-100 text-indigo-700 text-[11px] px-2.5 py-1 rounded-lg font-medium">
+      <span>${kw}</span>
+      <button class="remove-kw hover:text-indigo-900 ml-1 opacity-70 hover:opacity-100" data-kw="${kw}">
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+    </span>`).join("");
   c.querySelectorAll(".remove-kw").forEach(b => b.addEventListener("click", () => { customKeywords = customKeywords.filter(k => k !== b.dataset.kw); renderCustomKeywords(); updateKwCount(); }));
 }
 
@@ -252,11 +263,19 @@ async function loadRoles() {
 
 function renderRoles(categories) {
   const c = document.getElementById("roles");
-  const labels = { tech: "Tech", sales: "Sales", media: "Media", healthcare: "Healthcare", finance: "Finance", admin: "Admin", legal: "Legal", education: "Education", civil: "Civil (Construction)" };
+  const labels = { tech: "Engineering & IT", sales: "Sales & Marketing", media: "Media & Design", healthcare: "Healthcare", finance: "Finance", admin: "Administration", legal: "Legal", education: "Education", civil: "Civil & Construction" };
   c.innerHTML = Object.entries(categories).map(([cat, roles]) =>
-    `<details class="border border-slate-200 rounded-lg overflow-hidden text-sm">
-      <summary class="cursor-pointer px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-500 flex items-center gap-2">${labels[cat]||cat} <span class="text-slate-400 font-normal">(${roles.length})</span></summary>
-      <div class="p-2 space-y-0.5 max-h-40 overflow-y-auto">${roles.map(r => `<label class="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-slate-50 cursor-pointer text-xs"><input type="checkbox" class="role-cb accent-indigo-600" value="${r}" onchange="updateRoleCount()"><span>${r}</span></label>`).join("")}</div>
+    `<details class="group border border-slate-100 rounded-xl overflow-hidden bg-white mb-1">
+      <summary class="cursor-pointer px-3 py-2 bg-slate-50/50 hover:bg-slate-50 text-[11px] font-semibold text-slate-700 flex items-center transition-colors">
+        ${labels[cat]||cat} <span class="ml-2 text-slate-400 font-normal">(${roles.length})</span>
+      </summary>
+      <div class="p-2 bg-white space-y-1 border-t border-slate-50">
+        ${roles.map(r => `
+          <label class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer text-xs text-slate-600 transition-colors">
+            <input type="checkbox" class="role-cb w-3.5 h-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900" value="${r}" onchange="updateRoleCount()">
+            <span>${r}</span>
+          </label>`).join("")}
+      </div>
     </details>`
   ).join("");
 }
@@ -271,18 +290,22 @@ document.getElementById("customRoleInput").addEventListener("keydown", e => { if
 
 function renderCustomRoles() {
   const c = document.getElementById("customRoles");
-  c.innerHTML = customRoles.map(r => `<span class="inline-flex items-center gap-1 bg-purple-100 text-purple-700 text-xs px-2.5 py-0.5 rounded-full"><span>${r}</span><button class="remove-role hover:text-red-500 font-bold leading-none" data-role="${r}">&times;</button></span>`).join("");
+  c.innerHTML = customRoles.map(r => `
+    <span class="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-100 text-emerald-700 text-[11px] px-2.5 py-1 rounded-lg font-medium">
+      <span>${r}</span>
+      <button class="remove-role hover:text-emerald-900 ml-1 opacity-70 hover:opacity-100" data-role="${r}">
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+    </span>`).join("");
   c.querySelectorAll(".remove-role").forEach(b => b.addEventListener("click", () => { customRoles = customRoles.filter(r => r !== b.dataset.role); renderCustomRoles(); updateRoleCount(); }));
 }
 
 function updateRoleCount() {
-  document.getElementById("roleCount").textContent = getSelectedRoles().length + " selected";
+  document.getElementById("roleCount").textContent = getSelectedRoles().length;
   updateSearchBtn();
 }
 
 function getSelectedRoles() { return [...Array.from(document.querySelectorAll(".role-cb:checked")).map(e => e.value), ...customRoles]; }
-
-// ===== SITES =====
 function getSelectedSites() { return Array.from(document.querySelectorAll("#sites input:checked:not(:disabled)")).map(e => e.value); }
 function getSelectedKeywords() { return [...Array.from(document.querySelectorAll("#keywords input:checked")).map(e => e.value), ...customKeywords]; }
 
@@ -332,23 +355,23 @@ function searchState(query) {
   const results = document.getElementById("locationResults");
   results.innerHTML = "";
   if (!allStates.length) {
-    results.innerHTML = '<div class="px-3 py-2 text-xs text-slate-400">Loading states...</div>';
+    results.innerHTML = '<div class="px-4 py-3 text-xs text-slate-400">Loading directory...</div>';
     results.classList.remove("hidden");
     return;
   }
   const lower = query.toLowerCase();
   const matches = allStates
     .filter(s => s.state.toLowerCase().includes(lower))
-    .slice(0, 8);
+    .slice(0, 6);
   if (!matches.length) {
-    results.innerHTML = '<div class="px-3 py-2 text-xs text-slate-400">No results</div>';
+    results.innerHTML = '<div class="px-4 py-3 text-xs text-slate-400">No matching locations</div>';
     results.classList.remove("hidden");
     return;
   }
   matches.forEach(item => {
     const label = [item.state, item.country].filter(Boolean).join(", ");
     const div = document.createElement("div");
-    div.className = "px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 text-slate-700 border-b border-slate-100 last:border-0";
+    div.className = "px-4 py-2.5 text-xs cursor-pointer hover:bg-slate-50 text-slate-700 border-b border-slate-50 last:border-0 font-medium transition-colors";
     div.textContent = label;
     div.addEventListener("mousedown", (e) => {
       e.preventDefault();
@@ -364,7 +387,12 @@ function selectLocation(loc) {
   document.getElementById("locationInput").value = loc.label;
   document.getElementById("locationResults").classList.add("hidden");
   const el = document.getElementById("selectedLocation");
-  el.innerHTML = `<span>${loc.label}</span><button class="ml-1 hover:text-red-500 font-bold leading-none text-emerald-500" id="clearLocation">&times;</button>`;
+  el.innerHTML = `
+    <svg class="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+    <span>${loc.label}</span>
+    <button class="ml-1 text-emerald-600/60 hover:text-emerald-800" id="clearLocation">
+      <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+    </button>`;
   el.classList.remove("hidden");
   document.getElementById("clearLocation").addEventListener("click", () => {
     selectedLocation = null;
@@ -373,9 +401,7 @@ function selectLocation(loc) {
   });
 }
 
-function getAdzunaCountry() {
-  return selectedLocation ? selectedLocation.country_code : "us";
-}
+function getAdzunaCountry() { return selectedLocation ? selectedLocation.country_code : "us"; }
 function getIndeedCountry() {
   if (!selectedLocation) return "USA";
   const cc = selectedLocation.country_code;
@@ -392,35 +418,41 @@ document.getElementById("internshipToggle").addEventListener("click", () => {
   const toggle = document.getElementById("internshipToggle");
   const knob = document.getElementById("toggleKnob");
   const btn = document.getElementById("searchBtn");
-  const header = document.getElementById("mainHeader");
-  const panel = document.getElementById("internshipPanel");
+
   if (internshipMode) {
     document.body.classList.add("internship-mode");
-    toggle.style.background = "#0d9488";
-    knob.style.left = "22px";
-    btn.innerHTML = '<span class="text-base">🎓</span> Find Internships';
-    header.style.background = "linear-gradient(135deg, #0f766e 0%, #0d9488 45%, #14b8a6 100%)";
-    if (panel) { panel.style.background = "#f0fdfa"; panel.style.borderColor = "#99f6e4"; }
+    toggle.classList.replace("bg-slate-200", "bg-teal-500");
+    knob.style.transform = "translateX(20px)";
+    btn.classList.replace("bg-slate-900", "bg-teal-600");
+    btn.classList.replace("hover:bg-slate-800", "hover:bg-teal-700");
+    btn.classList.replace("shadow-slate-900/10", "shadow-teal-600/20");
+    btn.innerHTML = '<span class="text-base">🎓</span> Search Internships';
+    document.getElementById("logoIcon").classList.replace("bg-slate-900", "bg-teal-600");
   } else {
     document.body.classList.remove("internship-mode");
-    toggle.style.background = "#cbd5e1";
-    knob.style.left = "2px";
-    btn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Search Jobs';
-    header.style.background = "linear-gradient(135deg, #1e1b4b 0%, #3730a3 45%, #6d28d9 100%)";
-    if (panel) { panel.style.background = "#f0fdf4"; panel.style.borderColor = "#bbf7d0"; }
+    toggle.classList.replace("bg-teal-500", "bg-slate-200");
+    knob.style.transform = "translateX(0)";
+    btn.classList.replace("bg-teal-600", "bg-slate-900");
+    btn.classList.replace("hover:bg-teal-700", "hover:bg-slate-800");
+    btn.classList.replace("shadow-teal-600/20", "shadow-slate-900/10");
+    btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Start Search';
+    document.getElementById("logoIcon").classList.replace("bg-teal-600", "bg-slate-900");
   }
 });
 
 // ===== SEARCH =====
 document.getElementById("searchBtn").addEventListener("click", async () => {
   const resume = document.getElementById("resume").value.trim();
-  if (!resume) return alert("Paste your resume first");
-  const sites = getSelectedSites(), keywords = getSelectedKeywords(), roles = getSelectedRoles();
-  if (!sites.length) return alert("Select at least one site");
-  if (!roles.length) return alert("Select at least one role category");
+  if (!resume) return setStatus("Missing required field: Please paste or upload your resume.", "red");
 
-  document.getElementById("searchBtn").innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Searching...';
-  document.getElementById("searchBtn").disabled = true;
+  const sites = getSelectedSites(), keywords = getSelectedKeywords(), roles = getSelectedRoles();
+  if (!roles.length) return setStatus("Missing required field: Select at least one job role.", "red");
+  if (!sites.length) return setStatus("Missing required field: Select at least one job board.", "red");
+  if (!document.getElementById("locationInput").value.trim()) return setStatus("Missing required field: Enter a location.", "red");
+
+  const btn = document.getElementById("searchBtn");
+  btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Searching Data...';
+  btn.disabled = true;
   document.getElementById("extractBtn").disabled = true;
 
   _searchId = crypto.randomUUID();
@@ -430,23 +462,30 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   allJobs = [];
   activeFilters = { site: '', experience_level: '' };
   document.getElementById("filterBar").classList.add("hidden");
-  showSpinner("Contacting scrapers...");
+
+  showSpinner("Connecting to Job Boards...");
   document.title = "🔍 Searching... - AI Job Agent";
   hideElement("results");
-  setStatus("Starting scrape...");
+  setStatus("Initializing data collection...", "blue");
   logEvent("search_started", { sites, keywords_count: keywords.length, roles_count: roles.length });
+
   try {
     await fetch("/scrape", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
       sites, keywords, resume_text: resume, roles,
       adzuna_country: getAdzunaCountry(),
       indeed_country: getIndeedCountry(),
-      location: getLocation(),
+      location: getLocation() || document.getElementById("locationInput").value,
       internship_mode: internshipMode,
       search_id: _searchId
     })});
     scrapeAttempts = 0;
     pollResults();
-  } catch (e) { document.title = "⚠️ Error - AI Job Agent"; setStatus("Error: " + e.message, "red"); logEvent("search_error", { error: e.message }); resetSearchBtn(); hideSpinner(); }
+  } catch (e) {
+    document.title = "AI Job Agent";
+    setStatus("Error: " + e.message, "red");
+    logEvent("search_error", { error: e.message });
+    resetSearchBtn(); hideSpinner(); showElement("results");
+  }
 });
 
 // ===== VOTE =====
@@ -472,7 +511,7 @@ function pollResults() {
       const d = await r.json();
 
       if (d.queue_position > 0) {
-        showSpinner(`Queued at position ${d.queue_position}...`);
+        showSpinner(`Position ${d.queue_position} in queue...`);
         document.title = "⏳ Queued... - AI Job Agent";
         return;
       }
@@ -485,27 +524,27 @@ function pollResults() {
         if (d.last_scrape_raw > 0) {
           if (d.last_scrape_relevant > 0) {
             if (genChanged && inPass) {
-              setStatus(`\u2713 Pass ${d.pass_num}/${d.max_passes} complete \u2014 ${d.last_scrape_relevant} relevant so far`);
+              setStatus(`Batch ${d.pass_num}/${d.max_passes} processed \u2014 ${d.last_scrape_relevant} matches found`, "blue");
             } else if (countChanged) {
-              setStatus(`Scoring${inPass ? ` Pass ${d.pass_num}/${d.max_passes}` : ""} jobs with AI... (${d.last_scrape_relevant} relevant)`);
+              setStatus(`AI evaluating candidates... (${d.last_scrape_relevant} matches)`, "blue");
             } else if (d.pass_num > lastPassNum && lastPassNum > 0) {
-              setStatus(`${d.last_scrape_relevant} relevant so far, searching for more (Pass ${d.pass_num}/${d.max_passes})...`);
+              setStatus(`${d.last_scrape_relevant} matches found, scanning further (Batch ${d.pass_num}/${d.max_passes})...`, "amber");
             } else {
-              setStatus(`${d.last_scrape_relevant} relevant so far${inPass ? ` (Pass ${d.pass_num}/${d.max_passes})` : ""}`);
+              setStatus(`${d.last_scrape_relevant} relevant roles found so far`, "blue");
             }
             await loadResultsIncremental(d.filtered_gen);
           } else {
             document.title = "🤖 Scoring... - AI Job Agent";
             if (d.pass_num > lastPassNum && lastPassNum > 0) {
-              showSkeleton(`Scoring: ${d.last_scrape_raw} jobs analyzed, no matches yet \u2014 searching for more (Pass ${d.pass_num}/${d.max_passes})...`);
+              showSkeleton(`AI rejected ${d.last_scrape_raw} generic roles. Scanning deeper (Batch ${d.pass_num}/${d.max_passes})...`);
             } else if (genChanged && inPass) {
-              showSkeleton(`\u2713 Pass ${d.pass_num}/${d.max_passes} complete \u2014 ${d.last_scrape_raw} jobs analyzed, scoring...`);
+              showSkeleton(`Batch ${d.pass_num}/${d.max_passes} processed \u2014 ${d.last_scrape_raw} roles analyzed, scoring in progress...`);
             } else {
-              showSkeleton(`Scoring ${d.last_scrape_raw} jobs with AI... (no matches yet)`);
+              showSkeleton(`AI is evaluating ${d.last_scrape_raw} initial results...`);
             }
           }
         } else {
-          showSpinner(`Scraping job boards${inPass ? ` (Pass ${d.pass_num}/${d.max_passes})` : ""}... (rate-limit delays active)`);
+          showSpinner(`Gathering data from networks${inPass ? ` (Batch ${d.pass_num}/${d.max_passes})` : ""}...`);
           document.title = "📡 Scraping... - AI Job Agent";
         }
         lastFilteredGen = d.filtered_gen;
@@ -515,16 +554,20 @@ function pollResults() {
       if (d.status === "done" || d.status === "error") {
         clearInterval(pollTimer); pollTimer = null;
         hideSpinner();
-        if (d.status === "error") { document.title = "⚠️ Error - AI Job Agent"; setStatus("Scraping failed", "red"); logEvent("search_error", { status: "error" }); }
+        if (d.status === "error") {
+          document.title = "AI Job Agent";
+          setStatus("Data collection encountered an error.", "red");
+          logEvent("search_error", { status: "error" });
+        }
         await loadResults(d);
       } else if (scrapeAttempts > 90) {
-        setStatus("Scraping is taking longer than expected — still processing...", undefined);
+        setStatus("Network responses are slower than usual, continuing processing...", "amber");
       }
     } catch {
       clearInterval(pollTimer); pollTimer = null;
-      document.title = "⚠️ Error - AI Job Agent";
-      setStatus("Error polling results", "red");
-      resetSearchBtn(); hideSpinner();
+      document.title = "AI Job Agent";
+      setStatus("Connection lost while polling.", "red");
+      resetSearchBtn(); hideSpinner(); showElement("results");
     }
   }, 2000);
 }
@@ -541,7 +584,7 @@ async function loadResultsIncremental(filteredGen) {
       jobs.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
       showElement("results");
       hideSpinner();
-      document.title = `✅ ${jobs.length} job${jobs.length > 1 ? "s" : ""} found - AI Job Agent`;
+      document.title = `(${jobs.length}) Jobs - AI Job Agent`;
       renderJobs(jobs);
       updateCountBadge(jobs.length);
     }
@@ -559,17 +602,17 @@ async function loadResults(statusData) {
     applyThreshold();
     let msg;
     if (allJobs.length) {
-      const passSummary = statusData && statusData.max_passes > 0 && statusData.pass_num > 0 ? ` after ${statusData.pass_num}/${statusData.max_passes} passes` : "";
-      msg = `Found ${allJobs.length} relevant jobs${passSummary}`;
-      document.title = `✅ ${allJobs.length} jobs found - AI Job Agent`;
+      const passSummary = statusData && statusData.max_passes > 0 && statusData.pass_num > 0 ? ` across ${statusData.pass_num} sources` : "";
+      msg = `Analysis complete: ${allJobs.length} matches found${passSummary}.`;
+      document.title = `(${allJobs.length}) Jobs - AI Job Agent`;
       logEvent("search_completed", { jobs_count: allJobs.length });
     } else {
-      msg = "No relevant jobs found";
-      document.title = "❌ No jobs found - AI Job Agent";
+      msg = "Analysis complete: No high-confidence matches found in this region.";
+      document.title = "AI Job Agent";
       logEvent("search_completed", { jobs_count: 0 });
     }
-    setStatus(msg, allJobs.length ? "green" : undefined);
-  } catch (e) { setStatus("Error loading results: " + e.message, "red"); }
+    setStatus(msg, allJobs.length ? "green" : "amber");
+  } catch (e) { setStatus("Failed to render final results: " + e.message, "red"); }
   resetSearchBtn();
 }
 
@@ -577,13 +620,14 @@ async function loadResults(statusData) {
 function renderJobs(jobs) {
   const c = document.getElementById("results");
   if (!jobs.length) {
-    c.innerHTML = `<div class="flex flex-col items-center justify-center py-20 text-slate-300">
-      <div class="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center mb-4">
-        <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-      </div>
-      <p class="text-sm font-medium text-slate-400">No matching jobs found</p>
-       <p class="text-xs text-slate-300 mt-1">Try changing keywords or job roles</p>
-    </div>`;
+    c.innerHTML = `
+      <div class="premium-card min-h-[400px] flex flex-col items-center justify-center text-center p-8">
+        <div class="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center mb-4 border border-slate-100">
+          <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </div>
+        <h3 class="text-sm font-semibold text-slate-800">No jobs match your current filters</h3>
+        <p class="text-xs text-slate-500 mt-1">Try broadening your target roles or selecting more job boards.</p>
+      </div>`;
     return;
   }
 
@@ -592,51 +636,88 @@ function renderJobs(jobs) {
 
   function cardHtml(j) {
     const sc = j.total_score || 0;
-    const barPct = Math.min(sc, 100);
-    const barColor = sc >= 80 ? "bg-emerald-500" : sc >= 50 ? "bg-amber-400" : "bg-red-400";
-    const txtColor = sc >= 80 ? "text-emerald-600" : sc >= 50 ? "text-amber-600" : "text-red-500";
+    const scoreClass = sc >= 85 ? "text-emerald-600 bg-emerald-50 border-emerald-100" :
+                       sc >= 60 ? "text-indigo-600 bg-indigo-50 border-indigo-100" :
+                       "text-amber-600 bg-amber-50 border-amber-100";
+    const barColor = sc >= 85 ? "bg-emerald-500" : sc >= 60 ? "bg-indigo-500" : "bg-amber-500";
+    const siteName = siteFromUrl(j.url);
+
     const expBadge = j.experience_level === "internship"
-      ? '<span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">🎓 Internship</span>'
+      ? '<span class="text-[10px] bg-teal-50 text-teal-700 border border-teal-100 px-2 py-0.5 rounded-md font-medium flex items-center gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0z"/></svg> Internship</span>'
       : j.experience_level === "entry_level"
-        ? '<span class="text-xs bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-medium">🌱 Entry Level</span>'
+        ? '<span class="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-medium">Entry Level</span>'
         : "";
-    return `<div class="border border-slate-100 rounded-xl p-4 hover:shadow-md hover:border-slate-200 transition cursor-default ${j.experience_level ? 'border-l-4 ' + (j.experience_level === 'internship' ? 'border-l-emerald-400' : 'border-l-sky-400') : ''}">
-      <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <div class="flex items-center gap-2 flex-wrap">
-            <h3 class="font-semibold text-slate-800 truncate">${j.title}</h3>
+
+    return `
+    <a href="${j.url}" target="_blank" class="block group relative bg-white rounded-2xl p-5 border border-slate-200 hover:border-slate-300 hover:shadow-lg transition-all duration-300 outline-none focus:ring-2 focus:ring-indigo-500">
+
+      <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-2 mb-1.5">
+            <h3 class="text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate pr-2">${j.title}</h3>
             ${expBadge}
           </div>
-          <p class="text-sm text-slate-400 truncate">${j.company} &middot; ${j.location}</p>
+          <p class="text-sm text-slate-600 flex items-center gap-2 truncate">
+            <span class="font-medium">${j.company}</span>
+            <span class="w-1 h-1 rounded-full bg-slate-300"></span>
+            <span>${j.location}</span>
+            ${j.salary ? `<span class="w-1 h-1 rounded-full bg-slate-300"></span><span class="font-medium text-emerald-700 bg-emerald-50 px-1.5 rounded">${j.salary}</span>` : ""}
+          </p>
         </div>
-        <div class="text-right shrink-0">
-          ${j.salary ? `<div class="text-xs font-semibold text-emerald-600 whitespace-nowrap">${j.salary}</div>` : ""}
-          <div class="font-mono text-lg font-bold ${txtColor}">${sc}</div>
-          <div class="text-xs text-slate-400">AI ${j.ai_score || 0} / KW ${j.keyword_score || 0}</div>
+
+        <div class="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start shrink-0 pt-1 sm:pt-0">
+          <div class="flex flex-col items-end">
+            <div class="flex items-center gap-2">
+              <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400">Match</div>
+              <div class="px-2.5 py-1 rounded-lg border font-mono text-sm font-bold ${scoreClass}">${sc}</div>
+            </div>
+            <div class="text-[10px] text-slate-400 mt-1 flex items-center gap-1.5">
+              <span title="AI Relevancy">AI <span class="font-medium text-slate-600">${j.ai_score || 0}</span></span>
+              <span class="text-slate-300">|</span>
+              <span title="Keyword Hits">KW <span class="font-medium text-slate-600">${j.keyword_score || 0}</span></span>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="mt-2 w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-        <div class="score-fill h-full ${barColor} rounded-full" style="width:0" data-w="${barPct}"></div>
+
+      ${j.reason ? `
+      <div class="mt-4 bg-slate-50/50 rounded-xl p-3 border border-slate-100">
+        <p class="text-xs text-slate-600 leading-relaxed"><strong class="text-slate-800">AI Note:</strong> ${j.reason}</p>
+      </div>` : ""}
+
+      <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+        <div class="flex flex-wrap gap-1.5 flex-1 pr-4 overflow-hidden h-6">
+          ${j.tags && j.tags.length ? j.tags.slice(0, 5).map(t => `<span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md whitespace-nowrap">${t}</span>`).join('') : ""}
+          ${j.tags && j.tags.length > 5 ? `<span class="text-[10px] text-slate-400 px-1 py-0.5 whitespace-nowrap">+${j.tags.length - 5} more</span>` : ""}
+        </div>
+        <div class="flex items-center gap-1.5 text-[11px] font-medium text-slate-400 shrink-0">
+          <span>via ${siteName}</span>
+          <svg class="w-3.5 h-3.5 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+        </div>
       </div>
-      ${j.tags && j.tags.length ? `<div class="flex flex-wrap gap-1 mt-2">${j.tags.slice(0, 6).map(t => `<span class="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">${t}</span>`).join('')}</div>` : ""}
-      ${j.reason ? `<p class="text-xs text-slate-400 mt-2 leading-relaxed">${j.reason}</p>` : ""}
-      <a href="${j.url}" target="_blank" class="text-indigo-600 text-xs hover:text-indigo-700 hover:underline mt-2 inline-flex items-center gap-1">${j.url.replace(/^https?:\/\//, '').substring(0, 40)}${j.url.length > 40 ? '...' : ''} <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
-    </div>`;
+
+      <div class="absolute bottom-0 left-0 h-0.5 w-full bg-slate-100 rounded-b-2xl overflow-hidden">
+        <div class="h-full ${barColor} transition-all duration-500" style="width: ${Math.min(sc, 100)}%"></div>
+      </div>
+    </a>`;
   }
 
   if (jobs.length > limit && !showAll) {
     const lockedCount = jobs.length - limit;
     const voteBtnHtml = hasVoted
-      ? `<button class="vote-btn mt-3 bg-slate-300 text-slate-500 px-5 py-2 rounded-lg text-sm font-medium inline-flex items-center gap-1.5 shadow-sm cursor-not-allowed"><span>✓</span> Voted</button>`
-      : `<button class="vote-btn mt-3 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg text-sm font-medium transition inline-flex items-center gap-1.5 shadow-sm" onclick="handleVote(this)">👍 Vote (${voteCount}/${voteThreshold})</button>`;
+      ? `<button class="mt-4 bg-slate-100 text-slate-400 px-6 py-2.5 rounded-xl text-sm font-semibold inline-flex items-center gap-2 cursor-not-allowed border border-slate-200"><svg class="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Voted</button>`
+      : `<button class="mt-4 bg-slate-900 hover:bg-slate-800 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-slate-900/10 inline-flex items-center gap-2" onclick="handleVote(this)">Unlock All Results <span class="bg-white/20 px-1.5 rounded text-[10px]">${voteCount}/${voteThreshold}</span></button>`;
+
     c.innerHTML = jobs.slice(0, limit).map(j => cardHtml(j)).join("") + `
-      <div class="relative border border-slate-100 rounded-xl overflow-hidden mt-3">
-        <div class="blur-job">${jobs.slice(limit).map(j => cardHtml(j)).join("")}</div>
-        <div class="absolute inset-0 flex items-center justify-center">
-          <div class="bg-white/80 backdrop-blur-sm rounded-xl p-5 text-center shadow-lg mx-3 max-w-sm">
-            <div class="text-3xl mb-1">🔒</div>
-            <p class="font-semibold text-slate-800 text-sm">${lockedCount} more job${lockedCount > 1 ? 's' : ''} locked</p>
-            <p class="text-xs text-slate-500 mt-0.5">Support the project to unlock all</p>
+      <div class="relative rounded-2xl overflow-hidden mt-4">
+        <div class="blur-job space-y-4 px-1">${jobs.slice(limit, limit+2).map(j => cardHtml(j)).join("")}</div>
+        <div class="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-[#FAFAFA] via-white/80 to-transparent">
+          <div class="bg-white border border-slate-200 rounded-2xl p-6 text-center shadow-lg mx-4 max-w-sm w-full transform -translate-y-4">
+            <div class="w-12 h-12 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <svg class="w-5 h-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+            </div>
+            <h4 class="font-semibold text-slate-900 text-sm">${lockedCount} more high-match roles hidden</h4>
+            <p class="text-xs text-slate-500 mt-1">Support the project via a free vote to instantly unlock all results.</p>
             ${voteBtnHtml}
           </div>
         </div>
@@ -644,9 +725,4 @@ function renderJobs(jobs) {
   } else {
     c.innerHTML = jobs.map(j => cardHtml(j)).join("");
   }
-  requestAnimationFrame(() => {
-    c.querySelectorAll('.score-fill').forEach(el => {
-      el.style.width = el.dataset.w + '%';
-    });
-  });
 }
