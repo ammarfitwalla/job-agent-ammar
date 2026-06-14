@@ -6,12 +6,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from llm.llm_client import LLMClient
 from llm.prompts import relevance_prompt, internship_relevance_prompt, batch_relevance_prompt
 from llm.providers import GroqProvider
-import config
+from config import GROQ_API_KEY, GROQ_MODEL, KEYWORDS_INCLUDE
 from utils.logger import log
 from utils.json_parser import extract_json
 
 BATCH_SIZE_RATIO = {True: 3, False: 5}  # internship vs normal
-_groq_provider = GroqProvider()
+_groq_provider = GroqProvider(api_key=GROQ_API_KEY, model=GROQ_MODEL)
 
 
 def keyword_score(
@@ -24,7 +24,7 @@ def keyword_score(
     if job_tags:
         combined += " " + " ".join(job_tags).lower()
 
-    kw_list = keywords if keywords else config.KEYWORDS_INCLUDE
+    kw_list = keywords if keywords else KEYWORDS_INCLUDE
     return sum(10 for kw in kw_list if kw.lower() in combined)
 
 
