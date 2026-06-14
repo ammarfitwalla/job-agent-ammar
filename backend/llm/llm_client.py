@@ -1,13 +1,14 @@
 # Unified LLM client — routes to provider, falls back gracefully
-from config import LLM_PROVIDER
+from config import LLM_PROVIDER, CEREBRAS_API_KEY, CEREBRAS_MODEL, CEREBRAS_API_URL, \
+    GROQ_API_KEY, GROQ_MODEL, OLLAMA_MODEL, OLLAMA_API_URL
 from llm.providers import CerebrasProvider, GroqProvider, OllamaProvider
 from utils.logger import log
 
 
 _providers = {
-    "cerebras": CerebrasProvider(),
-    "groq": GroqProvider(),
-    "ollama": OllamaProvider(),
+    "cerebras": CerebrasProvider(api_key=CEREBRAS_API_KEY, model=CEREBRAS_MODEL, base_url=CEREBRAS_API_URL),
+    "groq": GroqProvider(api_key=GROQ_API_KEY, model=GROQ_MODEL),
+    "ollama": OllamaProvider(model=OLLAMA_MODEL, api_url=OLLAMA_API_URL),
 }
 
 # Fallback order when primary provider fails (cerbras → groq)

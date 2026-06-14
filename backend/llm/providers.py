@@ -54,16 +54,15 @@ class BaseProvider(ABC):
 class CerebrasProvider(BaseProvider):
     name = "cerebras"
 
-    def __init__(self):
-        import config
+    def __init__(self, api_key, model, base_url):
+        self._model = model
         self._bucket = TokenBucket(capacity=4, refill_rate=4 / 60)
-        if config.CEREBRAS_API_KEY:
+        if api_key:
             self._client = OpenAI(
-                api_key=config.CEREBRAS_API_KEY,
-                base_url=config.CEREBRAS_API_URL,
+                api_key=api_key,
+                base_url=base_url,
                 timeout=60,
             )
-            self._model = config.CEREBRAS_MODEL
         else:
             self._client = None
 
@@ -106,17 +105,18 @@ class CerebrasProvider(BaseProvider):
 class GroqProvider(BaseProvider):
     name = "groq"
 
-    def __init__(self):
+    def __init__(self, api_key, model):
+        self._api_key = api_key
+        self._model = model
         self._bucket = TokenBucket(capacity=28, refill_rate=28 / 60)
 
     def chat(self, prompt: str, max_tokens: int = 600) -> str:
-        import config
         for attempt in range(3):
             self._bucket.acquire()
             try:
-                client = Groq(api_key=config.GROQ_API_KEY, timeout=30)
+                client = Groq(api_key=self._api_key, timeout=30)
                 completion = client.chat.completions.create(
-                    model=config.GROQ_MODEL,
+                    model=self._model,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.1,
                     max_completion_tokens=max_tokens,
@@ -141,21 +141,22 @@ class GroqProvider(BaseProvider):
 class OllamaProvider(BaseProvider):
     name = "ollama"
 
-    def __init__(self):
+    def __init__(self, model, api_url):
+        self._model = model
+        self._api_url = api_url
         self._bucket = TokenBucket(capacity=28, refill_rate=28 / 60)
 
     def chat(self, prompt: str, max_tokens: int = 600) -> str:
-        import config
         self._bucket.acquire()
         try:
             payload = {
-                "model": config.OLLAMA_MODEL,
+                "model": self._model,
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": max_tokens,
                 "temperature": 0.25,
                 "stream": False,
             }
-            resp = requests.post(config.OLLAMA_API_URL, json=payload, timeout=60)
+            resp = requests.post(self._api_url, json=payload, timeout=60)
             if resp.status_code != 200:
                 log(f"[OLLAMA ERROR] {resp.text}")
                 return ""
