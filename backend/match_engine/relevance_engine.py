@@ -139,7 +139,6 @@ def _score_batch(
     # If all jobs in batch failed but LLM returned something, fall back
     if not results and parsed:
         log(f"[BATCH WARN] All batch results rejected (internship={internship_mode}) — retrying individually")
-        for i, ai_result in enumerate(parsed):
         for job in batch_jobs:
             r = _score_one(job, min_score, keywords, resume, llm_weight, kw_weight, internship_mode)
             if r:
