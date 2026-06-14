@@ -90,9 +90,6 @@ def _score_jobs(jobs: list, keywords: list[str], resume_text: str,
 def run_scrape(sid: str, sites: list[str], keywords: list[str], resume_text: str,
                roles=None, adzuna_country="us", location="", indeed_country="USA",
                internship_mode=False, min_relevant=5, max_passes=3):
-    import sys
-    sys.path.insert(0, ".")
-
     if not sid:
         print(f"[SCRAPE] No search_id provided, aborting")
         return
