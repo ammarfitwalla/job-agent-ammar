@@ -7,7 +7,6 @@ from openai import OpenAI
 from groq import Groq, RateLimitError
 import requests
 
-import config
 from utils.logger import log
 
 
@@ -56,6 +55,7 @@ class CerebrasProvider(BaseProvider):
     name = "cerebras"
 
     def __init__(self):
+        import config
         self._bucket = TokenBucket(capacity=4, refill_rate=4 / 60)
         if config.CEREBRAS_API_KEY:
             self._client = OpenAI(
@@ -110,6 +110,7 @@ class GroqProvider(BaseProvider):
         self._bucket = TokenBucket(capacity=28, refill_rate=28 / 60)
 
     def chat(self, prompt: str, max_tokens: int = 600) -> str:
+        import config
         for attempt in range(3):
             self._bucket.acquire()
             try:
@@ -144,6 +145,7 @@ class OllamaProvider(BaseProvider):
         self._bucket = TokenBucket(capacity=28, refill_rate=28 / 60)
 
     def chat(self, prompt: str, max_tokens: int = 600) -> str:
+        import config
         self._bucket.acquire()
         try:
             payload = {
