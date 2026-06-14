@@ -14,7 +14,7 @@ from api.routes import jobs, scrape, email, resume, roles, states, events, leads
 import json
 from db import init_db
 
-VOTE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "votes.json")
+VOTE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "votes.json")
 VOTE_THRESHOLD = 100
 
 def _load_votes() -> int:
