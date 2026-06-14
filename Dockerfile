@@ -31,8 +31,7 @@ WORKDIR /app
 COPY --chown=user backend/ backend/
 COPY --chown=user frontend/ frontend/
 
-# config.py is gitignored, create from example
-RUN cp backend/config.example.py backend/config.py && chown user:user backend/config.py
+# config.py is now tracked — use the pushed file directly
 
 USER user
 ENV PATH="/home/user/.local/bin:$PATH"

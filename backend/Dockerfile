@@ -29,8 +29,7 @@ WORKDIR /app
 COPY backend/ backend/
 COPY frontend/ frontend/
 
-# config.py is gitignored, so generate from the example for deployment
-RUN cp backend/config.example.py backend/config.py
+# config.py is now tracked — use the pushed file directly
 
 WORKDIR /app/backend
 
