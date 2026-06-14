@@ -67,6 +67,19 @@ def init_db():
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
             );
+            CREATE TABLE IF NOT EXISTS leads (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id      TEXT,
+                email           TEXT NOT NULL,
+                name            TEXT DEFAULT '',
+                roles           TEXT DEFAULT '[]',
+                location        TEXT DEFAULT '',
+                keywords        TEXT DEFAULT '[]',
+                internship_mode INTEGER DEFAULT 0,
+                resume_snippet  TEXT DEFAULT '',
+                source          TEXT DEFAULT 'web',
+                created_at      TEXT NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS idx_jobs_session ON jobs(session_id);
             CREATE INDEX IF NOT EXISTS idx_jobs_raw ON jobs(session_id, is_raw);
             CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
@@ -74,20 +87,6 @@ def init_db():
         conn.commit()
     finally:
         conn.close()
-    gc_sessions()
-    _start_gc_loop()
-
-
-def _start_gc_loop(interval_minutes: int = 30):
-    def _gc_loop():
-        while True:
-            time.sleep(interval_minutes * 60)
-            try:
-                gc_sessions()
-            except Exception:
-                pass
-    t = threading.Thread(target=_gc_loop, daemon=True)
-    t.start()
 
 
 def gc_sessions(max_age_minutes: int = 240):
@@ -124,7 +123,7 @@ def create_session(sid: str, **kwargs):
 
 def update_session(sid: str, **kwargs):
     conn, cur = _get_conn()
-    allowed = {"status", "pass_num", "max_passes", "filtered_gen", "cancel", "queue_position"}
+    allowed = {"status", "pass_num", "max_passes", "filtered_gen", "cancel", "queue_position", "scraped"}
     updates = {k: v for k, v in kwargs.items() if k in allowed}
     if not updates:
         return
@@ -237,3 +236,53 @@ def add_event(sid: str, event: str, data: dict = None, elapsed: int = 0):
     cur.execute("""INSERT INTO events (session_id, event, data, elapsed_seconds, created_at)
         VALUES (?, ?, ?, ?, ?)""", (sid, event, json.dumps(data or {}), elapsed, _now()))
     conn.commit()
+
+
+# ── Leads ──
+
+def add_lead(
+    session_id: str = None,
+    email: str = "",
+    name: str = "",
+    roles: list = None,
+    location: str = "",
+    keywords: list = None,
+    internship_mode: bool = False,
+    resume_snippet: str = "",
+    source: str = "web",
+) -> int:
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("""INSERT INTO leads
+            (session_id, email, name, roles, location, keywords, internship_mode, resume_snippet, source, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
+                session_id, email, name,
+                json.dumps(roles or []),
+                location,
+                json.dumps(keywords or []),
+                1 if internship_mode else 0,
+                resume_snippet, source, _now(),
+            ))
+        conn.commit()
+        lead_id = cur.lastrowid
+    add_event(session_id or "", "lead_captured", {"email": email, "has_name": bool(name), "lead_id": lead_id})
+    return lead_id
+
+
+def get_leads(limit: int = 100) -> list[dict]:
+    conn, cur = _get_conn()
+    cur.execute("SELECT * FROM leads ORDER BY created_at DESC LIMIT ?", (limit,))
+    rows = cur.fetchall()
+    results = []
+    for row in rows:
+        d = dict(row)
+        try:
+            d["roles"] = json.loads(d["roles"])
+        except (json.JSONDecodeError, TypeError):
+            d["roles"] = []
+        try:
+            d["keywords"] = json.loads(d["keywords"])
+        except (json.JSONDecodeError, TypeError):
+            d["keywords"] = []
+        results.append(d)
+    return results

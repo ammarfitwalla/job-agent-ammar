@@ -167,7 +167,6 @@ def _scrape_normal(sid, sites, keywords, resume_text, roles,
     set_filtered_jobs(sid, relevant)
     update_session(sid, status="done", filtered_gen=1)
     print(f"[SCRAPE] Pipeline complete — {len(all_jobs)} raw → {len(relevant)} relevant")
-    print(f"[SCRAPE] Relevant jobs: {[j.get('title', '?') for j in relevant]}")
 
 
 def _scrape_internship(sid, sites, keywords, resume_text, roles,
@@ -266,11 +265,12 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
                                 progress_callback=lambda j: add_filtered_job(sid, j),
                                 internship_mode=True)
 
-            all_relevant.extend(batch)
-            all_relevant.sort(key=lambda j: j.get("total_score", 0), reverse=True)
-            set_filtered_jobs(sid, all_relevant)
-            s = get_session(sid)
-            update_session(sid, filtered_gen=(s.get("filtered_gen", 0) if s else 0) + 1)
+            if batch:
+                all_relevant.extend(batch)
+                all_relevant.sort(key=lambda j: j.get("total_score", 0), reverse=True)
+                set_filtered_jobs(sid, all_relevant)
+                s = get_session(sid)
+                update_session(sid, filtered_gen=(s.get("filtered_gen", 0) if s else 0) + 1)
 
         print(f"[SCRAPE] Pass {pass_num}: {len(all_jobs)} raw, "
               f"{len(candidates)} exp-filtered, {len(all_relevant)} relevant")
@@ -283,7 +283,6 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
     update_session(sid, filtered_gen=(s.get("filtered_gen", 0) if s else 0) + 1,
                    status="done")
     print(f"[SCRAPE] Pipeline complete — {len(all_jobs)} raw → {len(all_relevant)} relevant")
-    print(f"[SCRAPE] Relevant jobs: {[j.get('title', '?') for j in all_relevant]}")
 
 
 @router.post("")

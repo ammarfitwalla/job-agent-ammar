@@ -25,6 +25,10 @@ python-docx
 
 # LLM
 groq
+openai
+
+# Email validation
+email-validator
 
 # API
 fastapi
