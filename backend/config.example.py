@@ -4,21 +4,26 @@ import os
 # ==============
 # LLM SETTINGS
 # ==============
-LLM_PROVIDER = "groq"  # "groq" or "ollama"
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "cerebras")  # "cerebras", "groq", or "ollama"
 
-# Groq
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "gsk_xxx")  # Replace with your Groq API key
+# Cerebras (primary)
+CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY", "")
+CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "gpt-oss-120b")
+CEREBRAS_API_URL = os.environ.get("CEREBRAS_API_URL", "https://api.cerebras.ai/v1")
+
+# Groq (fallback)
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
 
-# Ollama (fallback)
+# Ollama (local fallback)
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434/v1/chat/completions")
 
 # ==============
 # ADZUNA API
 # ==============
-ADZUNA_APP_ID = os.environ.get("ADZUNA_APP_ID", "your_adzuna_app_id")
-ADZUNA_KEY = os.environ.get("ADZUNA_KEY", "your_adzuna_key")
+ADZUNA_APP_ID = os.environ.get("ADZUNA_APP_ID", "")
+ADZUNA_KEY = os.environ.get("ADZUNA_KEY", "")
 
 # ==============
 # JOB SEARCH SETTINGS
@@ -76,28 +81,37 @@ TARGET_ROLES = []
 for roles in ROLES_BY_CATEGORY.values():
     TARGET_ROLES.extend(roles)
 
-KEYWORDS_INCLUDE = [
-    "python", "tensorflow", "pytorch", "machine learning", "ml", "deep learning",
-    "data science", "ai", "llm", "natural language processing", "nlp",
-]
+KEYWORDS_INCLUDE = []
 
 KEYWORDS_EXCLUDE = [
-    "senior manager", "sales", "hr", "accounting",
-    "non technical", "non-technical", "media", "marketing",
+    "senior manager",
+    "sales",
+    "hr",
+    "accounting",
+    "non technical",
+    "non-technical",
+    "media",
+    "marketing",
+    
+]
+
+INTERNSHIP_KEYWORDS = [
+    "internship", "intern", "entry level", "fresher", "graduate",
+    "trainee", "junior", "apprentice", "graduate trainee",
 ]
 
 # Scrape limits per site
-SCRAPE_LIMIT = 100
+SCRAPE_LIMIT = 1000
 
 # ==============
 # GOOGLE SHEETS
 # ==============
-GOOGLE_SHEET_NAME = "My Job Tracker"
+GOOGLE_SHEET_NAME = "Ammar Job Tracker"
 
 # ==============
 # EMAIL SETTINGS
 # ==============
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "your@email.com")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "yourmail@gmail.com")
 DAILY_EMAIL_SUBJECT = "Daily Job Application Summary"
 
 # ==============
@@ -107,8 +121,8 @@ RESUME_PATH = "resume.txt"
 AUTO_APPLY = False
 CHROME_PROFILE_PATH = ""
 
-EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
-EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
-EMAIL_USER = os.environ.get("EMAIL_USER", "your@email.com")
-EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "your-app-password")
-EMAIL_TO = os.environ.get("EMAIL_TO", "your@email.com")
+EMAIL_HOST=os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT=int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_USER=os.environ.get("EMAIL_USER", "")
+EMAIL_PASSWORD=os.environ.get("EMAIL_PASSWORD", "")
+EMAIL_TO=os.environ.get("EMAIL_TO", "")
