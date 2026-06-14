@@ -37,7 +37,8 @@ def init_db():
                 keywords_count INTEGER DEFAULT 0,
                 roles_count INTEGER DEFAULT 0,
             resume_length INTEGER DEFAULT 0,
-            scraped INTEGER DEFAULT 0
+            scraped INTEGER DEFAULT 0,
+            elapsed_seconds REAL DEFAULT 0
         );
             CREATE TABLE IF NOT EXISTS jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,6 +86,10 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
         """)
         conn.commit()
+        try:
+            cur.execute("ALTER TABLE sessions ADD COLUMN elapsed_seconds REAL DEFAULT 0")
+        except:
+            pass
     finally:
         conn.close()
 
@@ -123,7 +128,7 @@ def create_session(sid: str, **kwargs):
 
 def update_session(sid: str, **kwargs):
     conn, cur = _get_conn()
-    allowed = {"status", "pass_num", "max_passes", "filtered_gen", "cancel", "queue_position", "scraped"}
+    allowed = {"status", "pass_num", "max_passes", "filtered_gen", "cancel", "queue_position", "scraped", "elapsed_seconds"}
     updates = {k: v for k, v in kwargs.items() if k in allowed}
     if not updates:
         return

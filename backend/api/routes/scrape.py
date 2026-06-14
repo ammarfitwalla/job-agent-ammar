@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter, BackgroundTasks, Query
 from api.schemas import ScrapeRequest
 from utils.logger import log
@@ -8,6 +9,14 @@ from db import create_session, update_session, get_session, set_filtered_jobs, a
 router = APIRouter(prefix="/scrape", tags=["scrape"])
 
 _scrape_lock = threading.Lock()
+
+
+def _save_elapsed(sid):
+    s = get_session(sid)
+    if s and s.get("created_at"):
+        elapsed = (datetime.utcnow() - datetime.fromisoformat(s["created_at"])).total_seconds()
+        update_session(sid, elapsed_seconds=round(elapsed, 1))
+
 _scrape_queue: deque[ScrapeRequest] = deque()
 
 
@@ -160,11 +169,13 @@ def _scrape_normal(sid, sites, keywords, resume_text, roles,
     if not all_jobs:
         print(f"[SCRAPE] No jobs found, skipping relevance engine")
         set_filtered_jobs(sid, [])
+        _save_elapsed(sid)
         update_session(sid, status="done")
         return
 
     relevant = _score_jobs(all_jobs, keywords, resume_text, sid=sid, internship_mode=False)
     set_filtered_jobs(sid, relevant)
+    _save_elapsed(sid)
     update_session(sid, status="done", filtered_gen=1)
     print(f"[SCRAPE] Pipeline complete — {len(all_jobs)} raw → {len(relevant)} relevant")
 
@@ -280,6 +291,7 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
 
     set_filtered_jobs(sid, all_relevant)
     s = get_session(sid)
+    _save_elapsed(sid)
     update_session(sid, filtered_gen=(s.get("filtered_gen", 0) if s else 0) + 1,
                    status="done")
     print(f"[SCRAPE] Pipeline complete — {len(all_jobs)} raw → {len(all_relevant)} relevant")
@@ -335,4 +347,5 @@ async def scrape_status(search_id: str = Query("")):
         "max_passes": s.get("max_passes", 0),
         "filtered_gen": s.get("filtered_gen", 0),
         "queue_position": s.get("queue_position", 0),
+        "elapsed": s.get("elapsed_seconds", 0),
     }
