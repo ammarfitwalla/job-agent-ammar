@@ -19,15 +19,14 @@ let allStates = [];
 let internshipMode = false;
 let activeFilters = { site: '', experience_level: '' };
 let _searchId = crypto.randomUUID();
+let _leadSubmitted = false;
+let _leadDismissed = false;
 
 function logEvent(event, data = {}, elapsed = 0) {
   try {
-    fetch("/api/events", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: _searchId, event, data, elapsed }),
-      keepalive: true
-    });
+    const body = JSON.stringify({ session_id: _searchId, event, data, elapsed });
+    const blob = new Blob([body], { type: "application/json" });
+    navigator.sendBeacon("/api/events", blob);
   } catch {}
 }
 
@@ -134,7 +133,7 @@ function setStatus(msg, type = "blue") {
     icon = '<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
   } else {
     el.classList.add("bg-indigo-50", "text-indigo-700", "border-indigo-100");
-    icon = '<svg class="w-4 h-4 shrink-0 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>';
+    icon = '<svg class="w-4 h-4 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>';
   }
 
   el.innerHTML = `${icon}<span>${msg}</span>`;
@@ -501,6 +500,61 @@ async function handleVote(btn) {
   } catch {}
 }
 
+// ===== LEAD CAPTURE =====
+function maybeShowLeadCapture() {
+  if (_leadSubmitted || _leadDismissed) return;
+  const modal = document.getElementById("leadModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+}
+
+document.getElementById("submitLead")?.addEventListener("click", async () => {
+  if (_leadSubmitted) return;
+  const email = document.getElementById("leadEmail").value.trim();
+  if (!email || !email.includes("@")) {
+    document.getElementById("leadEmail").classList.add("border-red-400");
+    return;
+  }
+  document.getElementById("leadEmail").classList.remove("border-red-400");
+  const name = document.getElementById("leadName").value.trim();
+  const btn = document.getElementById("submitLead");
+  btn.disabled = true;
+  btn.innerHTML = '<svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Submitting...';
+  try {
+    await fetch("/api/lead", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: _searchId,
+        email,
+        name,
+        roles: getSelectedRoles(),
+        location: getLocation() || document.getElementById("locationInput").value,
+        keywords: getSelectedKeywords(),
+        internship_mode: internshipMode,
+        resume_snippet: (document.getElementById("resume").value || "").slice(0, 200),
+      }),
+    });
+    _leadSubmitted = true;
+    document.getElementById("leadEmail").classList.add("hidden");
+    document.getElementById("leadName").classList.add("hidden");
+    document.getElementById("submitLead").classList.add("hidden");
+    document.getElementById("leadSuccess").classList.remove("hidden");
+  } catch {
+    btn.disabled = false;
+    btn.innerHTML = "Notify Me";
+  }
+});
+
+document.getElementById("dismissLead")?.addEventListener("click", () => {
+  _leadDismissed = true;
+  document.getElementById("leadModal").classList.add("hidden");
+});
+
+document.getElementById("leadEmail")?.addEventListener("input", () => {
+  document.getElementById("leadEmail").classList.remove("border-red-400");
+});
+
 // ===== POLL =====
 function pollResults() {
   if (pollTimer) clearInterval(pollTimer);
@@ -573,11 +627,11 @@ function pollResults() {
 }
 
 async function loadResultsIncremental(filteredGen) {
+  const gen = filteredGen !== undefined ? filteredGen : lastFilteredGen;
   try {
     const r = await fetch(`/jobs?search_id=${_searchId}`);
     const d = await r.json();
     const jobs = d.jobs || [];
-    const gen = filteredGen !== undefined ? filteredGen : lastFilteredGen;
     if (jobs.length > 0 && (jobs.length !== lastRenderedCount || gen !== lastFilteredGen)) {
       lastRenderedCount = jobs.length;
       lastFilteredGen = gen;
@@ -612,6 +666,7 @@ async function loadResults(statusData) {
       logEvent("search_completed", { jobs_count: 0 });
     }
     setStatus(msg, allJobs.length ? "green" : "amber");
+    setTimeout(maybeShowLeadCapture, 2000);
   } catch (e) { setStatus("Failed to render final results: " + e.message, "red"); }
   resetSearchBtn();
 }

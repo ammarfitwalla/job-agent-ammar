@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Mount
-from api.routes import jobs, scrape, email, resume, roles, states, events
+from api.routes import jobs, scrape, email, resume, roles, states, events, leads
 import json
 from db import init_db
 
@@ -64,6 +64,7 @@ app.include_router(resume.router)
 app.include_router(roles.router)
 app.include_router(states.router)
 app.include_router(events.router)
+app.include_router(leads.router)
 
 
 @app.on_event("startup")

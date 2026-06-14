@@ -95,9 +95,9 @@ async def delete_resumes():
 @router.post("/keywords", response_model=ResumeKeywordsResponse)
 async def extract_keywords(req: ResumeKeywordsRequest):
     try:
-        from llm.llm_client import LLMClient
+        from llm.providers import GroqProvider
         prompt = EXTRACT_PROMPT.format(resume=req.resume_text)
-        response = LLMClient.chat(prompt, max_tokens=500)
+        response = GroqProvider().chat(prompt, max_tokens=500)
         print(f"[KEYWORDS] LLM response received ({len(response)} chars)")
 
         parsed = extract_json(response)

@@ -142,6 +142,8 @@
         </div>
       </div>
 
+
+
       <!-- Search Button -->
       <div class="sticky bottom-4 z-20">
         <button id="searchBtn" class="w-full bg-slate-900 hover:bg-slate-800 text-white py-3.5 rounded-xl text-sm font-semibold shadow-lg shadow-slate-900/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
@@ -191,6 +193,29 @@
     </section>
 
   </main>
+
+  <div id="leadModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div class="bg-white rounded-2xl p-6 shadow-xl w-full max-w-sm mx-4 space-y-4">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+            Get notified
+          </div>
+          <p class="text-xs text-slate-500 mt-0.5">Get weekly alerts when new jobs match your search.</p>
+        </div>
+        <button id="dismissLead" class="text-slate-400 hover:text-slate-600 transition-colors">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <input id="leadEmail" type="email" placeholder="Your email" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-slate-400 transition-colors">
+      <input id="leadName" type="text" placeholder="Your name (optional)" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-slate-400 transition-colors">
+      <button id="submitLead" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5">
+        Notify Me
+      </button>
+      <p id="leadSuccess" class="hidden text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 text-center font-medium">You're on the list!</p>
+    </div>
+  </div>
 
   <script src="/app.js"></script>
 </body>
