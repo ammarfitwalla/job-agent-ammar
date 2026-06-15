@@ -20,7 +20,7 @@ pandas
 tqdm
 
 # Resume parsing
-pdfplumber
+PyMuPDF
 python-docx
 
 # LLM
@@ -38,5 +38,5 @@ countrystatecity-countries
 # Job scraping (Indeed via JobSpy)
 python-jobspy
 python-multipart
-pdfplumber
+PyMuPDF
 python-docx

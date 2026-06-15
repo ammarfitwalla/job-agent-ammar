@@ -87,6 +87,7 @@ def _score_one(
     llm_weight: float,
     kw_weight: float,
     internship_mode: bool = False,
+    sid: str = None,
 ) -> Optional[dict]:
     prompt = (internship_relevance_prompt if internship_mode else relevance_prompt)(
         job["title"], job["description"], job.get("tags"), resume=resume)
@@ -94,7 +95,7 @@ def _score_one(
 
     ai_result = extract_json(response)
     if not isinstance(ai_result, dict):
-        log(f"[WARN] Unparseable AI response for: {job['title']}")
+        log(f"[WARN] Unparseable AI response for: {job['title']}", sid)
         return None
 
     return _apply_scoring(job, ai_result, min_score, keywords, llm_weight, kw_weight, internship_mode)
@@ -108,8 +109,8 @@ def _score_batch(
     llm_weight: float,
     kw_weight: float,
     internship_mode: bool,
+    sid: str = None,
 ) -> list[dict]:
-    """Score a batch of jobs (up to BATCH_SIZE) in one LLM call."""
     prompt = batch_relevance_prompt(
         [(j["title"], j["description"], j.get("tags")) for j in batch_jobs],
         resume=resume,
@@ -119,10 +120,10 @@ def _score_batch(
 
     parsed = extract_json(response)
     if not isinstance(parsed, list):
-        log(f"[BATCH WARN] Response is not a list — falling back to per-job scoring")
+        log(f"[BATCH WARN] Response is not a list — falling back to per-job scoring", sid)
         results = []
         for job in batch_jobs:
-            r = _score_one(job, min_score, keywords, resume, llm_weight, kw_weight, internship_mode)
+            r = _score_one(job, min_score, keywords, resume, llm_weight, kw_weight, internship_mode, sid=sid)
             if r:
                 results.append(r)
         return results
@@ -130,17 +131,16 @@ def _score_batch(
     results = []
     for job, ai_result in zip(batch_jobs, parsed):
         if not isinstance(ai_result, dict):
-            log(f"[BATCH WARN] Invalid entry for '{job['title']}' — skipping")
+            log(f"[BATCH WARN] Invalid entry for '{job['title']}' — skipping", sid)
             continue
         r = _apply_scoring(job, ai_result, min_score, keywords, llm_weight, kw_weight, internship_mode)
         if r:
             results.append(r)
 
-    # If all jobs in batch failed but LLM returned something, fall back
     if not results and parsed:
-        log(f"[BATCH WARN] All batch results rejected (internship={internship_mode}) — retrying individually")
+        log(f"[BATCH WARN] All batch results rejected (internship={internship_mode}) — retrying individually", sid)
         for job in batch_jobs:
-            r = _score_one(job, min_score, keywords, resume, llm_weight, kw_weight, internship_mode)
+            r = _score_one(job, min_score, keywords, resume, llm_weight, kw_weight, internship_mode, sid=sid)
             if r:
                 results.append(r)
 
@@ -158,11 +158,12 @@ def filter_jobs(
     max_workers: int = 3,
     progress_callback=None,
     internship_mode: bool = False,
+    sid: str = None,
 ) -> list:
     if not jobs:
         return []
 
-    log(f"[MATCH ENGINE] {len(jobs)} jobs received")
+    log(f"[MATCH ENGINE] {len(jobs)} jobs received", sid)
 
     limit = llm_candidate_limit * 2 if internship_mode else llm_candidate_limit
 
@@ -175,19 +176,18 @@ def filter_jobs(
 
     batch_size = BATCH_SIZE_RATIO[internship_mode]
 
-    log(f"[MATCH ENGINE] {len(candidates)}/{len(jobs)} sent to LLM (limit={llm_candidate_limit}, batch_size={batch_size})")
+    log(f"[MATCH ENGINE] {len(candidates)}/{len(jobs)} sent to LLM (limit={llm_candidate_limit}, batch_size={batch_size})", sid)
 
-    # Group into batches
     candidate_jobs = [job for job, _ in candidates]
     batches = [candidate_jobs[i:i + batch_size] for i in range(0, len(candidate_jobs), batch_size)]
 
-    log(f"[MATCH ENGINE] {len(batches)} batch(es) of up to {batch_size}")
+    log(f"[MATCH ENGINE] {len(batches)} batch(es) of up to {batch_size}", sid)
 
     filtered = []
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
             pool.submit(
-                _score_batch, batch, min_score, keywords, resume, llm_weight, kw_weight, internship_mode
+                _score_batch, batch, min_score, keywords, resume, llm_weight, kw_weight, internship_mode, sid
             ): f"batch of {len(batch)}"
             for batch in batches
         }
@@ -200,8 +200,8 @@ def filter_jobs(
                     if progress_callback:
                         progress_callback(r)
             except Exception as e:
-                log(f"[MATCH ENGINE] Error scoring {label}: {e}")
+                log(f"[MATCH ENGINE] Error scoring {label}: {e}", sid)
 
     filtered.sort(key=lambda j: j["total_score"], reverse=True)
-    log(f"[MATCH ENGINE] {len(filtered)} relevant jobs returned")
+    log(f"[MATCH ENGINE] {len(filtered)} relevant jobs returned", sid)
     return filtered

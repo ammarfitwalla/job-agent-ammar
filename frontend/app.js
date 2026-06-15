@@ -21,6 +21,8 @@ let activeFilters = { site: '', experience_level: '' };
 let _searchId = crypto.randomUUID();
 let _leadSubmitted = false;
 let _leadDismissed = false;
+let _selectedSites = [];
+let _searchStart = 0;
 
 function logEvent(event, data = {}, elapsed = 0) {
   try {
@@ -139,18 +141,34 @@ function setStatus(msg, type = "blue") {
   el.innerHTML = `${icon}<span>${msg}</span>`;
 }
 
-function showSpinner(msg) {
-  document.getElementById("spinnerMsg").textContent = msg;
-  showElement("spinner");
+function setStepProgress(steps) {
+  const el = document.getElementById("stepProgress");
+  el.classList.remove("hidden", "step-progress-exit");
   hideElement("results");
+  steps.forEach((s, i) => {
+    const container = document.getElementById(`step${i + 1}`);
+    const circle = document.getElementById(`step${i + 1}Circle`);
+    const spinner = document.getElementById(`step${i + 1}Spinner`);
+    const check = document.getElementById(`step${i + 1}Check`);
+    const msg = document.getElementById(`step${i + 1}Msg`);
+    container.className = "flex items-start gap-4";
+    container.classList.add(`step-${s.status}`);
+    circle.classList.toggle("hidden", s.status !== "pending");
+    spinner.classList.toggle("hidden", s.status !== "active");
+    check.classList.toggle("hidden", s.status !== "done");
+    msg.textContent = s.msg;
+    if (i < 2) {
+      const conn = document.getElementById(`conn${i + 1}`);
+      if (s.status === "done") conn.className = "w-px h-full connector-line bg-green-400";
+      else if (s.status === "active") conn.className = "w-px h-full connector-line bg-blue-400";
+      else conn.className = "w-px h-full connector-line bg-slate-200";
+    }
+  });
 }
-function showSkeleton(msg) {
-  document.getElementById("spinnerMsg").textContent = msg;
-  showElement("spinner");
-  hideElement("results");
-}
-function hideSpinner() {
-  hideElement("spinner");
+function hideStepProgress() {
+  const el = document.getElementById("stepProgress");
+  el.classList.add("step-progress-exit");
+  setTimeout(() => el.classList.add("hidden"), 350);
 }
 
 function resetSearchBtn() {
@@ -444,7 +462,9 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   const resume = document.getElementById("resume").value.trim();
   if (!resume) return setStatus("Missing required field: Please paste or upload your resume.", "red");
 
+  _searchStart = Date.now();
   const sites = getSelectedSites(), keywords = getSelectedKeywords(), roles = getSelectedRoles();
+  _selectedSites = sites.slice();
   if (!roles.length) return setStatus("Missing required field: Select at least one job role.", "red");
   if (!sites.length) return setStatus("Missing required field: Select at least one job board.", "red");
   if (!document.getElementById("locationInput").value.trim()) return setStatus("Missing required field: Enter a location.", "red");
@@ -462,9 +482,12 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   activeFilters = { site: '', experience_level: '' };
   document.getElementById("filterBar").classList.add("hidden");
 
-  showSpinner("Connecting to Job Boards...");
+  setStepProgress([
+    { status: "active", msg: "Connecting to Indeed, LinkedIn, Adzuna..." },
+    { status: "pending", msg: "Waiting for data..." },
+    { status: "pending", msg: "Waiting..." }
+  ]);
   document.title = "🔍 Searching... - AI Job Agent";
-  hideElement("results");
   setStatus("Initializing data collection...", "blue");
   logEvent("search_started", { sites, keywords_count: keywords.length, roles_count: roles.length });
 
@@ -483,7 +506,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
     document.title = "AI Job Agent";
     setStatus("Error: " + e.message, "red");
     logEvent("search_error", { error: e.message });
-    resetSearchBtn(); hideSpinner(); showElement("results");
+    resetSearchBtn(); hideElement("stepProgress"); showElement("results");
   }
 });
 
@@ -565,9 +588,34 @@ function pollResults() {
       const d = await r.json();
 
       if (d.queue_position > 0) {
-        showSpinner(`Position ${d.queue_position} in queue...`);
+        setStepProgress([
+          { status: "active", msg: `Position ${d.queue_position} in queue...` },
+          { status: "pending", msg: "Waiting for data..." },
+          { status: "pending", msg: "Waiting..." }
+        ]);
         document.title = "⏳ Queued... - AI Job Agent";
         return;
+      }
+
+      // Per-step ETA
+      for (let si = 1; si <= 3; si++) {
+        const container = document.getElementById(`step${si}`);
+        const etaEl = document.getElementById(`step${si}Eta`);
+        if (!etaEl || !container) continue;
+        const isActive = container.classList.contains("step-active");
+        if (isActive && d.status === "running" && _searchStart > 0) {
+          const elapsed = Math.round((Date.now() - _searchStart) / 1000);
+          const hasLinkedIn = _selectedSites.includes("linkedin");
+          const multiSite = _selectedSites.length >= 2;
+          const scrapeEst = _selectedSites.length >= 3 ? 40 : hasLinkedIn ? 20 : multiSite ? 15 : 10;
+          const est = [scrapeEst, 30, 2][si - 1];
+          const soFar = [scrapeEst, scrapeEst + 30, scrapeEst + 32][si - 1];
+          const remaining = Math.max(1, soFar - elapsed);
+          etaEl.textContent = `~${remaining}s`;
+          etaEl.classList.remove("hidden");
+        } else {
+          etaEl.classList.add("hidden");
+        }
       }
 
       if (d.status === "running") {
@@ -590,15 +638,31 @@ function pollResults() {
           } else {
             document.title = "🤖 Scoring... - AI Job Agent";
             if (d.pass_num > lastPassNum && lastPassNum > 0) {
-              showSkeleton(`AI rejected ${d.last_scrape_raw} generic roles. Scanning deeper (Batch ${d.pass_num}/${d.max_passes})...`);
+              setStepProgress([
+                { status: "done", msg: `Scraped ${d.last_scrape_raw} jobs` },
+                { status: "active", msg: `Filtering generic roles, scanning deeper (Batch ${d.pass_num}/${d.max_passes})...` },
+                { status: "pending", msg: "Waiting for AI results..." }
+              ]);
             } else if (genChanged && inPass) {
-              showSkeleton(`Batch ${d.pass_num}/${d.max_passes} processed \u2014 ${d.last_scrape_raw} roles analyzed, scoring in progress...`);
+              setStepProgress([
+                { status: "done", msg: `Scraped ${d.last_scrape_raw} jobs` },
+                { status: "active", msg: `Batch ${d.pass_num}/${d.max_passes} scored, analyzing...` },
+                { status: "pending", msg: "Waiting for AI results..." }
+              ]);
             } else {
-              showSkeleton(`AI is evaluating ${d.last_scrape_raw} initial results...`);
+              setStepProgress([
+                { status: "done", msg: `Scraped ${d.last_scrape_raw} jobs` },
+                { status: "active", msg: `AI scoring ${d.last_scrape_raw} results...` },
+                { status: "pending", msg: "Waiting for AI results..." }
+              ]);
             }
           }
         } else {
-          showSpinner(`Gathering data from networks${inPass ? ` (Batch ${d.pass_num}/${d.max_passes})` : ""}...`);
+          setStepProgress([
+            { status: "active", msg: `Gathering data from networks${inPass ? ` (Batch ${d.pass_num}/${d.max_passes})` : ""}...` },
+            { status: "pending", msg: "Waiting for data..." },
+            { status: "pending", msg: "Waiting..." }
+          ]);
           document.title = "📡 Scraping... - AI Job Agent";
         }
         lastFilteredGen = d.filtered_gen;
@@ -607,13 +671,22 @@ function pollResults() {
 
       if (d.status === "done" || d.status === "error") {
         clearInterval(pollTimer); pollTimer = null;
-        hideSpinner();
         if (d.status === "error") {
+          hideElement("stepProgress");
           document.title = "AI Job Agent";
           setStatus("Data collection encountered an error.", "red");
           logEvent("search_error", { status: "error" });
+          await loadResults(d);
+        } else {
+          setStepProgress([
+            { status: "done", msg: `Scraped ${d.last_scrape_raw || 0} jobs` },
+            { status: "done", msg: `Found ${d.last_scrape_relevant || 0} matches` },
+            { status: "done", msg: "Analysis complete" }
+          ]);
+          await new Promise(r => setTimeout(r, 500));
+          hideStepProgress();
+          await loadResults(d);
         }
-        await loadResults(d);
       } else if (scrapeAttempts > 90) {
         setStatus("Network responses are slower than usual, continuing processing...", "amber");
       }
@@ -621,9 +694,9 @@ function pollResults() {
       clearInterval(pollTimer); pollTimer = null;
       document.title = "AI Job Agent";
       setStatus("Connection lost while polling.", "red");
-      resetSearchBtn(); hideSpinner(); showElement("results");
+      resetSearchBtn(); hideElement("stepProgress"); showElement("results");
     }
-  }, 2000);
+  }, 1000);
 }
 
 async function loadResultsIncremental(filteredGen) {
@@ -637,7 +710,7 @@ async function loadResultsIncremental(filteredGen) {
       lastFilteredGen = gen;
       jobs.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
       showElement("results");
-      hideSpinner();
+      hideElement("stepProgress");
       document.title = `(${jobs.length}) Jobs - AI Job Agent`;
       renderJobs(jobs);
       updateCountBadge(jobs.length);

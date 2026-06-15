@@ -242,6 +242,15 @@ def add_event(sid: str, event: str, data: dict = None, elapsed: int = 0):
         VALUES (?, ?, ?, ?, ?)""", (sid, event, json.dumps(data or {}), elapsed, _now()))
     conn.commit()
 
+def get_events(sid: str, limit: int = 50) -> list[dict]:
+    conn, cur = _get_conn()
+    cur.execute(
+        "SELECT event, created_at FROM events WHERE session_id = ? ORDER BY id DESC LIMIT ?",
+        (sid, limit),
+    )
+    rows = cur.fetchall()
+    return [{"event": row[0], "created_at": row[1]} for row in rows][::-1]
+
 
 # ── Leads ──
 
