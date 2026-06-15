@@ -96,12 +96,12 @@
 
         <!-- Location -->
         <div class="space-y-2">
-          <label class="text-xs font-medium text-slate-500">Location <span class="text-red-400">*</span></label>
+          <label class="text-xs font-medium text-slate-500">Location (state or country) <span class="text-red-400">*</span></label>
           <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </div>
-            <input id="locationInput" type="text" autocomplete="off" class="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-400 transition-colors bg-white" placeholder="e.g. California, US">
+            <input id="locationInput" type="text" autocomplete="off" class="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-400 transition-colors bg-white" placeholder="e.g. California, US or India">
             <div id="locationResults" class="hidden absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto overflow-hidden"></div>
           </div>
           <div id="selectedLocation" class="hidden mt-2 inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-md"></div>
