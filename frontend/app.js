@@ -371,28 +371,47 @@ function searchState(query) {
   lastQuery = query;
   const results = document.getElementById("locationResults");
   results.innerHTML = "";
-  if (!allStates.length) {
-    results.innerHTML = '<div class="px-4 py-3 text-xs text-slate-400">Loading directory...</div>';
-    results.classList.remove("hidden");
-    return;
-  }
   const lower = query.toLowerCase();
-  const matches = allStates
-    .filter(s => s.state.toLowerCase().includes(lower))
-    .slice(0, 6);
+
+  // Search countries from loaded map
+  const countryMatches = Object.entries(countriesMap)
+    .filter(([code, name]) => name.toLowerCase().includes(lower) || code.includes(lower))
+    .slice(0, 3)
+    .map(([code, name]) => ({
+      state: null,
+      country: name,
+      country_code: code,
+      label: name
+    }));
+
+  // Search states if loaded
+  let stateMatches = [];
+  if (allStates.length) {
+    const count = Math.max(0, 6 - countryMatches.length);
+    stateMatches = allStates
+      .filter(s => s.state.toLowerCase().includes(lower))
+      .slice(0, count)
+      .map(item => ({
+        state: item.state,
+        country: item.country,
+        country_code: item.country_code,
+        label: [item.state, item.country].filter(Boolean).join(", ")
+      }));
+  }
+
+  const matches = [...countryMatches, ...stateMatches];
   if (!matches.length) {
     results.innerHTML = '<div class="px-4 py-3 text-xs text-slate-400">No matching locations</div>';
     results.classList.remove("hidden");
     return;
   }
   matches.forEach(item => {
-    const label = [item.state, item.country].filter(Boolean).join(", ");
     const div = document.createElement("div");
     div.className = "px-4 py-2.5 text-xs cursor-pointer hover:bg-slate-50 text-slate-700 border-b border-slate-50 last:border-0 font-medium transition-colors";
-    div.textContent = label;
+    div.textContent = item.label;
     div.addEventListener("mousedown", (e) => {
       e.preventDefault();
-      selectLocation({ state: item.state, country: item.country, country_code: item.country_code, label });
+      selectLocation({ state: item.state, country: item.country, country_code: item.country_code, label: item.label });
     });
     results.appendChild(div);
   });
@@ -607,9 +626,9 @@ function pollResults() {
           const elapsed = Math.round((Date.now() - _searchStart) / 1000);
           const hasLinkedIn = _selectedSites.includes("linkedin");
           const multiSite = _selectedSites.length >= 2;
-          const scrapeEst = _selectedSites.length >= 3 ? 40 : hasLinkedIn ? 20 : multiSite ? 15 : 10;
-          const est = [scrapeEst, 30, 2][si - 1];
-          const soFar = [scrapeEst, scrapeEst + 30, scrapeEst + 32][si - 1];
+          const scrapeEst = _selectedSites.length >= 3 ? 60 : 40;
+          const est = [scrapeEst, 60, 2][si - 1];
+          const soFar = [scrapeEst, scrapeEst + 60, scrapeEst + 62][si - 1];
           const remaining = Math.max(1, soFar - elapsed);
           etaEl.textContent = `~${remaining}s`;
           etaEl.classList.remove("hidden");
