@@ -161,24 +161,71 @@
 
       <div id="filterBar" class="hidden flex flex-wrap items-center gap-2 text-xs mb-2"></div>
 
-      <!-- Spinner -->
-      <div id="spinner" class="hidden premium-card p-10 flex flex-col items-center justify-center text-center min-h-[400px]">
-        <div class="relative w-12 h-12 mb-4">
-          <svg class="animate-spin absolute inset-0 text-slate-200 w-full h-full" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-100" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
-          </svg>
-          <svg class="animate-spin absolute inset-0 text-slate-800 w-full h-full" style="animation-direction: reverse; animation-duration: 1.5s;" fill="none" viewBox="0 0 24 24">
-            <path class="opacity-100" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-          </svg>
-        </div>
-        <div class="text-sm font-semibold text-slate-800 mb-1" id="spinnerMsg">Processing request...</div>
-        <div class="text-xs text-slate-500 max-w-sm">Our AI is analyzing job descriptions against your resume criteria. This may take a moment.</div>
-        <div class="w-full max-w-md mt-8 space-y-4">
-          <div class="flex gap-4"><div class="skeleton-line w-12 h-12 rounded-xl shrink-0"></div><div class="flex-1 space-y-2 py-1"><div class="skeleton-line w-3/4"></div><div class="skeleton-line w-1/2"></div></div></div>
-          <div class="flex gap-4"><div class="skeleton-line w-12 h-12 rounded-xl shrink-0"></div><div class="flex-1 space-y-2 py-1"><div class="skeleton-line w-5/6"></div><div class="skeleton-line w-2/3"></div></div></div>
+      <!-- Step Progress -->
+      <div id="stepProgress" class="hidden premium-card p-10 min-h-[460px]">
+        <div class="flex flex-col max-w-sm mx-auto w-full gap-0">
+
+          <div class="flex items-start gap-5 step-pending" id="step1">
+            <div class="step-icon shrink-0">
+              <div class="step-circle step-pending-circle" id="step1Circle">1</div>
+              <svg class="step-spinner hidden w-10 h-10 text-blue-500 animate-spin" id="step1Spinner" viewBox="0 0 24 24" fill="none">
+                <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor"/>
+              </svg>
+              <svg class="step-check hidden w-10 h-10 text-green-600" id="step1Check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 13l4 4L19 7"/>
+              </svg>
+            </div>
+            <div class="flex-1 min-w-0 pt-0.5">
+              <div class="text-base font-bold step-label">Scrape</div>
+              <div class="text-sm text-slate-500 mt-0.5" id="step1Msg">Initializing...</div>
+              <span class="step-eta text-sm text-slate-400 font-medium ml-2" id="step1Eta"></span>
+            </div>
+          </div>
+
+          <div class="ml-8 pl-4 h-12 flex items-center">
+            <div class="w-px h-full connector-line bg-slate-200" id="conn1"></div>
+          </div>
+
+          <div class="flex items-start gap-5 step-pending" id="step2">
+            <div class="step-icon shrink-0">
+              <div class="step-circle step-pending-circle" id="step2Circle">2</div>
+              <svg class="step-spinner hidden w-10 h-10 text-blue-500 animate-spin" id="step2Spinner" viewBox="0 0 24 24" fill="none">
+                <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor"/>
+              </svg>
+              <svg class="step-check hidden w-10 h-10 text-green-600" id="step2Check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 13l4 4L19 7"/>
+              </svg>
+            </div>
+            <div class="flex-1 min-w-0 pt-0.5">
+              <div class="text-base font-bold step-label">AI Scoring</div>
+              <div class="text-sm text-slate-500 mt-0.5" id="step2Msg">Waiting for data...</div>
+              <span class="step-eta text-sm text-slate-400 font-medium ml-2" id="step2Eta"></span>
+            </div>
+          </div>
+
+          <div class="ml-8 pl-4 h-12 flex items-center">
+            <div class="w-px h-full connector-line bg-slate-200" id="conn2"></div>
+          </div>
+
+          <div class="flex items-start gap-5 step-pending" id="step3">
+            <div class="step-icon shrink-0">
+              <div class="step-circle step-pending-circle" id="step3Circle">3</div>
+              <svg class="step-spinner hidden w-10 h-10 text-blue-500 animate-spin" id="step3Spinner" viewBox="0 0 24 24" fill="none">
+                <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor"/>
+              </svg>
+              <svg class="step-check hidden w-10 h-10 text-green-600" id="step3Check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 13l4 4L19 7"/>
+              </svg>
+            </div>
+            <div class="flex-1 min-w-0 pt-0.5">
+              <div class="text-base font-bold step-label">Results</div>
+              <div class="text-sm text-slate-500 mt-0.5" id="step3Msg">Waiting for AI scoring...</div>
+              <span class="step-eta text-sm text-slate-400 font-medium ml-2" id="step3Eta"></span>
+            </div>
+          </div>
+
         </div>
       </div>
-
       <!-- Results -->
       <div id="results" class="space-y-4">
         <div class="premium-card min-h-[500px] flex flex-col items-center justify-center text-center p-8 border-dashed">

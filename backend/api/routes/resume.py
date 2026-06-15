@@ -34,9 +34,9 @@ Resume:
 def _extract_text(filepath: str) -> str:
     ext = os.path.splitext(filepath)[1].lower()
     if ext == ".pdf":
-        import pdfplumber
-        with pdfplumber.open(filepath) as pdf:
-            return "\n".join(page.extract_text() or "" for page in pdf.pages)
+        import fitz
+        doc = fitz.open(filepath)
+        return "\n".join(doc[i].get_text() or "" for i in range(len(doc)))
     elif ext == ".docx":
         import docx
         doc = docx.Document(filepath)

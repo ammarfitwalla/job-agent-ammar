@@ -85,12 +85,13 @@ class CerebrasProvider(BaseProvider):
                 err = str(e)
                 log(f"[CEREBRAS ERROR] attempt {attempt+1}/3 — {err[:200]}")
                 is_retryable = (
-                    "rate" in err.lower()
-                    or "token_quota" in err.lower()
-                    or "429" in err
-                    or "timeout" in err.lower()
+                    "timeout" in err.lower()
                     or "503" in err
                 )
+                is_queue = "queue_exceeded" in err or "429" in err
+                if is_queue:
+                    log(f"[CEREBRAS] queue_exceeded — fast-failing to fallback")
+                    return ""
                 if is_retryable:
                     wait = self._backoff(attempt, base=10.0, max_wait=60.0)
                     log(f"[CEREBRAS] retrying in {wait:.1f}s")
