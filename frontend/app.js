@@ -106,6 +106,10 @@ setupLocationSearch();
   await fetchCountries();
   await loadStates();
 })();
+setTimeout(() => {
+  const el = document.getElementById("splashOverlay");
+  if (el) el.classList.add("splash-hidden");
+}, 3000);
 
 async function checkRawJobs() {
   try { const r = await fetch("/scrape/status"); const d = await r.json(); hasRawJobs = d.last_scrape_raw > 0; } catch {}
