@@ -1,33 +1,25 @@
-# Global configs (paths, API keys, target roles)
+# Global configs — copy config.example.py to config.py and fill in your values
 import os
 
-# ==============
-# LLM SETTINGS
-# ==============
-LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "cerebras")  # "cerebras", "groq", or "ollama"
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "cerebras")
 
-# Cerebras (primary)
 CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY", "")
 CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "gpt-oss-120b")
 CEREBRAS_API_URL = os.environ.get("CEREBRAS_API_URL", "https://api.cerebras.ai/v1")
 
-# Groq (fallback)
+INTERNSHIP_CEREBRAS_API_KEY = os.environ.get("INTERNSHIP_CEREBRAS_API_KEY", "")
+INTERNSHIP_CEREBRAS_MODEL = os.environ.get("INTERNSHIP_CEREBRAS_MODEL", CEREBRAS_MODEL)
+INTERNSHIP_CEREBRAS_RATE = int(os.environ.get("INTERNSHIP_CEREBRAS_RATE", "4"))
+
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
 
-# Ollama (local fallback)
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434/v1/chat/completions")
 
-# ==============
-# ADZUNA API
-# ==============
 ADZUNA_APP_ID = os.environ.get("ADZUNA_APP_ID", "")
 ADZUNA_KEY = os.environ.get("ADZUNA_KEY", "")
 
-# ==============
-# JOB SEARCH SETTINGS
-# ==============
 ROLES_BY_CATEGORY = {
     "tech": [
         "AI Engineer", "Machine Learning Engineer", "Data Scientist",
@@ -76,7 +68,6 @@ ROLES_BY_CATEGORY = {
     ],
 }
 
-# Flat list of all roles (for scraper fallback if user picks none)
 TARGET_ROLES = []
 for roles in ROLES_BY_CATEGORY.values():
     TARGET_ROLES.extend(roles)
@@ -92,7 +83,6 @@ KEYWORDS_EXCLUDE = [
     "non-technical",
     "media",
     "marketing",
-    
 ]
 
 INTERNSHIP_KEYWORDS = [
@@ -100,26 +90,16 @@ INTERNSHIP_KEYWORDS = [
     "trainee", "junior", "apprentice", "graduate trainee",
 ]
 
-# Scrape limits per site
 SCRAPE_LIMIT = 1000
 
-# ==============
-# GOOGLE SHEETS
-# ==============
 GOOGLE_SHEET_NAME = "Ammar Job Tracker"
 
-# ==============
-# EMAIL SETTINGS
-# ==============
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "yourmail@gmail.com")
 DAILY_EMAIL_SUBJECT = "Daily Job Application Summary"
 
-# ==============
-# SYSTEM SETTINGS
-# ==============
-RESUME_PATH = "resume.txt"  # storing your resume text here
-AUTO_APPLY = False  # semi-automatic (you click submit)
-CHROME_PROFILE_PATH = ""     # optional browser profile path
+RESUME_PATH = "resume.txt"
+AUTO_APPLY = False
+CHROME_PROFILE_PATH = ""
 
 EMAIL_HOST=os.environ.get("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT=int(os.environ.get("EMAIL_PORT", "587"))
