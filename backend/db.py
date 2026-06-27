@@ -34,6 +34,8 @@ def init_db():
                 cancel INTEGER DEFAULT 0,
                 queue_position INTEGER DEFAULT 0,
                 sites TEXT DEFAULT '[]',
+                keywords TEXT DEFAULT '[]',
+                roles TEXT DEFAULT '[]',
                 keywords_count INTEGER DEFAULT 0,
                 roles_count INTEGER DEFAULT 0,
             resume_length INTEGER DEFAULT 0,
@@ -90,17 +92,26 @@ def init_db():
             cur.execute("ALTER TABLE sessions ADD COLUMN elapsed_seconds REAL DEFAULT 0")
         except:
             pass
+        try:
+            cur.execute("ALTER TABLE sessions ADD COLUMN keywords TEXT DEFAULT '[]'")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sessions ADD COLUMN roles TEXT DEFAULT '[]'")
+        except:
+            pass
     finally:
         conn.close()
 
 
 def gc_sessions(max_age_minutes: int = 240):
-    conn, cur = _get_conn()
-    cutoff = (datetime.utcnow() - timedelta(minutes=max_age_minutes)).isoformat()
-    cur.execute("DELETE FROM sessions WHERE updated_at < ?", (cutoff,))
-    cur.execute("DELETE FROM jobs WHERE session_id NOT IN (SELECT id FROM sessions)")
-    cur.execute("DELETE FROM events WHERE session_id NOT IN (SELECT id FROM sessions)")
-    conn.commit()
+    with _write_lock:
+        conn, cur = _get_conn()
+        cutoff = (datetime.utcnow() - timedelta(minutes=max_age_minutes)).isoformat()
+        cur.execute("DELETE FROM sessions WHERE updated_at < ?", (cutoff,))
+        cur.execute("DELETE FROM jobs WHERE session_id NOT IN (SELECT id FROM sessions)")
+        cur.execute("DELETE FROM events WHERE session_id NOT IN (SELECT id FROM sessions)")
+        conn.commit()
 
 
 def _now():
@@ -110,33 +121,37 @@ def _now():
 # ── Sessions ──
 
 def create_session(sid: str, **kwargs):
-    conn, cur = _get_conn()
-    now = _now()
-    fields = {
-        "id": sid, "created_at": now, "updated_at": now,
-        "sites": json.dumps(kwargs.get("sites", [])),
-        "keywords_count": kwargs.get("keywords_count", 0),
-        "roles_count": kwargs.get("roles_count", 0),
-        "resume_length": kwargs.get("resume_length", 0),
-        "internship_mode": 1 if kwargs.get("internship_mode") else 0,
-    }
-    cur.execute("""INSERT OR REPLACE INTO sessions
-        (id, created_at, updated_at, sites, keywords_count, roles_count, resume_length, internship_mode)
-        VALUES (:id, :created_at, :updated_at, :sites, :keywords_count, :roles_count, :resume_length, :internship_mode)""", fields)
-    conn.commit()
+    with _write_lock:
+        conn, cur = _get_conn()
+        now = _now()
+        fields = {
+            "id": sid, "created_at": now, "updated_at": now,
+            "sites": json.dumps(kwargs.get("sites", [])),
+            "keywords": json.dumps(kwargs.get("keywords", [])),
+            "roles": json.dumps(kwargs.get("roles", [])),
+            "keywords_count": kwargs.get("keywords_count", 0),
+            "roles_count": kwargs.get("roles_count", 0),
+            "resume_length": kwargs.get("resume_length", 0),
+            "internship_mode": 1 if kwargs.get("internship_mode") else 0,
+        }
+        cur.execute("""INSERT OR REPLACE INTO sessions
+            (id, created_at, updated_at, sites, keywords, roles, keywords_count, roles_count, resume_length, internship_mode)
+            VALUES (:id, :created_at, :updated_at, :sites, :keywords, :roles, :keywords_count, :roles_count, :resume_length, :internship_mode)""", fields)
+        conn.commit()
 
 
 def update_session(sid: str, **kwargs):
-    conn, cur = _get_conn()
-    allowed = {"status", "pass_num", "max_passes", "filtered_gen", "cancel", "queue_position", "scraped", "elapsed_seconds"}
-    updates = {k: v for k, v in kwargs.items() if k in allowed}
-    if not updates:
-        return
-    updates["updated_at"] = _now()
-    set_clause = ", ".join(f"{k} = :{k}" for k in updates)
-    updates["id"] = sid
-    cur.execute(f"UPDATE sessions SET {set_clause} WHERE id = :id", updates)
-    conn.commit()
+    with _write_lock:
+        conn, cur = _get_conn()
+        allowed = {"status", "pass_num", "max_passes", "filtered_gen", "cancel", "queue_position", "scraped", "elapsed_seconds"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return
+        updates["updated_at"] = _now()
+        set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+        updates["id"] = sid
+        cur.execute(f"UPDATE sessions SET {set_clause} WHERE id = :id", updates)
+        conn.commit()
 
 
 def get_session(sid: str) -> Optional[dict]:
@@ -148,10 +163,11 @@ def get_session(sid: str) -> Optional[dict]:
     d = dict(row)
     d["internship_mode"] = bool(d["internship_mode"])
     d["cancel"] = bool(d["cancel"])
-    try:
-        d["sites"] = json.loads(d["sites"])
-    except (json.JSONDecodeError, TypeError):
-        d["sites"] = []
+    for field in ("sites", "keywords", "roles"):
+        try:
+            d[field] = json.loads(d[field])
+        except (json.JSONDecodeError, TypeError):
+            d[field] = []
     return d
 
 
@@ -178,23 +194,25 @@ def _job_to_row(sid: str, job: dict) -> dict:
 
 
 def set_filtered_jobs(sid: str, jobs: list):
-    conn, cur = _get_conn()
-    cur.execute("DELETE FROM jobs WHERE session_id = ? AND is_raw = 0", (sid,))
-    rows = [_job_to_row(sid, j) for j in jobs]
-    if rows:
-        cur.executemany("""INSERT INTO jobs
-            (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, created_at)
-            VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :created_at)""", rows)
-    conn.commit()
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("DELETE FROM jobs WHERE session_id = ? AND is_raw = 0", (sid,))
+        rows = [_job_to_row(sid, j) for j in jobs]
+        if rows:
+            cur.executemany("""INSERT INTO jobs
+                (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, created_at)
+                VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :created_at)""", rows)
+        conn.commit()
 
 
 def add_filtered_job(sid: str, job: dict):
-    conn, cur = _get_conn()
-    row = _job_to_row(sid, job)
-    cur.execute("""INSERT INTO jobs
-        (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, created_at)
-        VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :created_at)""", row)
-    conn.commit()
+    with _write_lock:
+        conn, cur = _get_conn()
+        row = _job_to_row(sid, job)
+        cur.execute("""INSERT INTO jobs
+            (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, created_at)
+            VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :created_at)""", row)
+        conn.commit()
 
 
 def count_filtered_jobs(sid: str) -> int:
@@ -237,10 +255,11 @@ def get_filtered_jobs(sid: str, min_score: int = 0, site: str = "", experience_l
 # ── Events ──
 
 def add_event(sid: str, event: str, data: dict = None, elapsed: int = 0):
-    conn, cur = _get_conn()
-    cur.execute("""INSERT INTO events (session_id, event, data, elapsed_seconds, created_at)
-        VALUES (?, ?, ?, ?, ?)""", (sid, event, json.dumps(data or {}), elapsed, _now()))
-    conn.commit()
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("""INSERT INTO events (session_id, event, data, elapsed_seconds, created_at)
+            VALUES (?, ?, ?, ?, ?)""", (sid, event, json.dumps(data or {}), elapsed, _now()))
+        conn.commit()
 
 def get_events(sid: str, limit: int = 50) -> list[dict]:
     conn, cur = _get_conn()
@@ -279,7 +298,12 @@ def add_lead(
             ))
         conn.commit()
         lead_id = cur.lastrowid
-    add_event(session_id or "", "lead_captured", {"email": email, "has_name": bool(name), "lead_id": lead_id})
+    elapsed = 0
+    if session_id:
+        s = get_session(session_id)
+        if s and s.get("created_at"):
+            elapsed = int((datetime.utcnow() - datetime.fromisoformat(s["created_at"])).total_seconds())
+    add_event(session_id or "", "lead_captured", {"email": email, "has_name": bool(name), "lead_id": lead_id}, elapsed)
     return lead_id
 
 

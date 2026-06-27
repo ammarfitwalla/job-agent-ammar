@@ -117,18 +117,28 @@ Job Title: {job_title}
 Instructions:
 1. FIRST, extract 3-5 key skills/tools/domains explicitly mentioned in the job description.
 2. THEN, check which of those appear in the resume.
-3. Score based ONLY on how many JD skills match the resume:
-   - 0-1 matching: score 10-30, is_relevant=false
-   - 2-3 matching: score 40-60, is_relevant=true
-   - 4+ matching: score 70-100, is_relevant=true
-4. Your reason MUST quote specific phrases from the JD. If no JD skills match the resume, the score is 15 and is_relevant=false.
-5. Do NOT list resume skills that are absent from the JD.
+3. Score based on how many of the extracted JD skills match the resume:
+   - 0 matching:  score 10-15,  is_relevant=false
+   - 1 matching:  score 15-25,  is_relevant=false
+   - 2 matching:  score 25-40,  is_relevant=true
+   - 3 matching:  score 40-55,  is_relevant=true
+   - 4 matching:  score 55-70,  is_relevant=true
+   - 5 matching:  score 70-85,  is_relevant=true
+   - 6+ matching: score 85-95,  is_relevant=true
+4. Penalties:
+   - If the job's domain (e.g., sales, healthcare, civil engineering) differs
+     from the candidate's domain (tech/software), score 10-20 and is_relevant=false
+     even if some skills happen to overlap.
+5. Your reason MUST quote specific phrases from the JD. If no JD skills match the resume, the score is 10-15 and is_relevant=false.
+6. Do NOT list resume skills that are absent from the JD.
+7. Be critical. A score of 50 means a solid match. Most jobs will score 25-55.
 
 Examples:
-- JD says "Salesforce, cold calling, CRM". Resume has Salesforce, lead gen. → 1 match → score 25, false
-- JD says "AutoCAD, Revit, steel design". Resume has AutoCAD, structural analysis. → 1 match → score 25, false
-- JD says "Docker, AWS, Python, Kubernetes". Resume has Docker, AWS, Python. → 3 matches → score 55, true
-- JD says "electrical engineering". Resume has sales skills. → 0 matches → score 15, false
+- JD says "Salesforce, cold calling, CRM". Resume has Salesforce, lead gen. → 1 match → score 20, false
+- JD says "AutoCAD, Revit, steel design". Resume has AutoCAD, structural analysis. → 1 match → score 20, false
+- JD says "Docker, AWS, Python, Kubernetes". Resume has Docker, AWS, Python. → 3 matches → score 45, true
+- JD says "React, Node.js, MongoDB, TypeScript, GraphQL". Resume has React, Node, Python. → 2 matches → score 30, true
+- JD says "electrical engineering". Resume has sales skills. → 0 matches → score 10, false
 
 Respond ONLY in JSON:
 {{
@@ -156,11 +166,17 @@ def batch_relevance_prompt(
     if internship_mode:
         instructions = """
 For each job, extract 3-5 key skills/tools/domains from its JD ONLY, then check how many
-appear in the resume. Score based ONLY on JD-to-resume skill overlap:
-  - 0-1 matching → score 10-30, is_relevant=false
-  - 2-3 matching → score 40-60, is_relevant=true
-  - 4+ matching  → score 70-100, is_relevant=true
+appear in the resume. Score based on how many of those JD skills match:
+  - 0 matching → score 10-15,  is_relevant=false
+  - 1 matching → score 15-25,  is_relevant=false
+  - 2 matching → score 25-40,  is_relevant=true
+  - 3 matching → score 40-55,  is_relevant=true
+  - 4 matching → score 55-70,  is_relevant=true
+  - 5 matching → score 70-85,  is_relevant=true
+  - 6+ matching → score 85-95, is_relevant=true
 If required_years >= 3, set is_relevant=false.
+If the job domain differs from tech/engineering, score 10-20 and is_relevant=false.
+Be critical. Most jobs will score 25-55. A score of 50 means a solid match.
 Do NOT hallucinate or invent skills. Every skill listed MUST appear verbatim in the JD text.
 Do NOT list resume skills absent from the JD.
 """

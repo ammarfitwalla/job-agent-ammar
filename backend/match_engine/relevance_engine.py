@@ -5,13 +5,18 @@ from typing import Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from llm.llm_client import LLMClient
 from llm.prompts import relevance_prompt, internship_relevance_prompt, batch_relevance_prompt
-from llm.providers import GroqProvider
-from config import GROQ_API_KEY, GROQ_MODEL, KEYWORDS_INCLUDE
+from llm.providers import CerebrasProvider
+from config import INTERNSHIP_CEREBRAS_API_KEY, INTERNSHIP_CEREBRAS_MODEL, INTERNSHIP_CEREBRAS_RATE, CEREBRAS_API_URL, KEYWORDS_INCLUDE
 from utils.logger import log
 from utils.json_parser import extract_json
 
 BATCH_SIZE_RATIO = {True: 3, False: 5}  # internship vs normal
-_groq_provider = GroqProvider(api_key=GROQ_API_KEY, model=GROQ_MODEL)
+_internship_provider = CerebrasProvider(
+    api_key=INTERNSHIP_CEREBRAS_API_KEY,
+    model=INTERNSHIP_CEREBRAS_MODEL,
+    base_url=CEREBRAS_API_URL,
+    rate_limit=INTERNSHIP_CEREBRAS_RATE,
+)
 
 
 def keyword_score(
@@ -71,7 +76,7 @@ def _apply_scoring(
     return {
         **copy.copy(job),
         "ai_score": ai_score,
-        "keyword_score": kw_score,
+        "keyword_score": kw_norm,
         "total_score": total_score,
         "reason": ai_result.get("reason", ""),
         "matched_skills": verified,
@@ -88,10 +93,17 @@ def _score_one(
     kw_weight: float,
     internship_mode: bool = False,
     sid: str = None,
+    cancel_check: Optional[callable] = None,
 ) -> Optional[dict]:
+    if cancel_check and cancel_check():
+        return None
     prompt = (internship_relevance_prompt if internship_mode else relevance_prompt)(
         job["title"], job["description"], job.get("tags"), resume=resume)
-    response = (_groq_provider.chat if internship_mode else LLMClient.chat)(prompt)
+    response = ""
+    if internship_mode:
+        response = _internship_provider.chat(prompt, cancel_check=cancel_check)
+    if not response and not (cancel_check and cancel_check()):
+        response = LLMClient.chat(prompt, cancel_check=cancel_check)
 
     ai_result = extract_json(response)
     if not isinstance(ai_result, dict):
@@ -110,20 +122,29 @@ def _score_batch(
     kw_weight: float,
     internship_mode: bool,
     sid: str = None,
+    cancel_check: Optional[callable] = None,
 ) -> list[dict]:
+    if cancel_check and cancel_check():
+        return []
     prompt = batch_relevance_prompt(
         [(j["title"], j["description"], j.get("tags")) for j in batch_jobs],
         resume=resume,
         internship_mode=internship_mode,
     )
-    response = _groq_provider.chat(prompt, max_tokens=3000) if internship_mode else LLMClient.batch_chat(prompt)
+    response = ""
+    if internship_mode:
+        response = _internship_provider.chat(prompt, max_tokens=3000, cancel_check=cancel_check)
+    if not response and not (cancel_check and cancel_check()):
+        response = LLMClient.batch_chat(prompt, cancel_check=cancel_check)
 
     parsed = extract_json(response)
     if not isinstance(parsed, list):
         log(f"[BATCH WARN] Response is not a list — falling back to per-job scoring", sid)
         results = []
         for job in batch_jobs:
-            r = _score_one(job, min_score, keywords, resume, llm_weight, kw_weight, internship_mode, sid=sid)
+            if cancel_check and cancel_check():
+                break
+            r = _score_one(job, min_score, keywords, resume, llm_weight, kw_weight, internship_mode, sid=sid, cancel_check=cancel_check)
             if r:
                 results.append(r)
         return results
@@ -140,7 +161,9 @@ def _score_batch(
     if not results and parsed:
         log(f"[BATCH WARN] All batch results rejected (internship={internship_mode}) — retrying individually", sid)
         for job in batch_jobs:
-            r = _score_one(job, min_score, keywords, resume, llm_weight, kw_weight, internship_mode, sid=sid)
+            if cancel_check and cancel_check():
+                break
+            r = _score_one(job, min_score, keywords, resume, llm_weight, kw_weight, internship_mode, sid=sid, cancel_check=cancel_check)
             if r:
                 results.append(r)
 
@@ -159,6 +182,7 @@ def filter_jobs(
     progress_callback=None,
     internship_mode: bool = False,
     sid: str = None,
+    cancel_check: Optional[callable] = None,
 ) -> list:
     if not jobs:
         return []
@@ -187,11 +211,16 @@ def filter_jobs(
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
             pool.submit(
-                _score_batch, batch, min_score, keywords, resume, llm_weight, kw_weight, internship_mode, sid
+                _score_batch, batch, min_score, keywords, resume, llm_weight, kw_weight, internship_mode, sid, cancel_check
             ): f"batch of {len(batch)}"
             for batch in batches
         }
         for future in as_completed(futures):
+            if cancel_check and cancel_check():
+                log(f"[MATCH ENGINE] Cancelled — discarding remaining LLM batches", sid)
+                for f in futures:
+                    f.cancel()
+                break
             label = futures[future]
             try:
                 batch_results = future.result(timeout=90)

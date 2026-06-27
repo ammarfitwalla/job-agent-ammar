@@ -1,4 +1,5 @@
 # Unified LLM client — routes to provider, falls back gracefully
+from typing import Optional, Callable
 from config import LLM_PROVIDER, CEREBRAS_API_KEY, CEREBRAS_MODEL, CEREBRAS_API_URL, \
     GROQ_API_KEY, GROQ_MODEL, OLLAMA_MODEL, OLLAMA_API_URL
 from llm.providers import CerebrasProvider, GroqProvider, OllamaProvider
@@ -18,22 +19,22 @@ _FALLBACK_CHAIN = ["cerebras", "groq"]
 class LLMClient:
 
     @staticmethod
-    def chat(prompt: str, max_tokens: int = 600) -> str:
-        return LLMClient._route(prompt, max_tokens)
+    def chat(prompt: str, max_tokens: int = 600, cancel_check: Optional[Callable[[], bool]] = None) -> str:
+        return LLMClient._route(prompt, max_tokens, cancel_check)
 
     @staticmethod
-    def batch_chat(prompt: str, max_tokens: int = 3000) -> str:
+    def batch_chat(prompt: str, max_tokens: int = 3000, cancel_check: Optional[Callable[[], bool]] = None) -> str:
         """Batch variant — same routing, higher token ceiling."""
-        return LLMClient._route(prompt, max_tokens)
+        return LLMClient._route(prompt, max_tokens, cancel_check)
 
     @staticmethod
-    def _route(prompt: str, max_tokens: int) -> str:
+    def _route(prompt: str, max_tokens: int, cancel_check: Optional[Callable[[], bool]] = None) -> str:
         primary = _providers.get(LLM_PROVIDER)
         if primary is None:
             log(f"[LLM] Unknown provider '{LLM_PROVIDER}'")
             return ""
 
-        result = primary.chat(prompt, max_tokens)
+        result = primary.chat(prompt, max_tokens, cancel_check=cancel_check)
         if result:
             return result
 
@@ -45,7 +46,7 @@ class LLMClient:
             if fallback is None:
                 continue
             log(f"[LLM] Falling back to '{name}'")
-            result = fallback.chat(prompt, max_tokens)
+            result = fallback.chat(prompt, max_tokens, cancel_check=cancel_check)
             if result:
                 return result
 
