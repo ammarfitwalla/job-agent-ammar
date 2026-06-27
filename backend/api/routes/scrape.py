@@ -105,6 +105,9 @@ def _is_cancelled(sid: str) -> bool:
     return bool(s and s.get("cancel"))
 
 
+def _resumes_dir():
+    return os.path.join(tempfile.gettempdir(), "job_agent_resumes")
+
 def run_scrape(sid: str, sites: list[str], keywords: list[str], resume_text: str,
                roles=None, adzuna_country="us", location="", indeed_country="USA",
                internship_mode=False, min_relevant=5, max_passes=3):
@@ -115,9 +118,9 @@ def run_scrape(sid: str, sites: list[str], keywords: list[str], resume_text: str
     create_session(sid, sites=sites, keywords=keywords, roles=roles or [],
                    keywords_count=len(keywords), roles_count=len(roles or []),
                    resume_length=len(resume_text), internship_mode=internship_mode)
-    _resumes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "resumes")
-    os.makedirs(_resumes_dir, exist_ok=True)
-    with open(os.path.join(_resumes_dir, f"{sid}.txt"), "w", encoding="utf-8") as f:
+    d = _resumes_dir()
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, f"{sid}.txt"), "w", encoding="utf-8") as f:
         f.write(resume_text)
     update_session(sid, status="running", cancel=False, pass_num=0,
                    max_passes=max_passes, filtered_gen=0, queue_position=0, scraped=0)

@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard — Job Agent</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:#f5f6fa; color:#2d3436; padding:20px; }
+h1 { font-size:24px; margin-bottom:20px; }
+h2 { font-size:18px; margin:24px 0 12px; }
+.cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+.card { background:#fff; border-radius:8px; padding:14px 16px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+.card .num { font-size:28px; font-weight:700; }
+.card .label { font-size:12px; color:#636e72; margin-top:4px; }
+.card.green .num { color:#00b894; }
+.card.orange .num { color:#fdcb6e; }
+.card.red .num { color:#d63031; }
+.card.blue .num { color:#0984e3; }
+.card.purple .num { color:#6c5ce7; }
+.charts { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+.chart-box { background:#fff; border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+.chart-box h3 { font-size:14px; margin-bottom:8px; color:#636e72; }
+table { width:100%; border-collapse:collapse; background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); font-size:13px; }
+th, td { padding:8px 10px; text-align:left; border-bottom:1px solid #f1f2f6; }
+th { background:#f8f9fa; font-weight:600; cursor:pointer; white-space:nowrap; user-select:none; }
+th:hover { background:#e9ecef; }
+tr:hover td { background:#f8f9fa; }
+.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+.badge-green { background:#00b89420; color:#00b894; }
+.badge-red { background:#d6303120; color:#d63031; }
+.badge-orange { background:#fdcb6e30; color:#b7950b; }
+.badge-gray { background:#636e7220; color:#636e72; }
+.badge-blue { background:#0984e320; color:#0984e3; }
+.tab { display:inline-block; padding:8px 18px; cursor:pointer; border-radius:6px 6px 0 0; font-size:14px; font-weight:500; }
+.tab.active { background:#fff; color:#0984e3; border-bottom:2px solid #0984e3; }
+.tab:hover { background:#e9ecef; }
+.tab-content { display:none; }
+.tab-content.active { display:block; }
+.tabs { margin-bottom:0; }
+.detail-panel { background:#f8f9fa; border-radius:6px; padding:12px; margin:8px 0; display:none; font-size:13px; }
+.detail-panel.open { display:block; }
+.detail-panel .ev { padding:3px 0; border-bottom:1px solid #e9ecef; }
+.detail-panel .ev:last-child { border:0; }
+.ev-time { color:#636e72; font-size:11px; margin-right:8px; }
+.section-toggle { color:#0984e3; cursor:pointer; font-size:12px; }
+.section-toggle:hover { text-decoration:underline; }
+.job-mini { padding:4px 0; font-size:12px; border-bottom:1px solid #e9ecef; }
+.job-mini:last-child { border:0; }
+.detail-panel table th { font-size:11px; padding:4px 6px; background:#e9ecef; }
+.detail-panel table td { padding:4px 6px; font-size:12px; }
+.score-bar { display:inline-block; height:8px; border-radius:4px; background:#dfe6e9; overflow:hidden; width:60px; vertical-align:middle; margin-right:6px; }
+.score-fill { height:100%; border-radius:4px; background:#00b894; }
+.search-input { padding:8px 12px; border:1px solid #dfe6e9; border-radius:6px; width:240px; font-size:13px; margin-bottom:12px; }
+.mode-badge { font-size:10px; padding:1px 6px; border-radius:8px; background:#dfe6e9; }
+.mode-internship { background:#6c5ce720; color:#6c5ce7; }
+.mode-normal { background:#0984e320; color:#0984e3; }
+.sites-cell { max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lead-table td { vertical-align:top; }
+.empty { color:#636e72; font-size:14px; padding:20px; text-align:center; }
+</style>
+</head>
+<body>
+
+<h1>Admin Dashboard</h1>
+
+<!-- Overview Cards -->
+<div class="cards" id="cards"></div>
+
+<!-- Charts -->
+<div class="charts">
+  <div class="chart-box"><h3>Daily Sessions (14 days)</h3><canvas id="dailyChart" height="160"></canvas></div>
+  <div class="chart-box"><h3>Completion by Mode</h3><canvas id="modeChart" height="160"></canvas></div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <span class="tab active" data-tab="sessions" onclick="switchTab('sessions')">Sessions</span>
+  <span class="tab" data-tab="scores" onclick="switchTab('scores')">Score Distribution</span>
+  <span class="tab" data-tab="leads" onclick="switchTab('leads')">Leads</span>
+</div>
+
+<div id="tab-sessions" class="tab-content active">
+  <input class="search-input" id="sessionSearch" placeholder="Search sessions..." oninput="filterSessions()">
+  <div style="overflow-x:auto"><table><thead id="sessionHead"></thead><tbody id="sessionBody"></tbody></table></div>
+</div>
+
+<div id="tab-scores" class="tab-content">
+  <div class="chart-box" style="max-width:600px"><h3>Total Score Distribution</h3><canvas id="scoreHistogram" height="200"></canvas></div>
+</div>
+
+<div id="tab-leads" class="tab-content">
+  <div style="overflow-x:auto"><table><thead><tr><th>Date</th><th>Name</th><th>Email</th><th>Roles</th><th>Location</th><th>Mode</th><th>Session</th></tr></thead><tbody id="leadBody"></tbody></table></div>
+</div>
+
+<script>
+let dailyChart, modeChart, scoreChart;
+let allSessions = [];
+
+async function loadStats() {
+  const r = await fetch("/api/admin/stats");
+  const d = await r.json();
+  const cards = [
+    { num: d.total_sessions, label: "Total Sessions", cls: "blue" },
+    { num: d.completed, label: "Completed", cls: "green" },
+    { num: d.cancelled, label: "Cancelled", cls: "orange" },
+    { num: d.abandoned, label: "Abandoned", cls: "red" },
+    { num: d.errors, label: "Errors", cls: "red" },
+    { num: d.total_leads, label: "Leads Captured", cls: "purple" },
+    { num: d.total_raw_jobs, label: "Raw Jobs", cls: "blue" },
+    { num: d.total_relevant_jobs, label: "Relevant Jobs", cls: "green" },
+    { num: formatDuration(d.avg_duration_seconds), label: "Avg Duration", cls: "blue" },
+  ];
+  document.getElementById("cards").innerHTML = cards.map(c => `<div class="card ${c.cls}"><div class="num">${c.num}</div><div class="label">${c.label}</div></div>`).join("");
+
+  // Daily chart
+  const days = d.daily.map(r => r.day.slice(5));
+  const counts = d.daily.map(r => r.count);
+  if (dailyChart) dailyChart.destroy();
+  dailyChart = new Chart(document.getElementById("dailyChart"), {
+    type: "bar",
+    data: { labels: days, datasets: [{ label: "Sessions", data: counts, backgroundColor: "#0984e3", borderRadius: 4 }] },
+    options: { responsive: true, plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: { grid: { display: false } } } }
+  });
+
+  // Mode pie
+  const modes = d.by_mode || {};
+  const modeLabels = [], modeDone = [], modeCancelled = [];
+  for (const [k, v] of Object.entries(modes)) {
+    modeLabels.push(k);
+    modeDone.push(v.completed);
+    modeCancelled.push(v.cancelled);
+  }
+  if (modeChart) modeChart.destroy();
+  modeChart = new Chart(document.getElementById("modeChart"), {
+    type: "pie",
+    data: {
+      labels: modeLabels,
+      datasets: [{
+        data: modeLabels.map(k => ((modes[k]?.completed || 0) + (modes[k]?.cancelled || 0)) || 1),
+        backgroundColor: ["#6c5ce7", "#0984e3"],
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { position: "bottom" } } }
+  });
+}
+
+async function loadSessions() {
+  const r = await fetch("/api/admin/sessions");
+  const d = await r.json();
+  allSessions = d.sessions || [];
+  renderSessions(allSessions);
+}
+
+function renderSessions(sessions) {
+  const cols = ["Date", "Session ID", "Mode", "Status", "Sites", "Jobs", "Duration"];
+  document.getElementById("sessionHead").innerHTML = "<tr>" + cols.map(c => `<th onclick="sortSessions('${c.toLowerCase().replace(/ /g,'_')}')">${c}</th>`).join("") + "</tr>";
+  document.getElementById("sessionBody").innerHTML = sessions.map(s => {
+    const statusBadge = { Completed: "badge-green", Cancelled: "badge-orange", Abandoned: "badge-red", Error: "badge-red" }[s.classification] || "badge-gray";
+    const modeCls = s.internship_mode ? "mode-internship" : "mode-normal";
+    const modeLabel = s.internship_mode ? "internship" : "normal";
+    return `<tr onclick="toggleDetail('${s.id}')" style="cursor:pointer">
+      <td style="white-space:nowrap">${s.created_at?.slice(0,19).replace("T"," ")}</td>
+      <td style="font-family:monospace;font-size:10px;max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${s.id}">${s.id}</td>
+      <td><span class="mode-badge ${modeCls}">${modeLabel}</span></td>
+      <td><span class="badge ${statusBadge}">${s.classification}</span></td>
+      <td class="sites-cell">${(s.sites||[]).join(", ")}</td>
+      <td>${s.scraped || 0} raw → ${s.relevant_jobs || 0} relevant</td>
+      <td>${formatDuration(s.elapsed_seconds)}</td>
+    </tr><tr id="detail-${s.id}" style="display:none"><td colspan="7"><div class="detail-panel" id="panel-${s.id}">Loading...</div></td></tr>`;
+  }).join("");
+}
+
+let _sortKey = "created_at", _sortDir = -1;
+
+function sortSessions(key) {
+  if (_sortKey === key) _sortDir *= -1; else { _sortKey = key; _sortDir = -1; }
+  const sorted = [...allSessions].sort((a, b) => {
+    let va = a[_sortKey] ?? "", vb = b[_sortKey] ?? "";
+    if (typeof va === "string") return _sortDir * va.localeCompare(vb);
+    return _sortDir * (va - vb);
+  });
+  renderSessions(sorted);
+}
+
+function filterSessions() {
+  const q = document.getElementById("sessionSearch").value.toLowerCase();
+  const filtered = allSessions.filter(s =>
+    (s.keywords||[]).join(" ").toLowerCase().includes(q) ||
+    (s.roles||[]).join(" ").toLowerCase().includes(q) ||
+    (s.sites||[]).join(" ").toLowerCase().includes(q) ||
+    s.classification.toLowerCase().includes(q) ||
+    s.id?.toLowerCase().includes(q)
+  );
+  renderSessions(filtered);
+}
+
+const _detailCache = {};
+
+async function toggleDetail(sid) {
+  const row = document.getElementById(`detail-${sid}`);
+  const panel = document.getElementById(`panel-${sid}`);
+  const isOpen = row.style.display !== "none";
+  row.style.display = isOpen ? "none" : "table-row";
+  if (!isOpen && !_detailCache[sid]) {
+    try {
+      const r = await fetch(`/api/admin/sessions/${sid}`);
+      const d = await r.json();
+      _detailCache[sid] = d;
+    } catch {}
+  }
+  if (!isOpen && _detailCache[sid]) {
+    renderDetail(sid, _detailCache[sid]);
+  }
+}
+
+function renderDetail(sid, d) {
+  const s = d.session || {};
+  const events = (d.events || []).slice(-30);
+  const jobs = (d.jobs || []).slice(0, 20);
+  let html = `<div style="display:flex;gap:20px;flex-wrap:wrap">`;
+  if (d.resume_available) html += `<a href="/api/admin/sessions/${sid}/resume" target="_blank" style="font-size:13px">View Resume</a>`;
+  html += `</div>`;
+  if ((s.keywords||[]).length) html += `<div style="margin-top:8px"><strong>Keywords:</strong> ${s.keywords.join(", ")}</div>`;
+  if ((s.roles||[]).length) html += `<div><strong>Roles:</strong> ${s.roles.join(", ")}</div>`;
+  if (events.length) {
+    html += `<div style="margin-top:8px"><strong>Events (last 30):</strong></div>`;
+    html += events.map(e => `<div class="ev"><span class="ev-time">${e.elapsed_seconds || 0}s</span>${e.event}</div>`).join("");
+  }
+  if (jobs.length) {
+    html += `<div style="margin-top:8px"><strong>Jobs (top 20):</strong></div>`;
+    html += `<table style="width:100%;font-size:12px;margin-top:4px"><tr><th>Title</th><th>Company</th><th>Score</th><th>Link</th></tr>`;
+    html += jobs.map(j => `<tr>
+      <td>${j.title}</td>
+      <td>${j.company}</td>
+      <td>${j.total_score} (AI ${j.ai_score} | KW ${j.keyword_score})</td>
+      <td>${j.url ? `<a href="${j.url}" target="_blank" style="color:#0984e3">Open</a>` : "—"}</td>
+    </tr>`).join("");
+    html += `</table>`;
+  }
+  if (!events.length && !jobs.length) html += `<div class="empty">No events or jobs for this session</div>`;
+  document.getElementById(`panel-${sid}`).innerHTML = html;
+}
+
+async function loadScores() {
+  const r = await fetch("/api/admin/scores");
+  const d = await r.json();
+  const dist = d.distribution || [];
+  if (scoreChart) scoreChart.destroy();
+  scoreChart = new Chart(document.getElementById("scoreHistogram"), {
+    type: "bar",
+    data: {
+      labels: dist.map(b => b.range),
+      datasets: [{ label: "Jobs", data: dist.map(b => b.count), backgroundColor: "#00b894", borderRadius: 4 }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: { grid: { display: false } } } }
+  });
+}
+
+async function loadLeads() {
+  const r = await fetch("/api/admin/leads");
+  const d = await r.json();
+  const leads = d.leads || [];
+  document.getElementById("leadBody").innerHTML = leads.length
+    ? leads.map(l => `<tr>
+      <td>${l.created_at?.slice(0,10)}</td>
+      <td>${l.name || ""}</td>
+      <td>${l.email}</td>
+      <td>${(l.roles||[]).join(", ")}</td>
+      <td>${l.location || ""}</td>
+      <td>${l.internship_mode ? "internship" : "normal"}</td>
+      <td>${l.session_id ? `<span class="section-toggle" onclick="toggleDetail('${l.session_id}')">${l.session_id?.slice(0,8)}...</span>` : ""}</td>
+    </tr>`).join("")
+    : '<tr><td colspan="7"><div class="empty">No leads captured yet</div></td></tr>';
+}
+
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+  document.querySelectorAll(".tab-content").forEach(c => c.classList.toggle("active", c.id === `tab-${name}`));
+}
+
+function formatDuration(sec) {
+  if (!sec || sec <= 0) return "—";
+  if (sec < 60) return `${Math.round(sec)}s`;
+  if (sec < 3600) return `${Math.floor(sec/60)}m ${Math.round(sec%60)}s`;
+  return `${Math.floor(sec/60)}m`;
+}
+
+loadStats();
+loadSessions();
+loadScores();
+loadLeads();
+</script>
+</body>
+</html>
