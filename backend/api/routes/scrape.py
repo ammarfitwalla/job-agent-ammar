@@ -1,14 +1,44 @@
-from datetime import datetime
-from fastapi import APIRouter, BackgroundTasks, Query
+import os
+import threading
+from datetime import datetime, timedelta
+from fastapi import APIRouter, Query
 from api.schemas import ScrapeRequest
 from utils.logger import log
-import threading
-from collections import deque
 from db import create_session, update_session, get_session, set_filtered_jobs, add_filtered_job, count_filtered_jobs, get_events
 
 router = APIRouter(prefix="/scrape", tags=["scrape"])
 
-_scrape_lock = threading.Lock()
+_STALE_TIMEOUT_MINUTES = 15
+
+
+def cancel_stale_sessions():
+    from db import _get_conn
+    cutoff = (datetime.utcnow() - timedelta(minutes=_STALE_TIMEOUT_MINUTES)).isoformat()
+    try:
+        conn, cur = _get_conn()
+        cur.execute("SELECT id FROM sessions WHERE status = 'running' AND updated_at < ?", (cutoff,))
+        stale = [row[0] for row in cur.fetchall()]
+        conn.close()
+        for sid in stale:
+            log(f"[GC] Cancelling stale session {sid}", sid)
+            try:
+                update_session(sid, cancel=True, status="done")
+            except Exception as inner:
+                log(f"[GC] Failed to cancel {sid}: {inner}")
+    except Exception as e:
+        log(f"[GC] Error cancelling stale sessions: {e}")
+
+
+def _start_stale_cleanup():
+    def _loop():
+        while True:
+            threading.Event().wait(60)
+            cancel_stale_sessions()
+    t = threading.Thread(target=_loop, daemon=True)
+    t.start()
+
+
+_start_stale_cleanup()
 
 
 def _save_elapsed(sid):
@@ -17,29 +47,11 @@ def _save_elapsed(sid):
         elapsed = (datetime.utcnow() - datetime.fromisoformat(s["created_at"])).total_seconds()
         update_session(sid, elapsed_seconds=round(elapsed, 1))
 
-_scrape_queue: deque[ScrapeRequest] = deque()
 
-
-def _process_queue():
-    if _scrape_queue:
-        next_req = _scrape_queue.popleft()
-        sid = next_req.search_id
-        if sid:
-            update_session(sid, queue_position=len(_scrape_queue))
-        print(f"[SCRAPE] Starting next queued scrape ({len(_scrape_queue)} remaining in queue)")
-        t = threading.Thread(target=_run_scrape_wrapper, args=(next_req,), daemon=True)
-        t.start()
-    else:
-        _scrape_lock.release()
-
-
-def _run_scrape_wrapper(req: ScrapeRequest):
-    try:
-        run_scrape(req.search_id, req.sites, req.keywords, req.resume_text, req.roles,
-                   req.adzuna_country, req.location, req.indeed_country,
-                   req.internship_mode, req.min_relevant, req.max_passes)
-    finally:
-        _process_queue()
+def _run_scrape(req: ScrapeRequest):
+    run_scrape(req.search_id, req.sites, req.keywords, req.resume_text, req.roles,
+               req.adzuna_country, req.location, req.indeed_country,
+               req.internship_mode, req.min_relevant, req.max_passes)
 
 
 SITE_MAP = {
@@ -82,9 +94,15 @@ def _score_jobs(jobs: list, keywords: list[str], resume_text: str,
         min_threshold = 0
     relevant = filter_jobs(jobs, min_score=min_threshold, keywords=keywords, resume=resume_text,
                            progress_callback=on_scored if sid else None,
-                           internship_mode=internship_mode, sid=sid)
+                           internship_mode=internship_mode, sid=sid,
+                           cancel_check=lambda: _is_cancelled(sid))
     log(f"[SCORE] {len(relevant)} relevant out of {len(jobs)}", sid)
     return relevant
+
+
+def _is_cancelled(sid: str) -> bool:
+    s = get_session(sid)
+    return bool(s and s.get("cancel"))
 
 
 def run_scrape(sid: str, sites: list[str], keywords: list[str], resume_text: str,
@@ -94,9 +112,13 @@ def run_scrape(sid: str, sites: list[str], keywords: list[str], resume_text: str
         log(f"[SCRAPE] No search_id provided, aborting", sid)
         return
 
-    create_session(sid, sites=sites, keywords_count=len(keywords),
-                   roles_count=len(roles or []), resume_length=len(resume_text),
-                   internship_mode=internship_mode)
+    create_session(sid, sites=sites, keywords=keywords, roles=roles or [],
+                   keywords_count=len(keywords), roles_count=len(roles or []),
+                   resume_length=len(resume_text), internship_mode=internship_mode)
+    _resumes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "resumes")
+    os.makedirs(_resumes_dir, exist_ok=True)
+    with open(os.path.join(_resumes_dir, f"{sid}.txt"), "w", encoding="utf-8") as f:
+        f.write(resume_text)
     update_session(sid, status="running", cancel=False, pass_num=0,
                    max_passes=max_passes, filtered_gen=0, queue_position=0, scraped=0)
 
@@ -271,7 +293,8 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
             batch = filter_jobs(new_candidates, min_score=min_threshold,
                                 keywords=keywords, resume=resume_text,
                                 progress_callback=lambda j: add_filtered_job(sid, j),
-                                internship_mode=True, sid=sid)
+                                internship_mode=True, sid=sid,
+                                cancel_check=lambda: _is_cancelled(sid))
 
             if batch:
                 all_relevant.extend(batch)
@@ -295,25 +318,15 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
 
 
 @router.post("")
-async def trigger_scrape(background_tasks: BackgroundTasks, req: ScrapeRequest):
+async def trigger_scrape(req: ScrapeRequest):
     if not req.search_id:
         return {"message": "Missing search_id", "status": "error"}
     sid = req.search_id
     log(f"[SCRAPE] Search triggered — sites={req.sites}, "
           f"mode={'internship' if req.internship_mode else 'normal'}", sid)
-    if _scrape_lock.acquire(blocking=False):
-        if sid:
-            update_session(sid, queue_position=0)
-        background_tasks.add_task(_run_scrape_wrapper, req)
-        return {"message": "Scrape started", "status": "running"}
-    else:
-        _scrape_queue.append(req)
-        pos = len(_scrape_queue)
-        if sid:
-            update_session(sid, queue_position=pos)
-        log(f"[SCRAPE] Queued at position {pos}", sid)
-        return {"message": f"Another scrape in progress — queued at position {pos}",
-                "status": "queued", "queue_position": pos}
+    t = threading.Thread(target=_run_scrape, args=(req,), daemon=True)
+    t.start()
+    return {"message": "Scrape started", "status": "running"}
 
 
 @router.post("/stop")
@@ -322,8 +335,6 @@ async def stop_scrape(search_id: str = Query("")):
         return {"message": "Missing search_id", "status": "error"}
     log(f"[STOP] Stop requested for session {search_id}", search_id)
     update_session(search_id, cancel=True, status="done")
-    _scrape_queue.clear()
-    log(f"[STOP] Cleared queue")
     return {"message": "Scrape cancelled", "status": "done"}
 
 

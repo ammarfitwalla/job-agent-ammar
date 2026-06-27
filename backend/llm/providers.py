@@ -1,7 +1,9 @@
 # Provider classes — each wraps one LLM API behind a common interface
 import random
+import threading
 import time
 from abc import ABC, abstractmethod
+from typing import Optional, Callable
 
 from openai import OpenAI
 from groq import Groq, RateLimitError
@@ -18,6 +20,7 @@ class TokenBucket:
         self.refill_rate = refill_rate
         self.tokens = capacity
         self.last_refill = time.monotonic()
+        self._lock = threading.Lock()
 
     def _refill(self):
         now = time.monotonic()
@@ -27,11 +30,12 @@ class TokenBucket:
 
     def acquire(self, tokens: int = 1):
         while True:
-            self._refill()
-            if self.tokens >= tokens:
-                self.tokens -= tokens
-                return
-            sleep_for = (tokens - self.tokens) / self.refill_rate
+            with self._lock:
+                self._refill()
+                if self.tokens >= tokens:
+                    self.tokens -= tokens
+                    return
+                sleep_for = (tokens - self.tokens) / self.refill_rate
             time.sleep(min(sleep_for, 0.25))
 
 
@@ -39,7 +43,7 @@ class BaseProvider(ABC):
     name: str = "base"
 
     @abstractmethod
-    def chat(self, prompt: str, max_tokens: int) -> str:
+    def chat(self, prompt: str, max_tokens: int, cancel_check: Optional[Callable[[], bool]] = None) -> str:
         ...
 
     @staticmethod
@@ -54,9 +58,9 @@ class BaseProvider(ABC):
 class CerebrasProvider(BaseProvider):
     name = "cerebras"
 
-    def __init__(self, api_key, model, base_url):
+    def __init__(self, api_key, model, base_url, rate_limit=4):
         self._model = model
-        self._bucket = TokenBucket(capacity=4, refill_rate=4 / 60)
+        self._bucket = TokenBucket(capacity=rate_limit, refill_rate=rate_limit / 60)
         if api_key:
             self._client = OpenAI(
                 api_key=api_key,
@@ -66,10 +70,13 @@ class CerebrasProvider(BaseProvider):
         else:
             self._client = None
 
-    def chat(self, prompt: str, max_tokens: int = 3000) -> str:
+    def chat(self, prompt: str, max_tokens: int = 3000, cancel_check: Optional[Callable[[], bool]] = None) -> str:
         if self._client is None:
             return ""
         for attempt in range(3):
+            if cancel_check and cancel_check():
+                log(f"[CEREBRAS] Cancelled during retry — aborting")
+                return ""
             self._bucket.acquire()
             try:
                 completion = self._client.chat.completions.create(
@@ -87,15 +94,17 @@ class CerebrasProvider(BaseProvider):
                 is_retryable = (
                     "timeout" in err.lower()
                     or "503" in err
+                    or "queue_exceeded" in err
+                    or "429" in err
                 )
-                is_queue = "queue_exceeded" in err or "429" in err
-                if is_queue:
-                    log(f"[CEREBRAS] queue_exceeded — fast-failing to fallback")
-                    return ""
                 if is_retryable:
                     wait = self._backoff(attempt, base=10.0, max_wait=60.0)
-                    log(f"[CEREBRAS] retrying in {wait:.1f}s")
-                    time.sleep(wait)
+                    log(f"[CEREBRAS] Retrying in {wait:.1f}s (attempt {attempt+1}/3)")
+                    for _ in range(int(wait / 0.5)):
+                        if cancel_check and cancel_check():
+                            log(f"[CEREBRAS] Cancelled during backoff — aborting")
+                            return ""
+                        time.sleep(0.5)
                 else:
                     return ""
         return ""
@@ -111,8 +120,11 @@ class GroqProvider(BaseProvider):
         self._model = model
         self._bucket = TokenBucket(capacity=28, refill_rate=28 / 60)
 
-    def chat(self, prompt: str, max_tokens: int = 600) -> str:
+    def chat(self, prompt: str, max_tokens: int = 600, cancel_check: Optional[Callable[[], bool]] = None) -> str:
         for attempt in range(3):
+            if cancel_check and cancel_check():
+                log(f"[GROQ] Cancelled during retry — aborting")
+                return ""
             self._bucket.acquire()
             try:
                 client = Groq(api_key=self._api_key, timeout=30)
@@ -129,7 +141,11 @@ class GroqProvider(BaseProvider):
             except RateLimitError as e:
                 wait = self._backoff(attempt, base=10.0, max_wait=60.0)
                 log(f"[GROQ RATE LIMITED] attempt {attempt+1}/3, waiting {wait:.1f}s — {e}")
-                time.sleep(wait)
+                for _ in range(int(wait / 0.5)):
+                    if cancel_check and cancel_check():
+                        log(f"[GROQ] Cancelled during backoff — aborting")
+                        return ""
+                    time.sleep(0.5)
             except Exception as e:
                 log(f"[GROQ ERROR] {e}")
                 return ""
@@ -147,7 +163,9 @@ class OllamaProvider(BaseProvider):
         self._api_url = api_url
         self._bucket = TokenBucket(capacity=28, refill_rate=28 / 60)
 
-    def chat(self, prompt: str, max_tokens: int = 600) -> str:
+    def chat(self, prompt: str, max_tokens: int = 600, cancel_check: Optional[Callable[[], bool]] = None) -> str:
+        if cancel_check and cancel_check():
+            return ""
         self._bucket.acquire()
         try:
             payload = {

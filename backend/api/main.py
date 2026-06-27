@@ -7,10 +7,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse, FileResponse
+from fastapi.responses import PlainTextResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Mount
-from api.routes import jobs, scrape, email, resume, roles, states, events, leads
+from api.routes import jobs, scrape, email, resume, roles, states, events, leads, admin
 import json
 from db import init_db
 
@@ -65,6 +65,7 @@ app.include_router(roles.router)
 app.include_router(states.router)
 app.include_router(events.router)
 app.include_router(leads.router)
+app.include_router(admin.router)
 
 
 @app.on_event("startup")
@@ -106,8 +107,19 @@ async def view_logs():
     return PlainTextResponse("(no visitors yet)")
 
 
-# Serve frontend (must be last — catches all unmatched routes)
+# Admin dashboard redirect
 _frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "frontend")
+_admin_html = os.path.join(_frontend_dir, "admin.html")
+
+
+@app.get("/admin")
+async def admin_redirect():
+    if os.path.isfile(_admin_html):
+        return FileResponse(_admin_html)
+    return PlainTextResponse("admin.html not found", status_code=404)
+
+
+# Serve frontend (must be last — catches all unmatched routes)
 
 
 @app.get("/db")

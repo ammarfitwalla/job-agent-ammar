@@ -32,9 +32,15 @@ function logEvent(event, data = {}, elapsed = 0) {
   } catch {}
 }
 
-window.addEventListener("beforeunload", () => {
-  logEvent("tab_closed", { url: window.location.href });
-});
+function cancelActiveSearch() {
+  if (_searchId && pollTimer) {
+    try { navigator.sendBeacon(`/scrape/stop?search_id=${_searchId}`); } catch {}
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+window.addEventListener("beforeunload", cancelActiveSearch);
+window.addEventListener("pagehide", cancelActiveSearch);
 
 function getFilteredJobs() {
   let jobs = allJobs;
@@ -528,7 +534,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   } catch (e) {
     document.title = "AI Job Agent";
     setStatus("Error: " + e.message, "red");
-    logEvent("search_error", { error: e.message });
+    logEvent("search_error", { error: e.message }, Math.round((Date.now() - _searchStart) / 1000));
     resetSearchBtn(); hideElement("stepProgress"); showElement("results");
   }
 });
@@ -698,7 +704,7 @@ function pollResults() {
           hideElement("stepProgress");
           document.title = "AI Job Agent";
           setStatus("Data collection encountered an error.", "red");
-          logEvent("search_error", { status: "error" });
+          logEvent("search_error", { status: "error" }, Math.round((Date.now() - _searchStart) / 1000));
           await loadResults(d);
         } else {
           setStepProgress([
@@ -755,11 +761,11 @@ async function loadResults(statusData) {
       const passSummary = statusData && statusData.max_passes > 0 && statusData.pass_num > 0 ? ` across ${statusData.pass_num} sources` : "";
       msg = `Analysis complete: ${allJobs.length} matches found${passSummary}.`;
       document.title = `(${allJobs.length}) Jobs - AI Job Agent`;
-      logEvent("search_completed", { jobs_count: allJobs.length });
+      logEvent("search_completed", { jobs_count: allJobs.length }, Math.round((Date.now() - _searchStart) / 1000));
     } else {
       msg = "Analysis complete: No high-confidence matches found in this region.";
       document.title = "AI Job Agent";
-      logEvent("search_completed", { jobs_count: 0 });
+      logEvent("search_completed", { jobs_count: 0 }, Math.round((Date.now() - _searchStart) / 1000));
     }
     setStatus(msg, allJobs.length ? "green" : "amber");
     setTimeout(maybeShowLeadCapture, 2000);
