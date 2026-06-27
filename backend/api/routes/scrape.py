@@ -1,5 +1,6 @@
 import os
 import threading
+import tempfile
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Query
 from api.schemas import ScrapeRequest
