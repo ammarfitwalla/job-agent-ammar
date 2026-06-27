@@ -1,5 +1,6 @@
 import json
 import os
+import tempfile
 from datetime import datetime, timedelta
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
@@ -182,11 +183,7 @@ async def admin_session_detail(sid: str):
 
     s["classification"] = _classify(s)
 
-    _resumes_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
-        "resumes",
-    )
-    resume_path = os.path.join(_resumes_dir, f"{sid}.txt")
+    resume_path = os.path.join(tempfile.gettempdir(), "job_agent_resumes", f"{sid}.txt")
     has_resume = os.path.isfile(resume_path)
 
     return {
@@ -199,11 +196,7 @@ async def admin_session_detail(sid: str):
 
 @router.get("/sessions/{sid}/resume")
 async def admin_resume(sid: str):
-    _resumes_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
-        "resumes",
-    )
-    path = os.path.join(_resumes_dir, f"{sid}.txt")
+    path = os.path.join(tempfile.gettempdir(), "job_agent_resumes", f"{sid}.txt")
     if os.path.isfile(path):
         return FileResponse(path, filename=f"resume_{sid}.txt", media_type="text/plain")
     return {"error": "Resume not found"}
