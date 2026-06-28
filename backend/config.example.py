@@ -18,7 +18,7 @@ INTERNSHIP_CEREBRAS_RATE = int(os.environ.get("INTERNSHIP_CEREBRAS_RATE", "4"))
 
 # Groq (fallback)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
 
 # Ollama (local fallback)
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")

@@ -8,6 +8,7 @@ from typing import Optional
 
 _DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "job_agent.db")
 _write_lock = threading.Lock()
+_job_count_cache: dict[str, int] = {}
 
 
 def _get_conn():
@@ -203,6 +204,7 @@ def set_filtered_jobs(sid: str, jobs: list):
                 (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, created_at)
                 VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :created_at)""", rows)
         conn.commit()
+        _job_count_cache.pop(sid, None)
 
 
 def add_filtered_job(sid: str, job: dict):
@@ -213,12 +215,17 @@ def add_filtered_job(sid: str, job: dict):
             (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, created_at)
             VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :created_at)""", row)
         conn.commit()
+        _job_count_cache.pop(sid, None)
 
 
 def count_filtered_jobs(sid: str) -> int:
+    if sid in _job_count_cache:
+        return _job_count_cache[sid]
     conn, cur = _get_conn()
     cur.execute("SELECT COUNT(*) FROM jobs WHERE session_id = ? AND is_raw = 0", (sid,))
-    return cur.fetchone()[0]
+    count = cur.fetchone()[0]
+    _job_count_cache[sid] = count
+    return count
 
 
 def get_filtered_jobs(sid: str, min_score: int = 0, site: str = "", experience_level: str = "") -> list:

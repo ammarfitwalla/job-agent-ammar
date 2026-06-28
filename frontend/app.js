@@ -24,6 +24,7 @@ let _leadSubmitted = false;
 let _leadDismissed = false;
 let _selectedSites = [];
 let _searchStart = 0;
+let _searchComplete = false;
 
 function logEvent(event, data = {}, elapsed = 0) {
   try {
@@ -505,6 +506,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   document.getElementById("extractBtn").disabled = true;
 
   _searchId = crypto.randomUUID();
+  _searchComplete = false;
   lastRenderedCount = 0;
   lastFilteredGen = 0;
   lastPassNum = 0;
@@ -717,7 +719,7 @@ function pollResults() {
           hideStepProgress();
           await loadResults(d);
         }
-      } else if (scrapeAttempts > 240 && !shownSlowWarning) {
+      } else if (scrapeAttempts > 80 && !shownSlowWarning) {
         shownSlowWarning = true;
         setStatus("Network responses are slower than usual, continuing processing...", "amber");
       }
@@ -727,10 +729,11 @@ function pollResults() {
       setStatus("Connection lost while polling.", "red");
       resetSearchBtn(); hideElement("stepProgress"); showElement("results");
     }
-  }, 1000);
+  }, 3000);
 }
 
 async function loadResultsIncremental(filteredGen) {
+  if (_searchComplete) return;
   const gen = filteredGen !== undefined ? filteredGen : lastFilteredGen;
   try {
     const r = await fetch(`/jobs?search_id=${_searchId}`);
@@ -739,18 +742,18 @@ async function loadResultsIncremental(filteredGen) {
     if (jobs.length > 0 && (jobs.length !== lastRenderedCount || gen !== lastFilteredGen)) {
       lastRenderedCount = jobs.length;
       lastFilteredGen = gen;
-      jobs.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
+      allJobs = jobs;
       showElement("results");
-      hideElement("stepProgress");
+      // hideElement("stepProgress");
       document.title = `(${jobs.length}) Jobs - AI Job Agent`;
-      renderJobs(jobs);
-      updateCountBadge(jobs.length);
+      applyThreshold();
     }
   } catch {}
 }
 
 // ===== LOAD RESULTS =====
 async function loadResults(statusData) {
+  _searchComplete = true;
   try {
     const r = await fetch(`/jobs?search_id=${_searchId}`);
     const d = await r.json();
