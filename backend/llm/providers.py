@@ -62,22 +62,28 @@ class CerebrasProvider(BaseProvider):
         self._model = model
         self._bucket = TokenBucket(capacity=rate_limit, refill_rate=rate_limit / 60)
         if api_key:
+            # print(f"[DBG CEREBRAS] __init__: key=SET (len={len(api_key)}), model={model}, rate={rate_limit}")
             self._client = OpenAI(
                 api_key=api_key,
                 base_url=base_url,
                 timeout=60,
             )
         else:
+            # print(f"[DBG CEREBRAS] __init__: key=NONE/EMPTY — client will be None")
             self._client = None
 
     def chat(self, prompt: str, max_tokens: int = 3000, cancel_check: Optional[Callable[[], bool]] = None) -> str:
+        # print(f"[DBG CEREBRAS] chat entry: model={self._model}, prompt_len={len(prompt)}, max_tokens={max_tokens}, client={'SET' if self._client else 'NONE'}")
         if self._client is None:
+            # print(f"[DBG CEREBRAS] chat: client is None, returning EMPTY immediately")
             return ""
         for attempt in range(3):
             if cancel_check and cancel_check():
                 log(f"[CEREBRAS] Cancelled during retry — aborting")
                 return ""
+            # print(f"[DBG CEREBRAS] chat: attempt {attempt+1}/3, waiting for bucket...")
             self._bucket.acquire()
+            # print(f"[DBG CEREBRAS] chat: bucket acquired, calling API...")
             try:
                 completion = self._client.chat.completions.create(
                     model=self._model,
@@ -87,9 +93,12 @@ class CerebrasProvider(BaseProvider):
                     top_p=0.95,
                     stream=False,
                 )
-                return completion.choices[0].message.content or ""
+                content = completion.choices[0].message.content or ""
+                print(f"[DBG CEREBRAS] SUCCESS: {len(content)} chars, finish={completion.choices[0].finish_reason}")
+                return content
             except Exception as e:
                 err = str(e)
+                # print(f"[DBG CEREBRAS] chat: attempt {attempt+1}/3 ERROR: {err[:150]}")
                 log(f"[CEREBRAS ERROR] attempt {attempt+1}/3 — {err[:200]}")
                 is_retryable = (
                     "timeout" in err.lower()
@@ -97,9 +106,11 @@ class CerebrasProvider(BaseProvider):
                     or "queue_exceeded" in err
                     or "429" in err
                 )
+                # print(f"[DBG CEREBRAS] chat: is_retryable={is_retryable}")
                 if is_retryable:
                     wait = self._backoff(attempt, base=10.0, max_wait=60.0)
                     log(f"[CEREBRAS] Retrying in {wait:.1f}s (attempt {attempt+1}/3)")
+                    # print(f"[DBG CEREBRAS] chat: backing off {wait:.1f}s")
                     for _ in range(int(wait / 0.5)):
                         if cancel_check and cancel_check():
                             log(f"[CEREBRAS] Cancelled during backoff — aborting")
@@ -121,6 +132,7 @@ class GroqProvider(BaseProvider):
         self._bucket = TokenBucket(capacity=28, refill_rate=28 / 60)
 
     def chat(self, prompt: str, max_tokens: int = 600, cancel_check: Optional[Callable[[], bool]] = None) -> str:
+        print(f"[GROQ DBG] key='{self._api_key[:12]}...' model='{self._model}' prompt_len={len(prompt)}")
         for attempt in range(3):
             if cancel_check and cancel_check():
                 log(f"[GROQ] Cancelled during retry — aborting")
@@ -137,7 +149,9 @@ class GroqProvider(BaseProvider):
                     stream=False,
                     timeout=30,
                 )
-                return completion.choices[0].message.content or ""
+                content = completion.choices[0].message.content
+                print(f"[GROQ DBG] attempt={attempt+1} finish={completion.choices[0].finish_reason} content_len={len(content) if content else 0} content_none={content is None}")
+                return content or ""
             except RateLimitError as e:
                 wait = self._backoff(attempt, base=10.0, max_wait=60.0)
                 log(f"[GROQ RATE LIMITED] attempt {attempt+1}/3, waiting {wait:.1f}s — {e}")
@@ -147,6 +161,7 @@ class GroqProvider(BaseProvider):
                         return ""
                     time.sleep(0.5)
             except Exception as e:
+                print(f"[GROQ DBG] EXCEPTION: {type(e).__name__}: {e}")
                 log(f"[GROQ ERROR] {e}")
                 return ""
         log("[GROQ] All retries exhausted")

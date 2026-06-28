@@ -30,11 +30,13 @@ class LLMClient:
     @staticmethod
     def _route(prompt: str, max_tokens: int, cancel_check: Optional[Callable[[], bool]] = None) -> str:
         primary = _providers.get(LLM_PROVIDER)
+        # print(f"[DBG LLM] _route: LLM_PROVIDER='{LLM_PROVIDER}', primary={primary.name if primary else 'None'}")
         if primary is None:
             log(f"[LLM] Unknown provider '{LLM_PROVIDER}'")
             return ""
 
         result = primary.chat(prompt, max_tokens, cancel_check=cancel_check)
+        # print(f"[DBG LLM] _route: primary '{primary.name}' returned {'SUCCESS' if result else 'EMPTY'} (len={len(result)})")
         if result:
             return result
 
@@ -46,8 +48,11 @@ class LLMClient:
             if fallback is None:
                 continue
             log(f"[LLM] Falling back to '{name}'")
+            # print(f"[DBG LLM] _route: trying fallback '{name}'")
             result = fallback.chat(prompt, max_tokens, cancel_check=cancel_check)
+            # print(f"[DBG LLM] _route: fallback '{name}' returned {'SUCCESS' if result else 'EMPTY'} (len={len(result)})")
             if result:
                 return result
 
+        # print(f"[DBG LLM] _route: all providers exhausted, returning EMPTY")
         return ""
