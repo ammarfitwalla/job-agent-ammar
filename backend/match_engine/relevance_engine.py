@@ -183,17 +183,6 @@ def _score_batch(
         if r:
             results.append(r)
 
-    if not results and parsed:
-        # print(f"[DBG RE] _score_batch: ALL {len(batch_jobs)} batch results REJECTED, retrying individually")
-        log(f"[BATCH WARN] All batch results rejected (internship={internship_mode}) — retrying individually", sid)
-        for job in batch_jobs:
-            if cancel_check and cancel_check():
-                break
-            r = _score_one(job, min_score, keywords, resume, llm_weight, kw_weight, internship_mode, sid=sid, cancel_check=cancel_check)
-            if r:
-                results.append(r)
-        # print(f"[DBG RE] _score_batch: individual retry returned {len(results)} results")
-
     # print(f"[DBG RE] _score_batch: returning {len(results)} results")
     return results
 

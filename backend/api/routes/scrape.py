@@ -89,13 +89,13 @@ def _score_jobs(jobs: list, keywords: list[str], resume_text: str,
             add_filtered_job(sid, job)
 
     if internship_mode:
-        has_tech = any(kw.lower() in _TECH_KEYWORDS for kw in keywords)
-        min_threshold = 30 if not has_tech else 50
+        min_threshold = 35
     else:
         min_threshold = 0
+    kw = dict(llm_weight=0.85, kw_weight=0.15) if internship_mode else {}
     relevant = filter_jobs(jobs, min_score=min_threshold, keywords=keywords, resume=resume_text,
                            progress_callback=on_scored if sid else None,
-                           internship_mode=internship_mode, sid=sid,
+                           internship_mode=internship_mode, sid=sid, **kw,
                            cancel_check=lambda: _is_cancelled(sid))
     log(f"[SCORE] {len(relevant)} relevant out of {len(jobs)}", sid)
     return relevant
@@ -215,6 +215,7 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
     scored_ids = set()
     all_relevant = []
     pass_num = 0
+    did_write = False
 
     while pass_num < max_passes:
         pass_num += 1
@@ -292,12 +293,12 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
         if new_candidates:
             log(f"[SCRAPE] Pass {pass_num}: {len(new_candidates)} new candidates "
                   f"to score (total {len(all_relevant)} relevant so far)", sid)
-            has_tech = any(kw.lower() in _TECH_KEYWORDS for kw in keywords)
-            min_threshold = 30 if not has_tech else 50
+            min_threshold = 35
             batch = filter_jobs(new_candidates, min_score=min_threshold,
                                 keywords=keywords, resume=resume_text,
                                 progress_callback=lambda j: add_filtered_job(sid, j),
                                 internship_mode=True, sid=sid,
+                                llm_weight=0.85, kw_weight=0.15,
                                 cancel_check=lambda: _is_cancelled(sid))
 
             if batch:
@@ -306,6 +307,7 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
                 set_filtered_jobs(sid, all_relevant)
                 s = get_session(sid)
                 update_session(sid, filtered_gen=(s.get("filtered_gen", 0) if s else 0) + 1)
+                did_write = True
 
         log(f"[SCRAPE] Pass {pass_num}: {len(all_jobs)} raw, "
               f"{len(candidates)} exp-filtered, {len(all_relevant)} relevant", sid)
@@ -313,11 +315,13 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
             log(f"[SCRAPE] Enough relevant ({len(all_relevant)} >= {min_relevant}), stopping", sid)
             break
 
-    set_filtered_jobs(sid, all_relevant)
     s = get_session(sid)
+    if not did_write:
+        set_filtered_jobs(sid, all_relevant)
+        s = get_session(sid)
+        update_session(sid, filtered_gen=(s.get("filtered_gen", 0) if s else 0) + 1)
     _save_elapsed(sid)
-    update_session(sid, filtered_gen=(s.get("filtered_gen", 0) if s else 0) + 1,
-                   status="done")
+    update_session(sid, status="done")
     log(f"[SCRAPE] Pipeline complete — {len(all_jobs)} raw → {len(all_relevant)} relevant", sid)
 
 
