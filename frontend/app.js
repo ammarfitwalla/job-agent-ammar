@@ -5,6 +5,7 @@ let allJobs = [];
 let customRoles = [];
 let customKeywords = [];
 let scrapeAttempts = 0;
+let shownSlowWarning = false;
 let voteCount = 0;
 let voteThreshold = 100;
 let hasVoted = false;
@@ -716,7 +717,8 @@ function pollResults() {
           hideStepProgress();
           await loadResults(d);
         }
-      } else if (scrapeAttempts > 90) {
+      } else if (scrapeAttempts > 240 && !shownSlowWarning) {
+        shownSlowWarning = true;
         setStatus("Network responses are slower than usual, continuing processing...", "amber");
       }
     } catch {

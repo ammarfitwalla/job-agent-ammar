@@ -6,6 +6,10 @@ from utils.json_parser import extract_json
 
 router = APIRouter(prefix="/resume", tags=["resume"])
 
+from config import GROQ_API_KEY, GROQ_MODEL
+from llm.providers import GroqProvider
+_groq = GroqProvider(api_key=GROQ_API_KEY, model=GROQ_MODEL)
+
 RESUME_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
 os.makedirs(RESUME_DIR, exist_ok=True)
 
@@ -95,11 +99,12 @@ async def delete_resumes():
 @router.post("/keywords", response_model=ResumeKeywordsResponse)
 async def extract_keywords(req: ResumeKeywordsRequest):
     try:
-        from config import GROQ_API_KEY, GROQ_MODEL
-        from llm.providers import GroqProvider
         prompt = EXTRACT_PROMPT.format(resume=req.resume_text)
-        response = GroqProvider(api_key=GROQ_API_KEY, model=GROQ_MODEL).chat(prompt, max_tokens=500)
+        print(f"[KEYWORDS] Calling Groq API (prompt_len={len(prompt)})")
+        response = _groq.chat(prompt, max_tokens=2000)
         print(f"[KEYWORDS] LLM response received ({len(response)} chars)")
+        if response:
+            print(f"[KEYWORDS] First 200 chars: {response[:200]}")
 
         parsed = extract_json(response)
         if isinstance(parsed, list):
