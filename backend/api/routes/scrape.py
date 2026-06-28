@@ -187,7 +187,7 @@ def _scrape_normal(sid, sites, keywords, resume_text, roles,
             log(f"[SCRAPE] {site_key} failed: {e}", sid)
 
     log(f"[SCRAPE] Total raw jobs: {len(all_jobs)}", sid)
-    update_session(sid, scraped=1)
+    update_session(sid, scraped=len(all_jobs))
 
     if not all_jobs:
         log(f"[SCRAPE] No jobs found, skipping relevance engine", sid)
@@ -277,7 +277,7 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
             except Exception as e:
                 log(f"[SCRAPE] {site_key} failed: {e}", sid)
 
-        update_session(sid, scraped=1)
+        update_session(sid, scraped=len(all_jobs))
 
         for job in all_jobs:
             if "experience_level" not in job:
