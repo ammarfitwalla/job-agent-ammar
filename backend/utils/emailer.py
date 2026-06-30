@@ -41,3 +41,30 @@ def send_remoteok_batch_email(jobs):
         server.starttls()
         server.login(sender, password)
         server.sendmail(sender, receiver, msg.as_string())
+
+
+def send_verification_code(email: str, code: str):
+    sender = config.EMAIL_USER
+    password = config.EMAIL_PASSWORD
+
+    subject = "Your Job Agent verification code"
+    body = f"""
+Your verification code is:
+
+  {code}
+
+This code expires in 10 minutes.
+
+If you didn't request this, you can safely ignore this email.
+"""
+
+    msg = MIMEMultipart()
+    msg["From"] = sender
+    msg["To"] = email
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.starttls()
+        server.login(sender, password)
+        server.sendmail(sender, email, msg.as_string())

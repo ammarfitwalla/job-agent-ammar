@@ -7,3 +7,4 @@ venv/
 resumes/
 server_log.txt
 *.db
+backend/config.py

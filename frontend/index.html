@@ -33,11 +33,11 @@
           <p class="text-[11px] text-slate-500 leading-tight mt-0.5">Find jobs where you actually have a shot.</p>
         </div>
       </div>
-      <div class="flex items-center gap-3">
-        <div class="flex items-center gap-2 text-xs font-medium bg-slate-100 text-slate-600 rounded-full px-3 py-1.5 transition-colors duration-300" id="resultBadgeWrapper">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span id="resultCount" class="font-mono">0</span> jobs found
-        </div>
+      <div class="flex items-center gap-2">
+        <a href="/profile.html" class="w-9 h-9 rounded-full flex items-center justify-center text-slate-600 hover:text-indigo-500 hover:bg-indigo-50 bg-slate-100 border-2 border-slate-300 hover:border-indigo-200 transition-all" id="profileLink" title="Your Profile">
+          <svg class="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
+        </a>
+        <div class="hidden" id="resultBadgeWrapper"></div>
       </div>
     </div>
   </header>
@@ -252,26 +252,72 @@
 
   </main>
 
-  <div id="leadModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-    <div class="bg-white rounded-2xl p-6 shadow-xl w-full max-w-sm mx-4 space-y-4">
-      <div class="flex items-start justify-between">
-        <div>
-          <div class="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
-            <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-            Get notified
+  <!-- Auth Modal -->
+  <div id="authModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40" onclick="if (event.target === this) closeAuthModal()">
+    <div class="bg-white rounded-2xl p-6 shadow-xl w-full max-w-sm mx-4 space-y-4" onclick="event.stopPropagation()">
+      <div id="authStep1">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+              Save jobs to your profile
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">Bookmark jobs and track your applications.</p>
           </div>
-          <p class="text-xs text-slate-500 mt-0.5">Get weekly alerts when new jobs match your search.</p>
+          <button onclick="closeAuthModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
         </div>
-        <button id="dismissLead" class="text-slate-400 hover:text-slate-600 transition-colors">
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        <input id="authEmail" type="email" placeholder="Your email address" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors mt-4">
+        <button id="authSendBtn" onclick="authSendCode()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors mt-2 flex items-center justify-center gap-1.5">
+          Send Code
+        </button>
+        <p id="authSendError" class="hidden text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center font-medium mt-2"></p>
+      </div>
+      <div id="authStep2" class="hidden">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="text-sm font-semibold text-slate-800">Check your inbox</div>
+            <p class="text-xs text-slate-500 mt-0.5">We sent a code to <span id="authSentEmail" class="font-medium text-slate-700"></span></p>
+          </div>
+          <button onclick="closeAuthModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+        <div class="flex gap-2 justify-center mt-4" id="codeInputs">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" maxlength="1" data-idx="0" autofocus>
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" maxlength="1" data-idx="1">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" maxlength="1" data-idx="2">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" maxlength="1" data-idx="3">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" maxlength="1" data-idx="4">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" maxlength="1" data-idx="5">
+        </div>
+        <p id="authCodeError" class="hidden text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center font-medium mt-2"></p>
+        <button id="authVerifyBtn" onclick="authVerifyCode()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors mt-2 flex items-center justify-center gap-1.5">
+          Verify
+        </button>
+        <button onclick="authResendCode()" class="w-full text-xs text-slate-500 hover:text-slate-700 py-1 transition-colors mt-1">
+          Resend code
+        </button>
+        <button onclick="authGoBack()" class="w-full text-xs text-slate-400 hover:text-slate-600 py-1 transition-colors">
+          Try another email
         </button>
       </div>
-      <input id="leadEmail" type="email" placeholder="Your email" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-slate-400 transition-colors">
-      <input id="leadName" type="text" placeholder="Your name (optional)" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-slate-400 transition-colors">
-      <button id="submitLead" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5">
-        Notify Me
-      </button>
-      <p id="leadSuccess" class="hidden text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 text-center font-medium">You're on the list!</p>
+      <div id="authStep3" class="hidden text-center py-4">
+        <div class="w-12 h-12 bg-emerald-50 border border-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
+          <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <div class="text-sm font-semibold text-slate-800">Verified!</div>
+        <p class="text-xs text-slate-500 mt-1">You can now save and track jobs.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 hidden">
+    <div class="bg-slate-900 text-white text-xs font-medium px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 whitespace-nowrap">
+      <span id="toastIcon"></span>
+      <span id="toastMsg"></span>
     </div>
   </div>
 

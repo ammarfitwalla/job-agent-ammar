@@ -84,6 +84,59 @@ def init_db():
                 source          TEXT DEFAULT 'web',
                 created_at      TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS users (
+                email TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS verification_codes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL,
+                code TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                used INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_vcodes_email ON verification_codes(email);
+            CREATE TABLE IF NOT EXISTS saved_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_email TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                company TEXT DEFAULT '',
+                url TEXT DEFAULT '',
+                location TEXT DEFAULT '',
+                salary TEXT DEFAULT '',
+                total_score INTEGER DEFAULT 0,
+                ai_score INTEGER DEFAULT 0,
+                keyword_score INTEGER DEFAULT 0,
+                reason TEXT DEFAULT '',
+                experience_level TEXT DEFAULT '',
+                tags TEXT DEFAULT '[]',
+                site TEXT DEFAULT '',
+                application_status TEXT DEFAULT 'saved',
+                saved_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (user_email) REFERENCES users(email),
+                UNIQUE(user_email, url)
+            );
+            CREATE INDEX IF NOT EXISTS idx_saved_email ON saved_jobs(user_email);
+            CREATE INDEX IF NOT EXISTS idx_saved_status ON saved_jobs(user_email, application_status);
+            CREATE TABLE IF NOT EXISTS saved_searches (
+                id TEXT PRIMARY KEY,
+                email TEXT NOT NULL,
+                name TEXT DEFAULT '',
+                sites TEXT DEFAULT '[]',
+                keywords TEXT DEFAULT '[]',
+                roles TEXT DEFAULT '[]',
+                location TEXT DEFAULT '',
+                internship_mode INTEGER DEFAULT 0,
+                interval_hours INTEGER DEFAULT 168,
+                last_run_at TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (email) REFERENCES users(email)
+            );
+            CREATE INDEX IF NOT EXISTS idx_saved_search_email ON saved_searches(email);
             CREATE INDEX IF NOT EXISTS idx_jobs_session ON jobs(session_id);
             CREATE INDEX IF NOT EXISTS idx_jobs_raw ON jobs(session_id, is_raw);
             CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
@@ -331,3 +384,212 @@ def get_leads(limit: int = 100) -> list[dict]:
             d["keywords"] = []
         results.append(d)
     return results
+
+
+# ── Users ──
+
+def get_user(email: str) -> Optional[dict]:
+    conn, cur = _get_conn()
+    cur.execute("SELECT * FROM users WHERE email = ?", (email,))
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def create_user(email: str, name: str) -> dict:
+    now = _now()
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("INSERT OR IGNORE INTO users (email, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                     (email, name, now, now))
+        conn.commit()
+    return {"email": email, "name": name, "created_at": now}
+
+
+def update_user_name(email: str, name: str):
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("UPDATE users SET name = ?, updated_at = ? WHERE email = ?",
+                     (name, _now(), email))
+        conn.commit()
+
+
+# ── Verification Codes ──
+
+def save_verification_code(email: str, code: str, expires_at: str):
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("INSERT INTO verification_codes (email, code, expires_at, used, created_at) VALUES (?, ?, ?, 0, ?)",
+                     (email, code, expires_at, _now()))
+        conn.commit()
+
+
+def verify_code(email: str, code: str) -> bool:
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute(
+            "SELECT id FROM verification_codes WHERE email = ? AND code = ? AND used = 0 AND expires_at > ? ORDER BY id DESC LIMIT 1",
+            (email, code, _now()),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return False
+        cur.execute("UPDATE verification_codes SET used = 1 WHERE id = ?", (row["id"],))
+        conn.commit()
+        return True
+
+
+# ── Saved Jobs ──
+
+def add_saved_job(user_email: str, job: dict) -> dict:
+    now = _now()
+    tags = job.get("tags")
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("""INSERT OR IGNORE INTO saved_jobs
+            (user_email, title, company, url, location, salary, total_score, ai_score, keyword_score, reason, experience_level, tags, site, application_status, saved_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'saved', ?, ?)""", (
+                user_email,
+                job.get("title", ""),
+                job.get("company", ""),
+                job.get("url", ""),
+                job.get("location", ""),
+                job.get("salary", ""),
+                job.get("total_score", 0),
+                job.get("ai_score", 0),
+                job.get("keyword_score", 0),
+                job.get("reason", ""),
+                job.get("experience_level", ""),
+                json.dumps(tags) if isinstance(tags, list) else "[]",
+                job.get("site", ""),
+                now,
+                now,
+            ))
+        conn.commit()
+        if cur.rowcount == 0:
+            cur.execute("SELECT id FROM saved_jobs WHERE user_email = ? AND url = ?", (user_email, job.get("url", "")))
+            row = cur.fetchone()
+            row_id = row["id"] if row else 0
+        else:
+            row_id = cur.lastrowid
+    return {"id": row_id, "saved": True}
+
+
+def is_job_saved(user_email: str, url: str) -> bool:
+    conn, cur = _get_conn()
+    cur.execute("SELECT 1 FROM saved_jobs WHERE user_email = ? AND url = ?", (user_email, url))
+    return cur.fetchone() is not None
+
+
+def batch_check_saved(user_email: str, urls: list[str]) -> dict[str, int]:
+    if not user_email or not urls:
+        return {}
+    conn, cur = _get_conn()
+    placeholders = ",".join("?" for _ in urls)
+    cur.execute(
+        f"SELECT id, url FROM saved_jobs WHERE user_email = ? AND url IN ({placeholders})",
+        [user_email] + urls,
+    )
+    saved = {row["url"]: row["id"] for row in cur.fetchall()}
+    return saved
+
+
+def get_saved_jobs(user_email: str, status: str = "") -> list[dict]:
+    conn, cur = _get_conn()
+    if status:
+        cur.execute("SELECT * FROM saved_jobs WHERE user_email = ? AND application_status = ? ORDER BY saved_at DESC",
+                     (user_email, status))
+    else:
+        cur.execute("SELECT * FROM saved_jobs WHERE user_email = ? ORDER BY saved_at DESC", (user_email,))
+    rows = cur.fetchall()
+    results = []
+    for row in rows:
+        d = dict(row)
+        try:
+            d["tags"] = json.loads(d["tags"])
+        except (json.JSONDecodeError, TypeError):
+            d["tags"] = []
+        results.append(d)
+    return results
+
+
+def update_saved_job_status(job_id: int, status: str) -> bool:
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("UPDATE saved_jobs SET application_status = ?, updated_at = ? WHERE id = ?",
+                     (status, _now(), job_id))
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def delete_saved_job(job_id: int) -> bool:
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("DELETE FROM saved_jobs WHERE id = ?", (job_id,))
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def get_saved_jobs_status_counts(user_email: str) -> dict[str, int]:
+    conn, cur = _get_conn()
+    cur.execute(
+        "SELECT application_status, COUNT(*) as cnt FROM saved_jobs WHERE user_email = ? GROUP BY application_status",
+        (user_email,),
+    )
+    counts = {"saved": 0, "applied": 0, "interviewing": 0, "offer": 0, "rejected": 0, "total": 0}
+    for row in cur.fetchall():
+        s = row["application_status"]
+        c = row["cnt"]
+        if s in counts:
+            counts[s] = c
+        counts["total"] += c
+    return counts
+
+
+# ── Saved Searches (placeholder for future cron) ──
+
+def add_saved_search(sid: str, email: str, name: str, sites: list, keywords: list, roles: list,
+                     location: str = "", internship_mode: bool = False, interval_hours: int = 168):
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("""INSERT OR REPLACE INTO saved_searches
+            (id, email, name, sites, keywords, roles, location, internship_mode, interval_hours, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
+                sid, email, name,
+                json.dumps(sites), json.dumps(keywords), json.dumps(roles),
+                location, 1 if internship_mode else 0, interval_hours, _now(),
+            ))
+        conn.commit()
+
+
+def get_saved_searches(email: str = "") -> list[dict]:
+    conn, cur = _get_conn()
+    if email:
+        cur.execute("SELECT * FROM saved_searches WHERE email = ? ORDER BY created_at DESC", (email,))
+    else:
+        cur.execute("SELECT * FROM saved_searches ORDER BY created_at DESC")
+    rows = cur.fetchall()
+    results = []
+    for row in rows:
+        d = dict(row)
+        try:
+            d["sites"] = json.loads(d["sites"])
+        except (json.JSONDecodeError, TypeError):
+            d["sites"] = []
+        try:
+            d["keywords"] = json.loads(d["keywords"])
+        except (json.JSONDecodeError, TypeError):
+            d["keywords"] = []
+        try:
+            d["roles"] = json.loads(d["roles"])
+        except (json.JSONDecodeError, TypeError):
+            d["roles"] = []
+        results.append(d)
+    return results
+
+
+def delete_saved_search(sid: str) -> bool:
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("DELETE FROM saved_searches WHERE id = ?", (sid,))
+        conn.commit()
+        return cur.rowcount > 0
