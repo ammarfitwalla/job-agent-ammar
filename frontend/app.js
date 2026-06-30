@@ -1,4 +1,6 @@
 // ===== STATE =====
+const SEARCH_CACHE_KEY = "jobagent_last_search";
+const SEARCH_CACHE_TTL = 30 * 60 * 1000; // 30 min
 let pollTimer = null;
 let hasRawJobs = false;
 let allJobs = [];
@@ -20,11 +22,301 @@ let allStates = [];
 let internshipMode = false;
 let activeFilters = { site: '', experience_level: '' };
 let _searchId = crypto.randomUUID();
-let _leadSubmitted = false;
-let _leadDismissed = false;
+
 let _selectedSites = [];
 let _searchStart = 0;
 let _searchComplete = false;
+let _pendingSaveJob = null;
+let _authEmail = "";
+
+// ===== PROFILE / LOCALSTORAGE =====
+function getProfile() {
+  try {
+    const raw = localStorage.getItem("jobagent_profile");
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function setProfile(data) {
+  localStorage.setItem("jobagent_profile", JSON.stringify(data));
+}
+function clearProfile() {
+  localStorage.removeItem("jobagent_profile");
+}
+
+// ===== TOAST =====
+let _toastTimer = null;
+function showToast(msg, icon) {
+  const el = document.getElementById("toast");
+  const msgEl = document.getElementById("toastMsg");
+  const iconEl = document.getElementById("toastIcon");
+  msgEl.textContent = msg;
+  iconEl.innerHTML = icon || '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+  el.classList.remove("hidden");
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.add("hidden"), 3000);
+}
+
+// ===== AUTH =====
+function showAuthModal() {
+  document.getElementById("authStep1").classList.remove("hidden");
+  document.getElementById("authStep2").classList.add("hidden");
+  document.getElementById("authStep3").classList.add("hidden");
+  document.getElementById("authEmail").value = "";
+  document.getElementById("authSendError").classList.add("hidden");
+  document.getElementById("authCodeError").classList.add("hidden");
+  document.getElementById("authEmail").focus();
+  document.getElementById("authModal").classList.remove("hidden");
+}
+function closeAuthModal() {
+  document.getElementById("authModal").classList.add("hidden");
+}
+function authGoBack() {
+  document.getElementById("authStep1").classList.remove("hidden");
+  document.getElementById("authStep2").classList.add("hidden");
+  document.getElementById("authSendError").classList.add("hidden");
+}
+
+async function authSendCode() {
+  const email = document.getElementById("authEmail").value.trim();
+  const btn = document.getElementById("authSendBtn");
+  const errEl = document.getElementById("authSendError");
+  if (!email || !email.includes("@")) {
+    errEl.textContent = "Please enter a valid email address.";
+    errEl.classList.remove("hidden");
+    return;
+  }
+  errEl.classList.add("hidden");
+  btn.disabled = true;
+  btn.textContent = "Sending...";
+  try {
+    const r = await fetch("/api/auth/send-code", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ email }),
+    });
+    const d = await r.json();
+    if (!d.ok) {
+      errEl.textContent = d.error || "Failed to send code. Try again.";
+      errEl.classList.remove("hidden");
+      btn.disabled = false;
+      btn.textContent = "Send Code";
+      return;
+    }
+    _authEmail = email;
+    document.getElementById("authSentEmail").textContent = email;
+    document.getElementById("authStep1").classList.add("hidden");
+    document.getElementById("authStep2").classList.remove("hidden");
+    document.querySelectorAll(".code-digit").forEach(inp => { inp.value = ""; });
+    document.querySelector(".code-digit").focus();
+  } catch (e) {
+    errEl.textContent = "Network error. Try again.";
+    errEl.classList.remove("hidden");
+  }
+  btn.disabled = false;
+  btn.textContent = "Send Code";
+}
+
+async function authVerifyCode() {
+  const digits = document.querySelectorAll(".code-digit");
+  const code = Array.from(digits).map(d => d.value).join("");
+  const btn = document.getElementById("authVerifyBtn");
+  const errEl = document.getElementById("authCodeError");
+  if (code.length !== 6) {
+    errEl.textContent = "Enter the full 6-digit code.";
+    errEl.classList.remove("hidden");
+    return;
+  }
+  errEl.classList.add("hidden");
+  btn.disabled = true;
+  btn.textContent = "Verifying...";
+  try {
+    const r = await fetch("/api/auth/verify-code", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ email: _authEmail, code }),
+    });
+    const d = await r.json();
+    if (!d.ok) {
+      errEl.textContent = d.error || "Invalid code. Try again.";
+      errEl.classList.remove("hidden");
+      btn.disabled = false;
+      btn.textContent = "Verify";
+      return;
+    }
+    setProfile({ email: d.user.email, name: d.user.name });
+    document.getElementById("authStep2").classList.add("hidden");
+    document.getElementById("authStep3").classList.remove("hidden");
+    updateProfileIcon();
+    setTimeout(() => {
+      closeAuthModal();
+      if (_pendingSaveJob) {
+        doSaveJob(_pendingSaveJob);
+        _pendingSaveJob = null;
+      }
+    }, 1000);
+  } catch (e) {
+    errEl.textContent = "Network error. Try again.";
+    errEl.classList.remove("hidden");
+  }
+  btn.disabled = false;
+  btn.textContent = "Verify";
+}
+
+function authResendCode() {
+  document.getElementById("authCodeError").classList.add("hidden");
+  authSendCode();
+}
+
+function setupCodeInputs() {
+  document.querySelectorAll(".code-digit").forEach(inp => {
+    inp.addEventListener("input", function () {
+      if (this.value && this.dataset.idx < "5") {
+        const next = document.querySelector(`.code-digit[data-idx="${parseInt(this.dataset.idx) + 1}"]`);
+        if (next) next.focus();
+      }
+    });
+    inp.addEventListener("keydown", function (e) {
+      if (e.key === "Backward" || e.key === "Backspace") {
+        if (!this.value && this.dataset.idx > "0") {
+          const prev = document.querySelector(`.code-digit[data-idx="${parseInt(this.dataset.idx) - 1}"]`);
+          if (prev) { prev.focus(); prev.value = ""; }
+        }
+      }
+      if (e.key === "Enter") authVerifyCode();
+    });
+    inp.addEventListener("paste", function(e) {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData("text").replace(/\D/g, "");
+      if (text.length !== 6) return;
+      const inputs = document.querySelectorAll(".code-digit");
+      inputs.forEach((input, i) => { input.value = text[i] || ""; });
+      inputs[5].focus();
+    });
+  });
+}
+document.addEventListener("DOMContentLoaded", setupCodeInputs);
+
+function updateProfileIcon() {
+  const link = document.getElementById("profileLink");
+  const profile = getProfile();
+  link.classList.remove("bg-indigo-50", "border-indigo-200", "hover:bg-indigo-100",
+    "text-slate-600", "hover:text-indigo-500", "hover:bg-indigo-50", "bg-slate-100", "border-2", "border-slate-300", "hover:border-indigo-200");
+  if (profile) {
+    link.innerHTML = `<span class="w-[20px] h-[20px] rounded-full bg-indigo-500 text-white flex items-center justify-center text-[11px] font-bold leading-none" style="line-height:0">${profile.name.charAt(0).toUpperCase()}</span>`;
+    link.classList.add("bg-indigo-50", "border-indigo-200", "hover:bg-indigo-100");
+    link.title = profile.name;
+  } else {
+    link.innerHTML = '<svg class="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>';
+    link.classList.add("text-slate-600", "hover:text-indigo-500", "hover:bg-indigo-50", "bg-slate-100", "border-2", "border-slate-300", "hover:border-indigo-200");
+    link.title = "Your Profile";
+  }
+}
+updateProfileIcon();
+
+// ===== SAVE JOBS =====
+async function toggleSaveJob(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const url = event.currentTarget?.dataset?.url;
+  if (!url) return;
+  const job = allJobs.find(j => j.url === url);
+  if (!job) return;
+  const profile = getProfile();
+  if (!profile) {
+    _pendingSaveJob = job;
+    showAuthModal();
+    return;
+  }
+  if (job._saved) {
+    await doUnsaveJob(job);
+  } else {
+    await doSaveJob(job);
+  }
+}
+
+async function doSaveJob(job) {
+  const profile = getProfile();
+  if (!profile) return;
+  try {
+    const r = await fetch("/api/saved-jobs", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        email: profile.email,
+        title: job.title || "",
+        company: job.company || "",
+        url: job.url || "",
+        location: job.location || "",
+        salary: job.salary || "",
+        total_score: job.total_score || 0,
+        ai_score: job.ai_score || 0,
+        keyword_score: job.keyword_score || 0,
+        reason: job.reason || "",
+        experience_level: job.experience_level || "",
+        tags: job.tags || [],
+        site: job._site || "",
+      }),
+    });
+    const d = await r.json();
+    if (d.saved) {
+      job._saved = true;
+      job._savedId = d.id;
+      updateBookmarkIcons();
+      showToast("Job saved!");
+    }
+  } catch {}
+}
+
+async function doUnsaveJob(job) {
+  if (!job._savedId) return;
+  try {
+    await fetch(`/api/saved-jobs/${job._savedId}`, { method: "DELETE" });
+    job._saved = false;
+    job._savedId = null;
+    updateBookmarkIcons();
+    showToast("Job removed from saved", '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>');
+  } catch {}
+}
+
+function updateBookmarkIcons() {
+  document.querySelectorAll(".bookmark-btn").forEach(btn => {
+    const url = btn.dataset.url;
+    const job = allJobs.find(j => j.url === url);
+    if (!job) return;
+    const svg = btn.querySelector("svg");
+    if (job._saved) {
+      svg.setAttribute("fill", "currentColor");
+      svg.classList.add("text-indigo-500");
+      svg.classList.remove("text-slate-600");
+    } else {
+      svg.setAttribute("fill", "none");
+      svg.classList.remove("text-indigo-500");
+      svg.classList.add("text-slate-600");
+    }
+  });
+}
+
+async function checkSavedStatuses() {
+  const profile = getProfile();
+  if (!profile) return;
+  const urls = allJobs.map(j => j.url).filter(Boolean);
+  if (!urls.length) return;
+  try {
+    const r = await fetch("/api/saved-jobs/batch-check", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ email: profile.email, urls }),
+    });
+    const d = await r.json();
+    if (d.saved_map) {
+      allJobs.forEach(j => {
+        const sid = d.saved_map[j.url];
+        if (sid) {
+          j._saved = true;
+          j._savedId = sid;
+        }
+      });
+      updateBookmarkIcons();
+    }
+  } catch {}
+}
 
 function logEvent(event, data = {}, elapsed = 0) {
   try {
@@ -114,10 +406,23 @@ setupLocationSearch();
   await fetchCountries();
   await loadStates();
 })();
-setTimeout(() => {
+const _hasCachedSearch = (() => {
+  try {
+    const raw = localStorage.getItem(SEARCH_CACHE_KEY);
+    if (!raw) return false;
+    const saved = JSON.parse(raw);
+    return saved && saved.searchId && Date.now() - saved.timestamp < SEARCH_CACHE_TTL;
+  } catch { return false; }
+})();
+if (_hasCachedSearch) {
   const el = document.getElementById("splashOverlay");
   if (el) el.classList.add("splash-hidden");
-}, 3000);
+} else {
+  setTimeout(() => {
+    const el = document.getElementById("splashOverlay");
+    if (el) el.classList.add("splash-hidden");
+  }, 3000);
+}
 
 async function checkRawJobs() {
   try { const r = await fetch("/scrape/status"); const d = await r.json(); hasRawJobs = d.last_scrape_raw > 0; } catch {}
@@ -191,16 +496,43 @@ function resetSearchBtn() {
 }
 
 function updateCountBadge(n) {
-  const el = document.getElementById("resultCount");
-  el.textContent = n;
-  el.parentElement.classList.remove("count-pop");
-  void el.parentElement.offsetWidth;
-  el.parentElement.classList.add("count-pop");
+  // removed — badge hidden per user request
 }
 
 function updateSearchBtn() {}
 
+function clearSearchState() {
+  cancelActiveSearch();
+  allJobs = [];
+  _searchComplete = false;
+  _searchId = crypto.randomUUID();
+  lastRenderedCount = 0;
+  lastFilteredGen = 0;
+  lastPassNum = 0;
+  hasRawJobs = false;
+  scrapeAttempts = 0;
+  shownSlowWarning = false;
+  activeFilters = { site: '', experience_level: '' };
+  document.getElementById("results").innerHTML = `
+    <div class="premium-card min-h-[500px] flex flex-col items-center justify-center text-center p-8 border-dashed">
+      <div class="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center mb-5 border border-slate-100">
+        <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+      </div>
+      <h3 class="text-base font-semibold text-slate-800">No jobs to display yet</h3>
+      <p class="text-sm text-slate-500 mt-1 max-w-sm">Upload your resume, set your target roles and location, and start the search to find your match.</p>
+    </div>`;
+  const fb = document.getElementById("filterBar");
+  if (fb) fb.classList.add("hidden");
+  hideElement("stepProgress");
+  document.title = "AI Job Agent";
+  setStatus("", "");
+  localStorage.removeItem(SEARCH_CACHE_KEY);
+}
+
 document.getElementById("resume").addEventListener("input", updateSearchBtn);
+document.getElementById("resume").addEventListener("input", () => {
+  if (document.getElementById("resume").value.trim()) clearSearchState();
+});
 
 // ===== RESUME UPLOAD =====
 document.getElementById("fileInput").addEventListener("change", async (e) => {
@@ -215,6 +547,7 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
     const r = await fetch("/resume/upload", { method: "POST", body: form });
     const d = await r.json();
     document.getElementById("resume").value = d.text;
+    clearSearchState();
     updateSearchBtn();
     document.getElementById("extractBtn").click();
   } catch (err) {
@@ -555,60 +888,7 @@ async function handleVote(btn) {
   } catch {}
 }
 
-// ===== LEAD CAPTURE =====
-function maybeShowLeadCapture() {
-  if (_leadSubmitted || _leadDismissed) return;
-  const modal = document.getElementById("leadModal");
-  if (!modal) return;
-  modal.classList.remove("hidden");
-}
 
-document.getElementById("submitLead")?.addEventListener("click", async () => {
-  if (_leadSubmitted) return;
-  const email = document.getElementById("leadEmail").value.trim();
-  if (!email || !email.includes("@")) {
-    document.getElementById("leadEmail").classList.add("border-red-400");
-    return;
-  }
-  document.getElementById("leadEmail").classList.remove("border-red-400");
-  const name = document.getElementById("leadName").value.trim();
-  const btn = document.getElementById("submitLead");
-  btn.disabled = true;
-  btn.innerHTML = '<svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Submitting...';
-  try {
-    await fetch("/api/lead", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        session_id: _searchId,
-        email,
-        name,
-        roles: getSelectedRoles(),
-        location: getLocation() || document.getElementById("locationInput").value,
-        keywords: getSelectedKeywords(),
-        internship_mode: internshipMode,
-        resume_snippet: (document.getElementById("resume").value || "").slice(0, 200),
-      }),
-    });
-    _leadSubmitted = true;
-    document.getElementById("leadEmail").classList.add("hidden");
-    document.getElementById("leadName").classList.add("hidden");
-    document.getElementById("submitLead").classList.add("hidden");
-    document.getElementById("leadSuccess").classList.remove("hidden");
-  } catch {
-    btn.disabled = false;
-    btn.innerHTML = "Notify Me";
-  }
-});
-
-document.getElementById("dismissLead")?.addEventListener("click", () => {
-  _leadDismissed = true;
-  document.getElementById("leadModal").classList.add("hidden");
-});
-
-document.getElementById("leadEmail")?.addEventListener("input", () => {
-  document.getElementById("leadEmail").classList.remove("border-red-400");
-});
 
 // ===== POLL =====
 function pollResults() {
@@ -744,8 +1024,9 @@ async function loadResultsIncremental(filteredGen) {
       lastFilteredGen = gen;
       allJobs = jobs;
       showElement("results");
-      // hideElement("stepProgress");
+      hideElement("stepProgress");
       document.title = `(${jobs.length}) Jobs - AI Job Agent`;
+      await checkSavedStatuses();
       applyThreshold();
     }
   } catch {}
@@ -760,7 +1041,19 @@ async function loadResults(statusData) {
     allJobs = d.jobs || [];
     hasRawJobs = true;
     showElement("results");
+    await checkSavedStatuses();
     applyThreshold();
+    localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify({
+      searchId: _searchId,
+      timestamp: Date.now(),
+      params: {
+        sites: getSelectedSites ? getSelectedSites() : [],
+        keywords: getSelectedKeywords ? getSelectedKeywords() : [],
+        roles: getSelectedRoles ? getSelectedRoles() : [],
+        location: document.getElementById("locationInput")?.value || "",
+        internshipMode: internshipMode,
+      },
+    }));
     let msg;
     if (allJobs.length) {
       const passSummary = statusData && statusData.max_passes > 0 && statusData.pass_num > 0 ? ` across ${statusData.pass_num} sources` : "";
@@ -773,7 +1066,7 @@ async function loadResults(statusData) {
       logEvent("search_completed", { jobs_count: 0 }, Math.round((Date.now() - _searchStart) / 1000));
     }
     setStatus(msg, allJobs.length ? "green" : "amber");
-    setTimeout(maybeShowLeadCapture, 2000);
+
   } catch (e) { setStatus("Failed to render final results: " + e.message, "red"); }
   resetSearchBtn();
 }
@@ -803,6 +1096,7 @@ function renderJobs(jobs) {
                        "text-amber-600 bg-amber-50 border-amber-100";
     const barColor = sc >= 85 ? "bg-emerald-500" : sc >= 60 ? "bg-indigo-500" : "bg-amber-500";
     const siteName = siteFromUrl(j.url);
+    const isSaved = j._saved || false;
 
     const expBadge = j.experience_level === "internship"
       ? '<span class="text-[10px] bg-teal-50 text-teal-700 border border-teal-100 px-2 py-0.5 rounded-md font-medium flex items-center gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0z"/></svg> Internship</span>'
@@ -827,17 +1121,22 @@ function renderJobs(jobs) {
           </p>
         </div>
 
-        <div class="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start shrink-0 pt-1 sm:pt-0">
-          <div class="flex flex-col items-end">
+        <div class="flex flex-col items-end shrink-0">
+          <div class="flex items-center gap-1.5">
             <div class="flex items-center gap-2">
               <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400">Match</div>
               <div class="px-2.5 py-1 rounded-lg border font-mono text-sm font-bold ${scoreClass}">${sc}</div>
             </div>
-            <div class="text-[10px] text-slate-400 mt-1 flex items-center gap-1.5">
-              <span title="AI Relevancy">AI <span class="font-medium text-slate-600">${j.ai_score || 0}</span></span>
-              <span class="text-slate-300">|</span>
-              <span title="Keyword Hits">KW <span class="font-medium text-slate-600">${j.keyword_score || 0}</span></span>
-            </div>
+            <button class="bookmark-btn p-1 -mr-0.5 transition-colors duration-200" data-url="${j.url || ''}" onclick="toggleSaveJob(event)" title="Save job">
+              <svg class="w-5 h-5 ${isSaved ? 'text-indigo-500' : 'text-slate-600'} transition-colors" fill="${isSaved ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="text-[10px] text-slate-400 mt-1 flex items-center gap-1.5">
+            <span title="AI Relevancy">AI <span class="font-medium text-slate-600">${j.ai_score || 0}</span></span>
+            <span class="text-slate-300">|</span>
+            <span title="Keyword Hits">KW <span class="font-medium text-slate-600">${j.keyword_score || 0}</span></span>
           </div>
         </div>
       </div>
@@ -888,3 +1187,23 @@ function renderJobs(jobs) {
     c.innerHTML = jobs.map(j => cardHtml(j)).join("");
   }
 }
+
+// ===== RESTORE LAST SEARCH ON PAGE LOAD =====
+(async function restoreLastSearch() {
+  const raw = localStorage.getItem(SEARCH_CACHE_KEY);
+  if (!raw) return;
+  let saved;
+  try { saved = JSON.parse(raw); } catch { return; }
+  if (!saved || !saved.searchId || Date.now() - saved.timestamp > SEARCH_CACHE_TTL) return;
+  try {
+    const r = await fetch(`/scrape/status?search_id=${saved.searchId}`);
+    const status = await r.json();
+    if (status.status === "done" || status.status === "error") {
+      _searchId = saved.searchId;
+      _searchComplete = true;
+      if (status.status === "done") {
+        await loadResults(status);
+      }
+    }
+  } catch {}
+})();
