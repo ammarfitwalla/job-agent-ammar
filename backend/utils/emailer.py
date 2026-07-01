@@ -1,11 +1,11 @@
+import os
 import resend
-from config import EMAIL_TO, RESEND_API_KEY, RESEND_FROM_EMAIL
 
-resend.api_key = RESEND_API_KEY
+resend.api_key = os.environ.get("RESEND_API_KEY", "")
 
 def send_remoteok_batch_email(jobs):
     print("Sending email via Resend...")
-    from_email = RESEND_FROM_EMAIL
+    from_email = os.environ.get("RESEND_FROM_EMAIL", "")
 
     subject = f"{len(jobs)} New RemoteOK Jobs Found 🚀"
 
@@ -31,7 +31,7 @@ def send_remoteok_batch_email(jobs):
 
     r = resend.Emails.send({
         "from": from_email,
-        "to": EMAIL_TO,
+        "to": os.environ.get("EMAIL_TO", ""),
         "subject": subject,
         "html": body.replace("\n", "<br>"),
     })
@@ -39,7 +39,7 @@ def send_remoteok_batch_email(jobs):
 
 
 def send_verification_code(email: str, code: str):
-    from_email = RESEND_FROM_EMAIL
+    from_email = os.environ.get("RESEND_FROM_EMAIL", "")
 
     body = f"Your verification code is:<br><br><strong>{code}</strong><br><br>This code expires in 10 minutes.<br><br>If you didn't request this, you can safely ignore this email."
 
