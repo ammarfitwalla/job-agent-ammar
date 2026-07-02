@@ -40,5 +40,3 @@ python-jobspy
 python-multipart
 PyMuPDF
 python-docx
-
-resend

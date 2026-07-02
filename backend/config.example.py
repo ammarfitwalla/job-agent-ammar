@@ -133,7 +133,7 @@ EMAIL_PASSWORD=os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_TO=os.environ.get("EMAIL_TO", "")
 
 # ==============
-# RESEND (for email verification on HF Spaces)
+# BREVO (for email verification — free 300/day, works on HF Spaces)
 # ==============
-RESEND_API_KEY=os.environ.get("RESEND_API_KEY", "")
-RESEND_FROM_EMAIL=os.environ.get("RESEND_FROM_EMAIL", "")
+BREVO_API_KEY=os.environ.get("BREVO_API_KEY", "")
+BREVO_FROM_EMAIL=os.environ.get("BREVO_FROM_EMAIL", "")
