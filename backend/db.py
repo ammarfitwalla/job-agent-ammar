@@ -41,7 +41,8 @@ def init_db():
                 roles_count INTEGER DEFAULT 0,
             resume_length INTEGER DEFAULT 0,
             scraped INTEGER DEFAULT 0,
-            elapsed_seconds REAL DEFAULT 0
+            elapsed_seconds REAL DEFAULT 0,
+            location TEXT DEFAULT ''
         );
             CREATE TABLE IF NOT EXISTS jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -154,6 +155,10 @@ def init_db():
             cur.execute("ALTER TABLE sessions ADD COLUMN roles TEXT DEFAULT '[]'")
         except:
             pass
+        try:
+            cur.execute("ALTER TABLE sessions ADD COLUMN location TEXT DEFAULT ''")
+        except:
+            pass
     finally:
         conn.close()
 
@@ -178,20 +183,21 @@ def create_session(sid: str, **kwargs):
     with _write_lock:
         conn, cur = _get_conn()
         now = _now()
-        fields = {
-            "id": sid, "created_at": now, "updated_at": now,
-            "sites": json.dumps(kwargs.get("sites", [])),
-            "keywords": json.dumps(kwargs.get("keywords", [])),
-            "roles": json.dumps(kwargs.get("roles", [])),
-            "keywords_count": kwargs.get("keywords_count", 0),
-            "roles_count": kwargs.get("roles_count", 0),
-            "resume_length": kwargs.get("resume_length", 0),
-            "internship_mode": 1 if kwargs.get("internship_mode") else 0,
-        }
-        cur.execute("""INSERT OR REPLACE INTO sessions
-            (id, created_at, updated_at, sites, keywords, roles, keywords_count, roles_count, resume_length, internship_mode)
-            VALUES (:id, :created_at, :updated_at, :sites, :keywords, :roles, :keywords_count, :roles_count, :resume_length, :internship_mode)""", fields)
-        conn.commit()
+    fields = {
+        "id": sid, "created_at": now, "updated_at": now,
+        "sites": json.dumps(kwargs.get("sites", [])),
+        "keywords": json.dumps(kwargs.get("keywords", [])),
+        "roles": json.dumps(kwargs.get("roles", [])),
+        "keywords_count": kwargs.get("keywords_count", 0),
+        "roles_count": kwargs.get("roles_count", 0),
+        "resume_length": kwargs.get("resume_length", 0),
+        "internship_mode": 1 if kwargs.get("internship_mode") else 0,
+        "location": kwargs.get("location", ""),
+    }
+    cur.execute("""INSERT OR REPLACE INTO sessions
+        (id, created_at, updated_at, sites, keywords, roles, keywords_count, roles_count, resume_length, internship_mode, location)
+        VALUES (:id, :created_at, :updated_at, :sites, :keywords, :roles, :keywords_count, :roles_count, :resume_length, :internship_mode, :location)""", fields)
+    conn.commit()
 
 
 def update_session(sid: str, **kwargs):

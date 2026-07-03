@@ -143,7 +143,7 @@ aside::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
 #searchBtn { transition: all 0.18s; }
 #extractBtn { transition: all 0.18s; }
-#addRoleBtn { transition: background 0.15s; }
+
 
 /* ===== Step Progress ===== */
 .step-icon {

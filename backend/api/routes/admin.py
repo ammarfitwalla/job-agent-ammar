@@ -196,6 +196,12 @@ async def admin_session_detail(sid: str):
 
 @router.get("/sessions/{sid}/resume")
 async def admin_resume(sid: str):
+    resumes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
+    for ext in (".pdf", ".docx", ".txt"):
+        path = os.path.join(resumes_dir, f"{sid}{ext}")
+        if os.path.isfile(path):
+            mime = {"pdf": "application/pdf", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "txt": "text/plain"}.get(ext.lstrip("."), "text/plain")
+            return FileResponse(path, filename=f"resume_{sid}{ext}", media_type=mime)
     path = os.path.join(tempfile.gettempdir(), "job_agent_resumes", f"{sid}.txt")
     if os.path.isfile(path):
         return FileResponse(path, filename=f"resume_{sid}.txt", media_type="text/plain")

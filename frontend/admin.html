@@ -330,7 +330,7 @@ function startRefresh() {
   _refreshInterval = setInterval(() => {
     setRefreshing(true);
     loadStats(); loadSessions(); loadScores(); loadLeads();
-  }, 30000);
+  }, 300000);
 }
 
 function stopRefresh() {
@@ -385,7 +385,7 @@ async function loadStats() {
       data: {
         labels: ["Completed", "Cancelled", "Abandoned", "Errors"],
         datasets: [{
-          data: [(d.completed||0) || 1, (d.cancelled||0) || 1, (d.abandoned||0) || 1, (d.errors||0) || 1],
+          data: [d.completed || 0, d.cancelled || 0, d.abandoned || 0, d.errors || 0],
           backgroundColor: ["#10b981", "#f59e0b", "#f87171", "#fca5a5"],
           borderWidth: 2, borderColor: "#fff",
         }]
@@ -417,7 +417,7 @@ function renderSessions(sessions) {
   const cols = [
     { k: "date", l: "Date" }, { k: "id_label", l: "Session ID" },
     { k: "mode_label", l: "Mode" }, { k: "classification", l: "Status" },
-    { k: "sites_label", l: "Sites" }, { k: "relevant_jobs", l: "Jobs" },
+    { k: "location", l: "Location" }, { k: "sites_label", l: "Sites" }, { k: "relevant_jobs", l: "Jobs" },
     { k: "duration_label", l: "Duration" },
   ];
   const sorted = _sortKey === "date" ? _sortDir : 0;
@@ -434,11 +434,12 @@ function renderSessions(sessions) {
       <td><span class="sid-cell" title="${s.id}">${s.id?.slice(0, 12)}...</span></td>
       <td><span class="mode-badge ${mc}">${ml}</span></td>
       <td><span class="badge ${sc}">${s.classification}</span></td>
+      <td title="${s.location || ""}">${s.location || "\u2014"}</td>
       <td class="sites-cell" title="${(s.sites||[]).join(", ")}">${(s.sites||[]).join(", ")}</td>
       <td>${s.relevant_jobs || 0}</td>
       <td>${formatDuration(s.elapsed_seconds)}</td>
-    </tr><tr class="detail-row" id="detail-${s.id}" data-session='${sj}'><td colspan="7"><div class="detail-panel" id="panel-${s.id}"><div class="empty">Loading session details...</div></div></td></tr>`;
-  }).join("") || `<tr><td colspan="7"><div class="empty">No sessions found</div></td></tr>`;
+    </tr><tr class="detail-row" id="detail-${s.id}" data-session='${sj}'><td colspan="8"><div class="detail-panel" id="panel-${s.id}"><div class="empty">Loading session details...</div></div></td></tr>`;
+  }).join("") || `<tr><td colspan="8"><div class="empty">No sessions found</div></td></tr>`;
 }
 
 let _sortKey = "date", _sortDir = -1;

@@ -52,7 +52,8 @@ def _save_elapsed(sid):
 def _run_scrape(req: ScrapeRequest):
     run_scrape(req.search_id, req.sites, req.keywords, req.resume_text, req.roles,
                req.adzuna_country, req.location, req.indeed_country,
-               req.internship_mode, req.min_relevant, req.max_passes)
+               req.internship_mode, req.min_relevant, req.max_passes,
+               original_resume=req.original_resume)
 
 
 SITE_MAP = {
@@ -106,19 +107,38 @@ def _is_cancelled(sid: str) -> bool:
     return bool(s and s.get("cancel"))
 
 
+_RESUMES_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
+
 def _resumes_dir():
     return os.path.join(tempfile.gettempdir(), "job_agent_resumes")
 
 def run_scrape(sid: str, sites: list[str], keywords: list[str], resume_text: str,
                roles=None, adzuna_country="us", location="", indeed_country="USA",
-               internship_mode=False, min_relevant=5, max_passes=3):
+               internship_mode=False, min_relevant=5, max_passes=3,
+               original_resume=""):
     if not sid:
         log(f"[SCRAPE] No search_id provided, aborting", sid)
         return
 
     create_session(sid, sites=sites, keywords=keywords, roles=roles or [],
                    keywords_count=len(keywords), roles_count=len(roles or []),
-                   resume_length=len(resume_text), internship_mode=internship_mode)
+                   resume_length=len(resume_text), internship_mode=internship_mode,
+                   location=location)
+
+    if original_resume:
+        src = os.path.join(_RESUMES_UPLOAD_DIR, original_resume)
+        ext = os.path.splitext(original_resume)[1]
+        dst = os.path.join(_RESUMES_UPLOAD_DIR, f"{sid}{ext}")
+        try:
+            os.rename(src, dst)
+        except OSError:
+            try:
+                import shutil
+                shutil.copy2(src, dst)
+                os.remove(src)
+            except:
+                pass
+
     d = _resumes_dir()
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, f"{sid}.txt"), "w", encoding="utf-8") as f:

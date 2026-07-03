@@ -27,6 +27,7 @@ let _selectedSites = [];
 let _searchStart = 0;
 let _searchComplete = false;
 let _pendingSaveJob = null;
+let _uploadedFilename = "";
 let _authEmail = "";
 
 const DEV_MODE = false;
@@ -557,6 +558,7 @@ function clearSearchState() {
   allJobs = [];
   _searchComplete = false;
   _searchId = crypto.randomUUID();
+  _uploadedFilename = "";
   lastRenderedCount = 0;
   lastFilteredGen = 0;
   lastPassNum = 0;
@@ -599,6 +601,7 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
     const d = await r.json();
     document.getElementById("resume").value = d.text;
     clearSearchState();
+    _uploadedFilename = d.filename;
     updateSearchBtn();
     document.getElementById("extractBtn").click();
   } catch (err) {
@@ -649,13 +652,15 @@ function updateKwCount() {
 }
 
 // ===== CUSTOM KEYWORDS =====
-document.getElementById("addKeywordBtn").addEventListener("click", () => {
+function addKeyword() {
   const i = document.getElementById("customKeywordInput");
   const kw = i.value.trim().toLowerCase();
   if (!kw || customKeywords.includes(kw)) return;
   customKeywords.push(kw); i.value = ""; renderCustomKeywords(); updateKwCount();
-});
-document.getElementById("customKeywordInput").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("addKeywordBtn").click(); });
+}
+
+document.getElementById("addKeywordBtn").addEventListener("click", addKeyword);
+document.getElementById("customKeywordInput").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addKeyword(); } });
 
 function renderCustomKeywords() {
   const c = document.getElementById("customKeywords");
@@ -677,6 +682,16 @@ async function loadRoles() {
   try { const r = await fetch("/roles"); const d = await r.json(); roleCategories = d.categories; renderRoles(roleCategories); } catch {}
 }
 
+function addRoleFromSearch(val) {
+  if (!val || customRoles.includes(val)) return;
+  customRoles.push(val);
+  document.getElementById("roleSearchInput").value = "";
+  roleSearchQuery = "";
+  renderCustomRoles();
+  updateRoleCount();
+  if (roleCategories) renderRoles(roleCategories);
+}
+
 function renderRoles(categories) {
   const c = document.getElementById("roles");
   const q = roleSearchQuery.toLowerCase().trim();
@@ -684,6 +699,10 @@ function renderRoles(categories) {
   if (q) {
     const words = q.split(/\s+/);
     allRoles = allRoles.filter(r => words.every(w => r.toLowerCase().includes(w)));
+  }
+  if (!allRoles.length && q) {
+    c.innerHTML = '<span class="text-xs text-slate-400 italic px-2">No matching roles</span>';
+    return;
   }
   c.innerHTML = allRoles.map(r =>
     `<label class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer text-xs text-slate-600 transition-colors">
@@ -700,13 +719,32 @@ function filterRoles() {
 
 document.getElementById("roleSearchInput").addEventListener("input", filterRoles);
 
-document.getElementById("addRoleBtn").addEventListener("click", () => {
-  const i = document.getElementById("customRoleInput");
-  const r = i.value.trim();
-  if (!r || customRoles.includes(r)) return;
-  customRoles.push(r); i.value = ""; renderCustomRoles(); updateRoleCount();
+document.getElementById("roleSearchInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const val = e.target.value.trim();
+    if (!val) return;
+    const allRoles = Object.values(roleCategories || {}).flat();
+    const exactMatch = allRoles.find(r => r.toLowerCase() === val.toLowerCase());
+    if (exactMatch) {
+      const cb = document.querySelector(`.role-cb[value="${exactMatch}"]`);
+      if (cb) {
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event("change"));
+      }
+      document.getElementById("roleSearchInput").value = "";
+      roleSearchQuery = "";
+      if (roleCategories) renderRoles(roleCategories);
+    } else {
+      addRoleFromSearch(val);
+    }
+  }
 });
-document.getElementById("customRoleInput").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("addRoleBtn").click(); });
+
+document.getElementById("addRoleBtn").addEventListener("click", () => {
+  const val = document.getElementById("roleSearchInput").value.trim();
+  if (val) addRoleFromSearch(val);
+});
 
 function renderCustomRoles() {
   const c = document.getElementById("customRoles");
@@ -921,8 +959,10 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
       indeed_country: getIndeedCountry(),
       location: getLocation() || document.getElementById("locationInput").value,
       internship_mode: internshipMode,
-      search_id: _searchId
+      search_id: _searchId,
+      original_resume: _uploadedFilename,
     })});
+    _uploadedFilename = "";
     scrapeAttempts = 0;
     pollResults();
   } catch (e) {

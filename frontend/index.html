@@ -26,7 +26,7 @@
 
   <!-- Header -->
   <header class="glass-header sticky top-0 z-50 transition-colors duration-300" id="mainHeader">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-sm shadow-sm transition-colors duration-300" id="logoIcon">JA</div>
         <div>
@@ -80,9 +80,11 @@
           <div id="keywords" class="flex flex-wrap gap-1.5 min-h-[28px] max-h-48 overflow-y-auto no-scrollbar">
             <span class="text-xs text-slate-400 italic">No keywords yet</span>
           </div>
-          <div class="flex gap-2">
-            <input id="customKeywordInput" type="text" class="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:border-slate-400 transition-colors" placeholder="Add keyword...">
-            <button id="addKeywordBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">Add</button>
+          <div class="relative">
+            <input id="customKeywordInput" type="text" class="w-full border border-slate-200 rounded-lg pr-10 px-3 py-1.5 text-xs outline-none focus:border-slate-400 transition-colors" placeholder="Add keyword..." autocomplete="off">
+            <button id="addKeywordBtn" class="absolute inset-y-0 right-0 pr-2.5 flex items-center text-indigo-500 hover:text-indigo-700 transition-colors" title="Add as custom keyword" tabindex="-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            </button>
           </div>
           <div id="customKeywords" class="flex flex-wrap gap-1.5"></div>
         </div>
@@ -97,13 +99,12 @@
             <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
               <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
-            <input id="roleSearchInput" type="text" class="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs outline-none focus:border-slate-400 transition-colors bg-white" placeholder="Search roles...">
+            <input id="roleSearchInput" type="text" class="w-full border border-slate-200 rounded-lg pl-8 pr-10 py-1.5 text-xs outline-none focus:border-slate-400 transition-colors bg-white" placeholder="Search or add a role..." autocomplete="off">
+            <button id="addRoleBtn" class="absolute inset-y-0 right-0 pr-2.5 flex items-center text-indigo-500 hover:text-indigo-700 transition-colors" title="Add typed text as a custom role" tabindex="-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            </button>
           </div>
           <div id="roles" class="space-y-1.5 max-h-60 overflow-y-auto no-scrollbar pr-1"></div>
-          <div class="flex gap-2">
-            <input id="customRoleInput" type="text" class="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:border-slate-400 transition-colors" placeholder="Add custom role...">
-            <button id="addRoleBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">Add</button>
-          </div>
           <div id="customRoles" class="flex flex-wrap gap-1.5"></div>
         </div>
       </div>

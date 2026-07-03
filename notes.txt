@@ -1,0 +1,5 @@
+Files
+
+1. backend/api/routes/auth.py → DEV_MODE = True → DEV_MODE = False
+2. frontend/app.js → DEV_MODE = true; → const DEV_MODE = false;
+3. frontend/profile.html → const DEV_MODE = true; → const DEV_MODE = false;
