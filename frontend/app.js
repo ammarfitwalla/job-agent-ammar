@@ -29,6 +29,32 @@ let _searchComplete = false;
 let _pendingSaveJob = null;
 let _authEmail = "";
 
+const EMAILJS_SERVICE_ID = "service_hm8m45q";
+const EMAILJS_TEMPLATE_ID = "template_6hlgxz5";
+const EMAILJS_PUBLIC_KEY = "wqGQqAkbZLnEpEOjq";
+let emailjsInitialized = false;
+
+function initEmailJS() {
+  if (typeof emailjs !== "undefined" && EMAILJS_PUBLIC_KEY) {
+    emailjs.init(EMAILJS_PUBLIC_KEY);
+    emailjsInitialized = true;
+  }
+}
+document.addEventListener("DOMContentLoaded", initEmailJS);
+
+async function sendEmailJS(templateParams) {
+  if (!emailjsInitialized) {
+    console.warn("EmailJS not initialized. Set EMAILJS_PUBLIC_KEY, EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID");
+    return { ok: false, error: "EmailJS not configured" };
+  }
+  try {
+    const res = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+    return { ok: true, res };
+  } catch (err) {
+    return { ok: false, error: err.text || err.message };
+  }
+}
+
 // ===== PROFILE / LOCALSTORAGE =====
 function getProfile() {
   try {
@@ -96,6 +122,18 @@ async function authSendCode() {
     const d = await r.json();
     if (!d.ok) {
       errEl.textContent = d.error || "Failed to send code. Try again.";
+      errEl.classList.remove("hidden");
+      btn.disabled = false;
+      btn.textContent = "Send Code";
+      return;
+    }
+    const emailRes = await sendEmailJS({
+      email: email,
+      subject: "Your Job Agent verification code",
+      passcode: d.code,
+    });
+    if (!emailRes.ok) {
+      errEl.textContent = emailRes.error || "Failed to send email. Try again.";
       errEl.classList.remove("hidden");
       btn.disabled = false;
       btn.textContent = "Send Code";

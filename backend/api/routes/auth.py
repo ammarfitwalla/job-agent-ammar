@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from db import get_user, create_user, save_verification_code, verify_code
-from utils.emailer import send_verification_code
+
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -24,11 +24,7 @@ async def auth_send_code(req: SendCodeRequest):
     code = "".join(random.choices(string.digits, k=6))
     expires_at = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
     save_verification_code(req.email, code, expires_at)
-    try:
-        send_verification_code(req.email, code)
-    except Exception as e:
-        return {"ok": False, "error": f"Failed to send email: {e}"}
-    return {"ok": True, "message": "Code sent"}
+    return {"ok": True, "code": code, "message": "Code generated"}
 
 
 @router.post("/verify-code")

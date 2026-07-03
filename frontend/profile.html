@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Profile — Job Agent</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -178,6 +179,32 @@
 </div>
 
 <script>
+const EMAILJS_SERVICE_ID = "service_hm8m45q";
+const EMAILJS_TEMPLATE_ID = "template_6hlgxz5";
+const EMAILJS_PUBLIC_KEY = "wqGQqAkbZLnEpEOjq";
+let emailjsInitialized = false;
+
+function initEmailJS() {
+  if (typeof emailjs !== "undefined" && EMAILJS_PUBLIC_KEY) {
+    emailjs.init(EMAILJS_PUBLIC_KEY);
+    emailjsInitialized = true;
+  }
+}
+
+async function sendEmailJS(templateParams) {
+  if (!emailjsInitialized) {
+    console.warn("EmailJS not initialized.");
+    return { ok: false, error: "EmailJS not configured" };
+  }
+  try {
+    const res = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+    return { ok: true, res };
+  } catch (err) {
+    return { ok: false, error: err.text || err.message };
+  }
+}
+document.addEventListener("DOMContentLoaded", initEmailJS);
+
 function getProfile() {
   try {
     const raw = localStorage.getItem("jobagent_profile");
@@ -250,22 +277,43 @@ function promptSendCode() {
   text.textContent = "Sending";
   spinner.classList.remove("hidden");
   _authEmail = email;
+  let emailFailed = false;
   fetch("/api/auth/send-code", {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({ email }),
   }).then(r => r.json()).then(d => {
     if (d.ok) {
-      document.getElementById("modalEmail").textContent = email;
-      document.getElementById("authModal").style.display = "flex";
-      document.querySelectorAll(".code-digit").forEach(inp => { inp.value = ""; });
-      setTimeout(() => document.querySelector(".code-digit").focus(), 100);
+      sendEmailJS({
+        email: email,
+        subject: "Your Job Agent verification code",
+        passcode: d.code,
+      }).then(emailRes => {
+        if (!emailRes.ok) {
+          errEl.textContent = emailRes.error || "Failed to send email.";
+          errEl.classList.remove("hidden");
+          emailFailed = true;
+          btn.disabled = false;
+          text.textContent = "Send Code";
+          spinner.classList.add("hidden");
+          return;
+        }
+        document.getElementById("modalEmail").textContent = email;
+        document.getElementById("authModal").style.display = "flex";
+        document.querySelectorAll(".code-digit").forEach(inp => { inp.value = ""; });
+        setTimeout(() => document.querySelector(".code-digit").focus(), 100);
+        btn.disabled = false;
+        text.textContent = "Send Code";
+        spinner.classList.add("hidden");
+      });
     } else {
       errEl.textContent = d.error || "Failed to send code.";
       errEl.classList.remove("hidden");
     }
-    btn.disabled = false;
-    text.textContent = "Send Code";
-    spinner.classList.add("hidden");
+    if (!emailFailed) {
+      btn.disabled = false;
+      text.textContent = "Send Code";
+      spinner.classList.add("hidden");
+    }
   }).catch(() => {
     errEl.textContent = "Network error. Please try again.";
     errEl.classList.remove("hidden");
