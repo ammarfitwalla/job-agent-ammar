@@ -29,6 +29,8 @@ let _searchComplete = false;
 let _pendingSaveJob = null;
 let _authEmail = "";
 
+const DEV_MODE = false;
+
 const EMAILJS_SERVICE_ID = "service_hm8m45q";
 const EMAILJS_TEMPLATE_ID = "template_6hlgxz5";
 const EMAILJS_PUBLIC_KEY = "wqGQqAkbZLnEpEOjq";
@@ -123,6 +125,17 @@ async function authSendCode() {
     if (!d.ok) {
       errEl.textContent = d.error || "Failed to send code. Try again.";
       errEl.classList.remove("hidden");
+      btn.disabled = false;
+      btn.textContent = "Send Code";
+      return;
+    }
+    _authEmail = email;
+    if (DEV_MODE) {
+      document.getElementById("authSentEmail").textContent = email;
+      document.getElementById("authStep1").classList.add("hidden");
+      document.getElementById("authStep2").classList.remove("hidden");
+      document.querySelectorAll(".code-digit").forEach(inp => { inp.value = ""; });
+      document.querySelector(".code-digit").focus();
       btn.disabled = false;
       btn.textContent = "Send Code";
       return;
@@ -616,7 +629,7 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
     renderKeywords(d.keywords);
     setStatus("Keywords successfully extracted.", "green");
   } catch (e) { setStatus("Failed to extract keywords.", "red"); }
-  finally { btn.textContent = "Auto-Extract Keywords"; btn.disabled = false; }
+  finally { btn.textContent = "✨ Auto-Extract Keywords"; btn.disabled = false; }
 });
 
 function renderKeywords(kws) {
@@ -657,28 +670,35 @@ function renderCustomKeywords() {
 }
 
 // ===== ROLES =====
+let roleCategories = null;
+let roleSearchQuery = "";
+
 async function loadRoles() {
-  try { const r = await fetch("/roles"); const d = await r.json(); renderRoles(d.categories); } catch {}
+  try { const r = await fetch("/roles"); const d = await r.json(); roleCategories = d.categories; renderRoles(roleCategories); } catch {}
 }
 
 function renderRoles(categories) {
   const c = document.getElementById("roles");
-  const labels = { tech: "Engineering & IT", sales: "Sales & Marketing", media: "Media & Design", healthcare: "Healthcare", finance: "Finance", admin: "Administration", legal: "Legal", education: "Education", civil: "Civil & Construction" };
-  c.innerHTML = Object.entries(categories).map(([cat, roles]) =>
-    `<details class="group border border-slate-100 rounded-xl overflow-hidden bg-white mb-1">
-      <summary class="cursor-pointer px-3 py-2 bg-slate-50/50 hover:bg-slate-50 text-[11px] font-semibold text-slate-700 flex items-center transition-colors">
-        ${labels[cat]||cat} <span class="ml-2 text-slate-400 font-normal">(${roles.length})</span>
-      </summary>
-      <div class="p-2 bg-white space-y-1 border-t border-slate-50">
-        ${roles.map(r => `
-          <label class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer text-xs text-slate-600 transition-colors">
-            <input type="checkbox" class="role-cb w-3.5 h-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900" value="${r}" onchange="updateRoleCount()">
-            <span>${r}</span>
-          </label>`).join("")}
-      </div>
-    </details>`
+  const q = roleSearchQuery.toLowerCase().trim();
+  let allRoles = Object.values(categories).flat();
+  if (q) {
+    const words = q.split(/\s+/);
+    allRoles = allRoles.filter(r => words.every(w => r.toLowerCase().includes(w)));
+  }
+  c.innerHTML = allRoles.map(r =>
+    `<label class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer text-xs text-slate-600 transition-colors">
+      <input type="checkbox" class="role-cb w-3.5 h-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900" value="${r}" onchange="updateRoleCount()">
+      <span>${r}</span>
+    </label>`
   ).join("");
 }
+
+function filterRoles() {
+  roleSearchQuery = document.getElementById("roleSearchInput").value;
+  if (roleCategories) renderRoles(roleCategories);
+}
+
+document.getElementById("roleSearchInput").addEventListener("input", filterRoles);
 
 document.getElementById("addRoleBtn").addEventListener("click", () => {
   const i = document.getElementById("customRoleInput");
@@ -842,18 +862,18 @@ document.getElementById("internshipToggle").addEventListener("click", () => {
     document.body.classList.add("internship-mode");
     toggle.classList.replace("bg-slate-200", "bg-teal-500");
     knob.style.transform = "translateX(20px)";
-    btn.classList.replace("bg-slate-900", "bg-teal-600");
-    btn.classList.replace("hover:bg-slate-800", "hover:bg-teal-700");
-    btn.classList.replace("shadow-slate-900/10", "shadow-teal-600/20");
+    btn.classList.replace("bg-slate-800", "bg-teal-600");
+    btn.classList.replace("hover:bg-slate-700", "hover:bg-teal-700");
+    btn.classList.replace("shadow-slate-800/10", "shadow-teal-600/20");
     btn.innerHTML = '<span class="text-base">🎓</span> Search Internships';
     document.getElementById("logoIcon").classList.replace("bg-slate-900", "bg-teal-600");
   } else {
     document.body.classList.remove("internship-mode");
     toggle.classList.replace("bg-teal-500", "bg-slate-200");
     knob.style.transform = "translateX(0)";
-    btn.classList.replace("bg-teal-600", "bg-slate-900");
-    btn.classList.replace("hover:bg-teal-700", "hover:bg-slate-800");
-    btn.classList.replace("shadow-teal-600/20", "shadow-slate-900/10");
+    btn.classList.replace("bg-teal-600", "bg-slate-800");
+    btn.classList.replace("hover:bg-teal-700", "hover:bg-slate-700");
+    btn.classList.replace("shadow-teal-600/20", "shadow-slate-800/10");
     btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Start Search';
     document.getElementById("logoIcon").classList.replace("bg-teal-600", "bg-slate-900");
   }
@@ -1181,7 +1201,7 @@ function renderJobs(jobs) {
 
       ${j.reason ? `
       <div class="mt-4 bg-slate-50/50 rounded-xl p-3 border border-slate-100">
-        <p class="text-xs text-slate-600 leading-relaxed"><strong class="text-slate-800">AI Note:</strong> ${j.reason}</p>
+        <p class="text-xs text-slate-600 leading-relaxed"><strong class="text-slate-800">✨ AI Note:</strong> ${j.reason}</p>
       </div>` : ""}
 
       <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">

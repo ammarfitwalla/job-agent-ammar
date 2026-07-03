@@ -111,6 +111,11 @@ body.internship-mode {
   100% { background-position: -200% 0; }
 }
 
+aside::-webkit-scrollbar { width: 12px; }
+aside::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+aside::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; border: 3px solid #f1f5f9; }
+aside::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
 #resume {
   resize: none;
   transition: border-color 0.15s, box-shadow 0.15s;

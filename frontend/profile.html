@@ -146,6 +146,21 @@
   </div>
 </main>
 
+<!-- Logout Confirmation Modal -->
+<div id="logoutModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onclick="if (event.target===this) cancelLogout()">
+  <div class="bg-white rounded-2xl p-6 shadow-2xl w-full max-w-sm mx-auto text-center" onclick="event.stopPropagation()">
+    <div class="w-12 h-12 bg-red-50 border border-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+      <svg class="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+    </div>
+    <h3 class="text-base font-bold text-slate-900 mb-2">Log out?</h3>
+    <p class="text-sm text-slate-500 mb-6">You'll need to verify your email again to access your saved jobs.</p>
+    <div class="flex gap-3">
+      <button onclick="cancelLogout()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl text-sm font-semibold transition-colors">Cancel</button>
+      <button onclick="confirmLogout()" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors">Log Out</button>
+    </div>
+  </div>
+</div>
+
 <!-- Auth Modal -->
 <div id="authModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 transition-opacity" onclick="if (event.target===this) closeAuthModal()">
   <div class="bg-white rounded-2xl p-8 shadow-2xl w-full max-w-sm mx-auto transform transition-all fade-in" onclick="event.stopPropagation()">
@@ -179,6 +194,7 @@
 </div>
 
 <script>
+const DEV_MODE = false;
 const EMAILJS_SERVICE_ID = "service_hm8m45q";
 const EMAILJS_TEMPLATE_ID = "template_6hlgxz5";
 const EMAILJS_PUBLIC_KEY = "wqGQqAkbZLnEpEOjq";
@@ -235,9 +251,17 @@ function updateNavIcon() {
 }
 
 function logout() {
-  if (!confirm("Log out? You'll need to verify your email again to access your saved jobs.")) return;
+  document.getElementById("logoutModal").classList.remove("hidden");
+}
+
+function confirmLogout() {
+  document.getElementById("logoutModal").classList.add("hidden");
   clearProfile();
   window.location.href = "/";
+}
+
+function cancelLogout() {
+  document.getElementById("logoutModal").classList.add("hidden");
 }
 
 let _authEmail = "";
@@ -283,6 +307,16 @@ function promptSendCode() {
     body: JSON.stringify({ email }),
   }).then(r => r.json()).then(d => {
     if (d.ok) {
+      if (DEV_MODE) {
+        document.getElementById("modalEmail").textContent = email;
+        document.getElementById("authModal").style.display = "flex";
+        document.querySelectorAll(".code-digit").forEach(inp => { inp.value = ""; });
+        setTimeout(() => document.querySelector(".code-digit").focus(), 100);
+        btn.disabled = false;
+        text.textContent = "Send Code";
+        spinner.classList.add("hidden");
+        return;
+      }
       sendEmailJS({
         email: email,
         subject: "Your Job Agent verification code",
