@@ -5,6 +5,7 @@ let pollTimer = null;
 let hasRawJobs = false;
 let allJobs = [];
 let customRoles = [];
+let selectedRoles = new Set();
 let customKeywords = [];
 let scrapeAttempts = 0;
 let shownSlowWarning = false;
@@ -882,10 +883,9 @@ function renderRoles(categories) {
     c.innerHTML = '<span class="text-xs text-slate-400 italic px-2">No matching roles</span>';
     return;
   }
-  const selected = getSelectedRoles();
   c.innerHTML = allRoles.map(r =>
     `<label class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer text-xs text-slate-600 transition-colors">
-      <input type="checkbox" class="role-cb w-3.5 h-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900" value="${r}" onchange="updateRoleCount()" ${selected.includes(r) ? 'checked' : ''}>
+      <input type="checkbox" class="role-cb w-3.5 h-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900" value="${r}" onchange="onRoleToggle(this)" ${selectedRoles.has(r) ? 'checked' : ''}>
       <span>${r}</span>
     </label>`
   ).join("");
@@ -937,12 +937,19 @@ function renderCustomRoles() {
   c.querySelectorAll(".remove-role").forEach(b => b.addEventListener("click", () => { customRoles = customRoles.filter(r => r !== b.dataset.role); renderCustomRoles(); updateRoleCount(); }));
 }
 
+function onRoleToggle(cb) {
+  if (cb.checked) {
+    selectedRoles.add(cb.value);
+  } else {
+    selectedRoles.delete(cb.value);
+  }
+  updateRoleCount();
+}
+
 function renderSelectedRoles() {
-  const selected = getSelectedRoles();
-  const predefined = selected.filter(r => !customRoles.includes(r));
   const c = document.getElementById("selectedRoles");
-  if (!predefined.length) { c.innerHTML = ""; return; }
-  c.innerHTML = predefined.map(r => `
+  if (!selectedRoles.size) { c.innerHTML = ""; return; }
+  c.innerHTML = [...selectedRoles].map(r => `
     <span class="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-100 text-indigo-700 text-[11px] px-2.5 py-1 rounded-lg font-medium">
       <span>${r}</span>
       <button class="deselect-role hover:text-indigo-900 ml-1 opacity-70 hover:opacity-100" data-role="${r}">
@@ -950,19 +957,19 @@ function renderSelectedRoles() {
       </button>
     </span>`).join("");
   c.querySelectorAll(".deselect-role").forEach(b => b.addEventListener("click", () => {
-    const cb = document.querySelector(`.role-cb[value="${b.dataset.role}"]`);
-    if (cb) { cb.checked = false; cb.dispatchEvent(new Event("change")); }
+    selectedRoles.delete(b.dataset.role);
     if (roleCategories) renderRoles(roleCategories);
+    updateRoleCount();
   }));
 }
 
 function updateRoleCount() {
-  document.getElementById("roleCount").textContent = getSelectedRoles().length;
+  document.getElementById("roleCount").textContent = selectedRoles.size + customRoles.length;
   renderSelectedRoles();
   updateSearchBtn();
 }
 
-function getSelectedRoles() { return [...Array.from(document.querySelectorAll(".role-cb:checked")).map(e => e.value), ...customRoles]; }
+function getSelectedRoles() { return [...selectedRoles, ...customRoles]; }
 function getSelectedSites() { return Array.from(document.querySelectorAll("#sites input:checked:not(:disabled)")).map(e => e.value); }
 function getSelectedKeywords() { return [...Array.from(document.querySelectorAll("#keywords input:checked")).map(e => e.value), ...customKeywords]; }
 
