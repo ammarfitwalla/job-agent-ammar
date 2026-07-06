@@ -882,9 +882,10 @@ function renderRoles(categories) {
     c.innerHTML = '<span class="text-xs text-slate-400 italic px-2">No matching roles</span>';
     return;
   }
+  const selected = getSelectedRoles();
   c.innerHTML = allRoles.map(r =>
     `<label class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer text-xs text-slate-600 transition-colors">
-      <input type="checkbox" class="role-cb w-3.5 h-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900" value="${r}" onchange="updateRoleCount()">
+      <input type="checkbox" class="role-cb w-3.5 h-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900" value="${r}" onchange="updateRoleCount()" ${selected.includes(r) ? 'checked' : ''}>
       <span>${r}</span>
     </label>`
   ).join("");
@@ -936,8 +937,28 @@ function renderCustomRoles() {
   c.querySelectorAll(".remove-role").forEach(b => b.addEventListener("click", () => { customRoles = customRoles.filter(r => r !== b.dataset.role); renderCustomRoles(); updateRoleCount(); }));
 }
 
+function renderSelectedRoles() {
+  const selected = getSelectedRoles();
+  const predefined = selected.filter(r => !customRoles.includes(r));
+  const c = document.getElementById("selectedRoles");
+  if (!predefined.length) { c.innerHTML = ""; return; }
+  c.innerHTML = predefined.map(r => `
+    <span class="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-100 text-indigo-700 text-[11px] px-2.5 py-1 rounded-lg font-medium">
+      <span>${r}</span>
+      <button class="deselect-role hover:text-indigo-900 ml-1 opacity-70 hover:opacity-100" data-role="${r}">
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+    </span>`).join("");
+  c.querySelectorAll(".deselect-role").forEach(b => b.addEventListener("click", () => {
+    const cb = document.querySelector(`.role-cb[value="${b.dataset.role}"]`);
+    if (cb) { cb.checked = false; cb.dispatchEvent(new Event("change")); }
+    if (roleCategories) renderRoles(roleCategories);
+  }));
+}
+
 function updateRoleCount() {
   document.getElementById("roleCount").textContent = getSelectedRoles().length;
+  renderSelectedRoles();
   updateSearchBtn();
 }
 
