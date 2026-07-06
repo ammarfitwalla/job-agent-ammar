@@ -100,6 +100,25 @@ def init_db():
                 created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_vcodes_email ON verification_codes(email);
+            CREATE TABLE IF NOT EXISTS visits (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                visit_id        TEXT NOT NULL UNIQUE,
+                ip_address      TEXT NOT NULL,
+                user_agent      TEXT DEFAULT '',
+                device_type     TEXT DEFAULT 'unknown',
+                referer         TEXT DEFAULT '',
+                path            TEXT DEFAULT '/',
+                session_id      TEXT DEFAULT '',
+                user_email      TEXT DEFAULT '',
+                duration_seconds REAL DEFAULT 0,
+                heartbeats      INTEGER DEFAULT 0,
+                country         TEXT DEFAULT '',
+                city            TEXT DEFAULT '',
+                region          TEXT DEFAULT '',
+                created_at      TEXT NOT NULL,
+                last_heartbeat  TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_visits_ip ON visits(ip_address);
             CREATE TABLE IF NOT EXISTS saved_jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_email TEXT NOT NULL,
@@ -142,6 +161,12 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_jobs_raw ON jobs(session_id, is_raw);
             CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
         """)
+        # Migrate existing visits table — add location columns if missing
+        for col in ("country", "city", "region"):
+            try:
+                cur.execute(f"ALTER TABLE visits ADD COLUMN {col} TEXT DEFAULT ''")
+            except Exception:
+                pass
         conn.commit()
         try:
             cur.execute("ALTER TABLE sessions ADD COLUMN elapsed_seconds REAL DEFAULT 0")
@@ -330,11 +355,11 @@ def add_event(sid: str, event: str, data: dict = None, elapsed: int = 0):
 def get_events(sid: str, limit: int = 50) -> list[dict]:
     conn, cur = _get_conn()
     cur.execute(
-        "SELECT event, created_at FROM events WHERE session_id = ? ORDER BY id DESC LIMIT ?",
+        "SELECT event, elapsed_seconds, created_at FROM events WHERE session_id = ? ORDER BY id DESC LIMIT ?",
         (sid, limit),
     )
     rows = cur.fetchall()
-    return [{"event": row[0], "created_at": row[1]} for row in rows][::-1]
+    return [{"event": row[0], "elapsed_seconds": row[1] or 0, "created_at": row[2]} for row in rows][::-1]
 
 
 # ── Leads ──
@@ -399,6 +424,12 @@ def get_user(email: str) -> Optional[dict]:
     cur.execute("SELECT * FROM users WHERE email = ?", (email,))
     row = cur.fetchone()
     return dict(row) if row else None
+
+
+def get_all_users(limit: int = 500) -> list[dict]:
+    conn, cur = _get_conn()
+    cur.execute("SELECT u.* FROM users u ORDER BY u.created_at DESC LIMIT ?", (limit,))
+    return [dict(r) for r in cur.fetchall()]
 
 
 def create_user(email: str, name: str) -> dict:
@@ -599,3 +630,132 @@ def delete_saved_search(sid: str) -> bool:
         cur.execute("DELETE FROM saved_searches WHERE id = ?", (sid,))
         conn.commit()
         return cur.rowcount > 0
+
+
+# ── Visits ──
+
+
+def log_visit_start(visit_id: str, ip_address: str, user_agent: str = "",
+                     device_type: str = "unknown", referer: str = "",
+                     path: str = "/", session_id: str = "",
+                     user_email: str = "", country: str = "",
+                     city: str = "", region: str = "") -> dict:
+    now = _now()
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("""INSERT OR IGNORE INTO visits
+            (visit_id, ip_address, user_agent, device_type, referer, path, session_id, user_email, duration_seconds, heartbeats, country, city, region, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)""",
+                     (visit_id, ip_address, user_agent, device_type, referer,
+                      path, session_id, user_email, country, city, region, now))
+        conn.commit()
+    return {"visit_id": visit_id, "created_at": now}
+
+
+def update_visit_ping(visit_id: str, elapsed_seconds: float):
+    now = _now()
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("""UPDATE visits SET duration_seconds = ?, last_heartbeat = ?,
+                       heartbeats = heartbeats + 1 WHERE visit_id = ?""",
+                     (elapsed_seconds, now, visit_id))
+        conn.commit()
+
+
+def finalize_visit(visit_id: str, total_duration: float):
+    now = _now()
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("""UPDATE visits SET duration_seconds = MAX(duration_seconds, ?),
+                       last_heartbeat = ? WHERE visit_id = ?""",
+                     (total_duration, now, visit_id))
+        conn.commit()
+
+
+def get_visit_stats() -> dict:
+    conn, cur = _get_conn()
+    cur.execute("SELECT COUNT(*) FROM visits")
+    total_visits = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(DISTINCT ip_address) FROM visits")
+    unique_visitors = cur.fetchone()[0]
+    cur.execute("SELECT COALESCE(AVG(duration_seconds), 0) FROM visits WHERE duration_seconds > 0")
+    avg_duration = round(cur.fetchone()[0], 1)
+    cur.execute("""SELECT device_type, COUNT(*) as cnt FROM visits
+                   WHERE device_type != '' GROUP BY device_type ORDER BY cnt DESC""")
+    devices = {r["device_type"]: r["cnt"] for r in cur.fetchall()}
+    cur.execute("""SELECT ip_address, COUNT(*) as visit_count,
+                   MIN(created_at) as first_visit, MAX(created_at) as last_visit,
+                   COALESCE(AVG(duration_seconds), 0) as avg_duration,
+                   (SELECT country FROM visits v2 WHERE v2.ip_address = visits.ip_address AND v2.country != '' ORDER BY v2.created_at DESC LIMIT 1) as country
+                   FROM visits GROUP BY ip_address
+                   ORDER BY visit_count DESC LIMIT 100""")
+    by_ip = []
+    for r in cur.fetchall():
+        by_ip.append({
+            "ip": r["ip_address"], "count": r["visit_count"],
+            "first_visit": r["first_visit"], "last_visit": r["last_visit"],
+            "avg_duration": round(r["avg_duration"], 1),
+            "country": r["country"] or "",
+        })
+    return {
+        "total_visits": total_visits,
+        "unique_visitors": unique_visitors,
+        "avg_duration_seconds": avg_duration,
+        "devices": devices,
+        "by_ip": by_ip,
+    }
+
+
+def get_visits(limit: int = 200) -> list[dict]:
+    conn, cur = _get_conn()
+    cur.execute("""SELECT * FROM visits ORDER BY created_at DESC LIMIT ?""", (limit,))
+    return [dict(r) for r in cur.fetchall()]
+
+
+# ── IP Geolocation ──
+
+import requests as _requests
+
+_ip_geo_cache: dict[str, dict] = {}
+_IP_GEO_CACHE_TTL = 86400  # 24h
+
+
+def _resolve_ip_sync(ip: str) -> dict:
+    """Look up IP geolocation via ip-api.com. Returns {country, city, region}."""
+    if ip in ("127.0.0.1", "::1", "localhost", "unknown"):
+        return {"country": "Local", "city": "", "region": ""}
+    cached = _ip_geo_cache.get(ip)
+    if cached:
+        return cached
+    try:
+        resp = _requests.get(f"http://ip-api.com/json/{ip}?fields=status,country,city,regionName",
+                             timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("status") == "success":
+                result = {
+                    "country": data.get("country", ""),
+                    "city": data.get("city", ""),
+                    "region": data.get("regionName", ""),
+                }
+                _ip_geo_cache[ip] = result
+                return result
+    except Exception:
+        pass
+    return {"country": "", "city": "", "region": ""}
+
+
+def _store_geo(ip: str, visit_id: str):
+    """Synchronous: resolve IP and store result in DB."""
+    try:
+        loc = _resolve_ip_sync(ip)
+        if loc.get("country") and visit_id:
+            with _write_lock:
+                conn2, cur2 = _get_conn()
+                cur2.execute(
+                    "UPDATE visits SET country=?, city=?, region=? WHERE visit_id=?",
+                    (loc["country"], loc["city"], loc["region"], visit_id))
+                conn2.commit()
+                conn2.close()
+    except Exception:
+        pass

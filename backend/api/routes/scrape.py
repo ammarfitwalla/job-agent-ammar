@@ -377,7 +377,7 @@ async def scrape_status(search_id: str = Query("")):
                 "pass_num": 0, "max_passes": 0, "filtered_gen": 0, "queue_position": 0}
     return {
         "status": s.get("status", "idle"),
-        "last_scrape_raw": 1 if s.get("scraped") else 0,
+        "last_scrape_raw": s.get("scraped") or 0,
         "last_scrape_relevant": count_filtered_jobs(search_id),
         "pass_num": s.get("pass_num", 0),
         "max_passes": s.get("max_passes", 0),

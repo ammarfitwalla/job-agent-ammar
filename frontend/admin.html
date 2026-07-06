@@ -87,12 +87,14 @@ body {
 .card.red { border-left-color: #ef4444; }
 .card.purple { border-left-color: #8b5cf6; }
 .card.sky { border-left-color: #06b6d4; }
+.card.teal { border-left-color: #14b8a6; }
 .card.blue .num { color: #2563eb; }
 .card.green .num { color: #059669; }
 .card.amber .num { color: #d97706; }
 .card.red .num { color: #dc2626; }
 .card.purple .num { color: #7c3aed; }
 .card.sky .num { color: #0891b2; }
+.card.teal .num { color: #0d9488; }
 
 /* ── Charts ── */
 .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
@@ -253,7 +255,8 @@ tr td:first-child { border-radius: 0; }
     <div class="tabs">
       <span class="tab active" data-tab="sessions" onclick="switchTab('sessions')">Sessions</span>
       <span class="tab" data-tab="scores" onclick="switchTab('scores')">Score Distribution</span>
-      <span class="tab" data-tab="leads" onclick="switchTab('leads')">Leads</span>
+      <span class="tab" data-tab="registrations" onclick="switchTab('registrations')">Registrations</span>
+      <span class="tab" data-tab="visits" onclick="switchTab('visits')">Visits</span>
     </div>
 
     <div id="tab-sessions" class="tab-content active">
@@ -265,8 +268,13 @@ tr td:first-child { border-radius: 0; }
       <div class="chart-box" style="max-width:580px"><h3>Total Score Distribution</h3><canvas id="scoreHistogram" height="200"></canvas></div>
     </div>
 
-    <div id="tab-leads" class="tab-content">
-      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Name</th><th>Email</th><th>Roles</th><th>Location</th><th>Mode</th><th>Session</th></tr></thead><tbody id="leadBody"></tbody></table></div>
+    <div id="tab-registrations" class="tab-content">
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Name</th><th>Email</th><th>Last Updated</th></tr></thead><tbody id="registrationBody"></tbody></table></div>
+    </div>
+
+    <div id="tab-visits" class="tab-content">
+      <div class="cards" id="visitCards" style="margin:0 0 16px 0"></div>
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>IP</th><th>Location</th><th>Device</th><th>Page</th><th>Duration</th></tr></thead><tbody id="visitBody"></tbody></table></div>
     </div>
 
   </div>
@@ -329,7 +337,7 @@ function startRefresh() {
   stopRefresh();
   _refreshInterval = setInterval(() => {
     setRefreshing(true);
-    loadStats(); loadSessions(); loadScores(); loadLeads();
+    loadStats(); loadSessions(); loadScores(); loadRegistrations(); loadVisits();
   }, 300000);
 }
 
@@ -340,7 +348,7 @@ function stopRefresh() {
 // ── Stats ──
 async function loadStats() {
   try {
-    const r = await fetch("/api/admin/stats");
+    const r = await fetch("/api/admin/stats", { cache: "no-cache" });
     const d = await r.json();
     const total = d.total_sessions || 1;
     document.getElementById("cards").innerHTML = [
@@ -349,13 +357,16 @@ async function loadStats() {
       { n: d.cancelled, l: "Cancelled", c: "amber" },
       { n: d.abandoned, l: "Abandoned", c: "red" },
       { n: d.errors, l: "Errors", c: "red" },
-      { n: d.total_leads, l: "Leads Captured", c: "purple" },
+      { n: d.total_users, l: "Registrations", c: "purple" },
       { n: d.total_raw_jobs, l: "Raw Jobs", c: "sky" },
       { n: d.total_relevant_jobs, l: "Relevant Jobs", c: "green" },
       { n: formatDuration(d.avg_duration_seconds), l: "Avg Duration", c: "blue" },
       { n: Math.round(d.completed / total * 100) + "%", l: "Completion Rate", c: "green" },
       { n: d.total_raw_jobs ? Math.round(d.total_raw_jobs / total) : "\u2014", l: "Avg Jobs/Session", c: "sky" },
-      { n: d.total_leads ? Math.round(d.total_leads / total * 100) + "%" : "\u2014", l: "Lead Conv Rate", c: "purple" },
+      { n: d.total_users && d.total_sessions ? Math.round(d.total_sessions / d.total_users) : "\u2014", l: "Sessions/User", c: "purple" },
+      { n: d.total_visits || 0, l: "Total Visits", c: "teal" },
+      { n: d.unique_visitors || 0, l: "Unique Visitors", c: "teal" },
+      { n: d.visit_avg_duration_seconds ? Math.round(d.visit_avg_duration_seconds) + "s" : "\u2014", l: "Avg Visit Duration", c: "teal" },
     ].map((o, i) => `<div class="card ${o.c}" style="animation-delay:${i * .03}s"><div class="num">${o.n}</div><div class="label">${o.l}</div></div>`).join("");
 
     const days = d.daily.map(r => r.day.slice(5));
@@ -406,7 +417,7 @@ async function loadStats() {
 // ── Sessions ──
 async function loadSessions() {
   try {
-    const r = await fetch("/api/admin/sessions");
+    const r = await fetch("/api/admin/sessions", { cache: "no-cache" });
     const d = await r.json();
     allSessions = d.sessions || [];
     renderSessions(allSessions);
@@ -523,7 +534,7 @@ function renderBasicDetail(sid, s) {
 // ── Scores ──
 async function loadScores() {
   try {
-    const r = await fetch("/api/admin/scores");
+    const r = await fetch("/api/admin/scores", { cache: "no-cache" });
     const d = await r.json();
     const dist = d.distribution || [];
     if (scoreChart) scoreChart.destroy();
@@ -543,23 +554,59 @@ async function loadScores() {
   } catch {}
 }
 
-// ── Leads ──
-async function loadLeads() {
+// ── Visits ──
+async function loadVisits() {
   try {
-    const r = await fetch("/api/admin/leads");
+    const r = await fetch("/api/admin/visits", { cache: "no-cache" });
     const d = await r.json();
-    const leads = d.leads || [];
-    document.getElementById("leadBody").innerHTML = leads.length
-      ? leads.map(l => `<tr>
-        <td style="white-space:nowrap">${l.created_at ? formatDate(l.created_at) : "\u2014"}</td>
-        <td>${l.name || "\u2014"}</td>
-        <td>${l.email}</td>
-        <td>${(l.roles||[]).join(", ") || "\u2014"}</td>
-        <td>${l.location || "\u2014"}</td>
-        <td><span class="mode-badge ${l.internship_mode ? "mode-internship" : "mode-normal"}">${l.internship_mode ? "internship" : "normal"}</span></td>
-        <td>${l.session_id ? `<span class="section-toggle" onclick="toggleDetail('${l.session_id}')">${l.session_id.slice(0,8)}...</span>` : "\u2014"}</td>
+    const visits = d.visits || [];
+    const stats = d.stats || {};
+
+    const devHtml = Object.entries(stats.devices || {}).map(([k, v]) => `
+      <div class="card teal" style="flex:0 0 auto;min-width:100px"><div class="num">${v}</div><div class="label">${k}</div></div>
+    `).join("");
+    document.getElementById("visitCards").innerHTML = devHtml +
+      `<div class="card teal" style="flex:0 0 auto;min-width:100px"><div class="num">${stats.total_visits || 0}</div><div class="label">Total</div></div>` +
+      `<div class="card teal" style="flex:0 0 auto;min-width:100px"><div class="num">${stats.unique_visitors || 0}</div><div class="label">Unique</div></div>`;
+
+    const ipHtml = (stats.by_ip || []).slice(0, 20).map(ip => `
+      <div style="font-size:12px;padding:4px 0;border-bottom:1px solid #f1f5f9;display:flex;gap:12px;align-items:center">
+        <span style="font-family:monospace;min-width:120px">${ip.ip}</span>
+        <span style="color:#64748b;min-width:40px">${ip.count}x</span>
+        <span style="color:#94a3b8;min-width:80px">${ip.country || ""}</span>
+        <span style="color:#94a3b8;font-size:11px">${ip.last_visit ? formatDate(ip.last_visit) : ""}</span>
+      </div>
+    `).join("");
+    if (ipHtml) {
+      document.getElementById("visitCards").insertAdjacentHTML("afterend",
+        `<div class="table-wrap" style="margin:12px 0"><div style="padding:8px 0;font-weight:600;font-size:13px">Top IPs</div>${ipHtml}</div>`);
+    }
+
+    document.getElementById("visitBody").innerHTML = visits.length
+      ? visits.map(v => `<tr>
+        <td style="white-space:nowrap">${v.created_at ? formatDate(v.created_at) : "\u2014"}</td>
+        <td style="font-family:monospace;font-size:12px">${v.ip_address}</td>
+        <td>${[v.country, v.region, v.city].filter(Boolean).join(", ") || "\u2014"}</td>
+        <td>${v.device_type || "\u2014"}</td>
+        <td>${v.path || "\u2014"}</td>
+        <td>${v.duration_seconds ? Math.round(v.duration_seconds) + "s" : "\u2014"}</td>
       </tr>`).join("")
-      : '<tr><td colspan="7"><div class="empty">No leads captured yet</div></td></tr>';
+      : '<tr><td colspan="6"><div class="empty">No visits yet</div></td></tr>';
+  } catch {}
+}
+async function loadRegistrations() {
+  try {
+    const r = await fetch("/api/admin/registrations", { cache: "no-cache" });
+    const d = await r.json();
+    const regs = d.registrations || [];
+    document.getElementById("registrationBody").innerHTML = regs.length
+      ? regs.map(u => `<tr>
+        <td style="white-space:nowrap">${u.created_at ? formatDate(u.created_at) : "\u2014"}</td>
+        <td>${u.name || "\u2014"}</td>
+        <td>${u.email}</td>
+        <td style="white-space:nowrap">${u.updated_at ? formatDate(u.updated_at) : "\u2014"}</td>
+      </tr>`).join("")
+      : '<tr><td colspan="4"><div class="empty">No registrations yet</div></td></tr>';
   } catch {}
 }
 
@@ -570,7 +617,7 @@ function switchTab(name) {
 }
 
 // ── Init ──
-loadStats(); loadSessions(); loadScores(); loadLeads();
+loadStats(); loadSessions(); loadScores(); loadRegistrations(); loadVisits();
 startRefresh();
 </script>
 </body>

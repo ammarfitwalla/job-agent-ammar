@@ -229,6 +229,8 @@ def filter_jobs(
     log(f"[MATCH ENGINE] {len(batches)} batch(es) of up to {batch_size}", sid)
 
     filtered = []
+    completed_batches = 0
+    total_batches = len(batches)
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
             pool.submit(
@@ -236,25 +238,23 @@ def filter_jobs(
             ): f"batch of {len(batch)}"
             for batch in batches
         }
-        # print(f"[DBG RE] filter_jobs: submitted {len(futures)} batches to pool (max_workers={max_workers})")
         for future in as_completed(futures):
             if cancel_check and cancel_check():
                 log(f"[MATCH ENGINE] Cancelled — discarding remaining LLM batches", sid)
-                # print(f"[DBG RE] filter_jobs: cancelled — discarding")
                 for f in futures:
                     f.cancel()
                 break
             label = futures[future]
             try:
                 batch_results = future.result(timeout=90)
-                # print(f"[DBG RE] filter_jobs: batch '{label}' returned {len(batch_results)} results")
+                completed_batches += 1
+                log(f"[SCORE] Batch {completed_batches}/{total_batches} done — {len(batch_results)} matched", sid)
                 for r in batch_results:
                     filtered.append(r)
                     if progress_callback:
                         progress_callback(r)
             except Exception as e:
                 log(f"[MATCH ENGINE] Error scoring {label}: {e}", sid)
-                # print(f"[DBG RE] filter_jobs: ERROR for {label}: {e}")
 
     filtered.sort(key=lambda j: j["total_score"], reverse=True)
     print(f"[DBG RE] filter_jobs: final {len(filtered)} relevant, top: {[j['total_score'] for j in filtered[:5]]}")

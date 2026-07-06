@@ -30,6 +30,48 @@ let _pendingSaveJob = null;
 let _uploadedFilename = "";
 let _authEmail = "";
 
+// ── Visit Tracking ──
+(function() {
+  const _visitId = crypto.randomUUID();
+  const _visitStart = Date.now();
+
+  function _detectDevice() {
+    const ua = navigator.userAgent;
+    if (/Mobi|Android|iPhone|iPad|iPod|BlackBerry|Windows Phone|IEMobile|Opera Mini/i.test(ua)) return "phone";
+    if (/Tablet|iPad|PlayBook|Silk/i.test(ua)) return "tablet";
+    return "desktop";
+  }
+
+  function _visitBeacon(endpoint, data) {
+    try {
+      const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+      navigator.sendBeacon(endpoint, blob);
+    } catch {}
+  }
+
+  _visitBeacon("/api/visit/start", {
+    visit_id: _visitId,
+    device_type: _detectDevice(),
+    path: window.location.pathname,
+    referer: document.referrer || "",
+    session_id: "",
+    user_email: "",
+  });
+
+  function _endVisit() {
+    _visitBeacon("/api/visit/end", {
+      visit_id: _visitId,
+      total_duration: (Date.now() - _visitStart) / 1000,
+    });
+  }
+
+  window.addEventListener("beforeunload", _endVisit);
+  window.addEventListener("pagehide", _endVisit);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") _endVisit();
+  });
+})();
+
 const DEV_MODE = false;
 
 const EMAILJS_SERVICE_ID = "service_hm8m45q";
@@ -310,7 +352,7 @@ async function doSaveJob(job) {
     if (d.saved) {
       job._saved = true;
       job._savedId = d.id;
-      updateBookmarkIcons();
+      updateSaveButtons();
       showToast("Job saved!");
     }
   } catch {}
@@ -322,25 +364,24 @@ async function doUnsaveJob(job) {
     await fetch(`/api/saved-jobs/${job._savedId}`, { method: "DELETE" });
     job._saved = false;
     job._savedId = null;
-    updateBookmarkIcons();
+    updateSaveButtons();
     showToast("Job removed from saved", '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>');
   } catch {}
 }
 
-function updateBookmarkIcons() {
+function updateSaveButtons() {
   document.querySelectorAll(".bookmark-btn").forEach(btn => {
     const url = btn.dataset.url;
     const job = allJobs.find(j => j.url === url);
     if (!job) return;
-    const svg = btn.querySelector("svg");
     if (job._saved) {
-      svg.setAttribute("fill", "currentColor");
-      svg.classList.add("text-indigo-500");
-      svg.classList.remove("text-slate-600");
+      btn.innerHTML = '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> Saved';
+      btn.classList.add("bg-indigo-500", "text-white", "border-indigo-500", "hover:bg-indigo-600");
+      btn.classList.remove("bg-indigo-50", "text-indigo-600", "border-indigo-200", "hover:bg-indigo-100", "active:bg-indigo-200");
     } else {
-      svg.setAttribute("fill", "none");
-      svg.classList.remove("text-indigo-500");
-      svg.classList.add("text-slate-600");
+      btn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg> Save';
+      btn.classList.remove("bg-indigo-500", "text-white", "border-indigo-500", "hover:bg-indigo-600");
+      btn.classList.add("bg-indigo-50", "text-indigo-600", "border-indigo-200", "hover:bg-indigo-100", "active:bg-indigo-200");
     }
   });
 }
@@ -365,7 +406,7 @@ async function checkSavedStatuses() {
           j._savedId = sid;
         }
       });
-      updateBookmarkIcons();
+      updateSaveButtons();
     }
   } catch {}
 }
@@ -510,32 +551,167 @@ function setStatus(msg, type = "blue") {
   el.innerHTML = `${icon}<span>${msg}</span>`;
 }
 
-function setStepProgress(steps) {
+function renderTimeline(logs, status) {
   const el = document.getElementById("stepProgress");
+  if (!el) return;
   el.classList.remove("hidden", "step-progress-exit");
   hideElement("results");
-  steps.forEach((s, i) => {
-    const container = document.getElementById(`step${i + 1}`);
-    const circle = document.getElementById(`step${i + 1}Circle`);
-    const spinner = document.getElementById(`step${i + 1}Spinner`);
-    const check = document.getElementById(`step${i + 1}Check`);
-    const msg = document.getElementById(`step${i + 1}Msg`);
-    container.className = "flex items-start gap-4";
-    container.classList.add(`step-${s.status}`);
-    circle.classList.toggle("hidden", s.status !== "pending");
-    spinner.classList.toggle("hidden", s.status !== "active");
-    check.classList.toggle("hidden", s.status !== "done");
-    msg.textContent = s.msg;
-    if (i < 2) {
-      const conn = document.getElementById(`conn${i + 1}`);
-      if (s.status === "done") conn.className = "w-px h-full connector-line bg-green-400";
-      else if (s.status === "active") conn.className = "w-px h-full connector-line bg-blue-400";
-      else conn.className = "w-px h-full connector-line bg-slate-200";
+
+  const siteIcons = { linkedin: "in", indeed: "indeed", adzuna: "ADZ", remoteok: "ROK", weworkremotely: "WWR", naukri: "NAU", gulftalent: "GT", eurojobs: "EUR" };
+  const timeline = document.getElementById("timeline");
+  if (!timeline) return;
+
+  let html = "";
+  const shown = new Set();
+
+  for (const log of logs || []) {
+    const msg = log.event || log.message || "";
+    const elapsed = log.elapsed_seconds || 0;
+    const ts = elapsed ? `${elapsed}s` : "";
+
+    // Site scrape start
+    let m = msg.match(/\[SCRAPE\] (Pass \d+\/\d+ — )?(\w+)\.\.\.$/);
+    if (m) {
+      const site = m[2];
+      const key = `site-start-${site}`;
+      if (!shown.has(key)) {
+        shown.add(key);
+        const icon = siteIcons[site] || site.slice(0, 3).toUpperCase();
+        html += `<div class="flex items-center gap-3 py-1.5 text-slate-600 timeline-active">
+          <span class="w-12 text-[10px] text-slate-400 shrink-0">${ts}</span>
+          <span class="w-10 h-5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">${icon}</span>
+          <span class="text-slate-500">Fetching jobs...</span>
+        </div>`;
+      }
+      continue;
     }
-  });
+
+    // Site done (normal)
+    m = msg.match(/\[SCRAPE\] (\w+) returned (\d+) jobs/);
+    if (m) {
+      const site = m[1];
+      const count = m[2];
+      const key = `site-done-${site}`;
+      if (!shown.has(key)) {
+        shown.add(key);
+        const icon = siteIcons[site] || site.slice(0, 3).toUpperCase();
+        html += `<div class="flex items-center gap-3 py-1.5 text-slate-700">
+          <span class="w-12 text-[10px] text-slate-400 shrink-0">${ts}</span>
+          <span class="w-10 h-5 rounded text-[9px] font-bold bg-green-100 text-green-700 flex items-center justify-center shrink-0">${icon}</span>
+          <span class="text-green-700 font-medium">${count} jobs</span>
+        </div>`;
+      }
+      continue;
+    }
+
+    // Site done (internship pass)
+    m = msg.match(/\[SCRAPE\] (\w+): (\d+) fetched, (\d+) new/);
+    if (m) {
+      const site = m[1];
+      const count = m[2];
+      const newCount = m[3];
+      const key = `site-pass-${site}-${newCount}`;
+      if (!shown.has(key) && parseInt(newCount) > 0) {
+        shown.add(key);
+        const icon = siteIcons[site] || site.slice(0, 3).toUpperCase();
+        html += `<div class="flex items-center gap-3 py-1.5 text-slate-700">
+          <span class="w-12 text-[10px] text-slate-400 shrink-0">${ts}</span>
+          <span class="w-10 h-5 rounded text-[9px] font-bold bg-green-100 text-green-700 flex items-center justify-center shrink-0">${icon}</span>
+          <span class="text-green-700 font-medium">+${newCount} jobs</span>
+        </div>`;
+      }
+      continue;
+    }
+
+    // Total raw
+    m = msg.match(/\[SCRAPE\] Total raw jobs: (\d+)/);
+    if (m && !shown.has("total-raw")) {
+      shown.add("total-raw");
+      html += `<div class="flex items-center gap-3 py-1.5 text-slate-500 border-t border-slate-100 mt-1 pt-2">
+        <span class="w-12 text-[10px] text-slate-400 shrink-0">${ts}</span>
+        <span class="text-slate-600">${m[1]} jobs collected</span>
+      </div>`;
+      continue;
+    }
+
+    // Scoring batch progress
+    m = msg.match(/\[SCORE\] Batch (\d+)\/(\d+) done/);
+    if (m && !shown.has("scoring")) {
+      shown.add("scoring");
+      html += `<div class="flex items-center gap-3 py-1.5 timeline-active">
+        <span class="w-12 text-[10px] text-slate-400 shrink-0">${ts}</span>
+        <span class="w-10 h-5 rounded text-[9px] font-bold bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">AI</span>
+        <span class="text-slate-600">Scoring batch ${m[1]}/${m[2]}...</span>
+      </div>`;
+      continue;
+    }
+
+    // Relevant jobs returned
+    m = msg.match(/\[MATCH ENGINE\] (\d+) relevant jobs returned/);
+    if (m && !shown.has("matches")) {
+      shown.add("matches");
+      html += `<div class="flex items-center gap-3 py-1.5 text-slate-700">
+        <span class="w-12 text-[10px] text-slate-400 shrink-0">${ts}</span>
+        <span class="w-10 h-5 rounded text-[9px] font-bold bg-green-100 text-green-700 flex items-center justify-center shrink-0">✓</span>
+        <span class="text-green-700 font-medium">${m[1]} matches found</span>
+      </div>`;
+      continue;
+    }
+
+    // Pipeline complete
+    m = msg.match(/\[SCRAPE\] Pipeline complete/);
+    if (m && !shown.has("complete")) {
+      shown.add("complete");
+      const matchCount = msg.match(/(\d+) relevant/);
+      const label = matchCount ? `${matchCount[1]} matches` : "Done";
+      html += `<div class="flex items-center gap-3 py-1.5 text-slate-700 border-t border-slate-100 mt-1 pt-2">
+        <span class="w-12 text-[10px] text-slate-400 shrink-0">${ts}</span>
+        <span class="w-10 h-5 rounded text-[9px] font-bold bg-green-100 text-green-700 flex items-center justify-center shrink-0">✓</span>
+        <span class="text-green-700 font-medium">Analysis complete — ${label}</span>
+      </div>`;
+      continue;
+    }
+
+    // Enough relevant
+    m = msg.match(/\[SCRAPE\] Enough relevant \((\d+).*\), stopping/);
+    if (m && !shown.has("enough")) {
+      shown.add("enough");
+      html += `<div class="flex items-center gap-3 py-1.5 text-slate-700">
+        <span class="w-12 text-[10px] text-slate-400 shrink-0">${ts}</span>
+        <span class="w-10 h-5 rounded text-[9px] font-bold bg-green-100 text-green-700 flex items-center justify-center shrink-0">✓</span>
+        <span class="text-green-700 font-medium">${m[1]} matches — target reached</span>
+      </div>`;
+      continue;
+    }
+
+    // Cancelled / Error
+    if ((msg.includes("Cancelled") || msg.includes("cancelled")) && !shown.has("cancelled")) {
+      shown.add("cancelled");
+      html += `<div class="flex items-center gap-3 py-1.5 text-red-600">
+        <span class="w-12 text-[10px] text-slate-400 shrink-0">${ts}</span>
+        <span class="w-10 h-5 rounded text-[9px] font-bold bg-red-100 text-red-700 flex items-center justify-center shrink-0">✕</span>
+        <span>Cancelled</span>
+      </div>`;
+    }
+  }
+
+  if (!html) {
+    if (status === "running") {
+      html = `<div class="flex items-center gap-3 py-1.5 text-slate-500 timeline-active">
+        <span class="w-12 text-[10px] text-slate-400 shrink-0"></span>
+        <span class="text-slate-500">Starting up...</span>
+      </div>`;
+    } else {
+      html = `<div class="text-sm text-slate-400 py-2">No activity yet</div>`;
+    }
+  }
+
+  timeline.innerHTML = html;
 }
+
 function hideStepProgress() {
   const el = document.getElementById("stepProgress");
+  if (!el) return;
   el.classList.add("step-progress-exit");
   setTimeout(() => el.classList.add("hidden"), 350);
 }
@@ -576,6 +752,8 @@ function clearSearchState() {
     </div>`;
   const fb = document.getElementById("filterBar");
   if (fb) fb.classList.add("hidden");
+  const tl = document.getElementById("timeline");
+  if (tl) tl.innerHTML = "";
   hideElement("stepProgress");
   document.title = "AI Job Agent";
   setStatus("", "");
@@ -943,11 +1121,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   activeFilters = { site: '', experience_level: '' };
   document.getElementById("filterBar").classList.add("hidden");
 
-  setStepProgress([
-    { status: "active", msg: "Connecting to Indeed, LinkedIn, Adzuna..." },
-    { status: "pending", msg: "Waiting for data..." },
-    { status: "pending", msg: "Waiting..." }
-  ]);
+  renderTimeline([], "running");
   document.title = "🔍 Searching... - AI Job Agent";
   setStatus("Initializing data collection...", "blue");
   logEvent("search_started", { sites, keywords_count: keywords.length, roles_count: roles.length });
@@ -998,34 +1172,14 @@ function pollResults() {
       const d = await r.json();
 
       if (d.queue_position > 0) {
-        setStepProgress([
-          { status: "active", msg: `Position ${d.queue_position} in queue...` },
-          { status: "pending", msg: "Waiting for data..." },
-          { status: "pending", msg: "Waiting..." }
-        ]);
+        renderTimeline([], d.status);
         document.title = "⏳ Queued... - AI Job Agent";
         return;
       }
 
-      // Per-step ETA
-      for (let si = 1; si <= 3; si++) {
-        const container = document.getElementById(`step${si}`);
-        const etaEl = document.getElementById(`step${si}Eta`);
-        if (!etaEl || !container) continue;
-        const isActive = container.classList.contains("step-active");
-        if (isActive && d.status === "running" && _searchStart > 0) {
-          const elapsed = Math.round((Date.now() - _searchStart) / 1000);
-          const hasLinkedIn = _selectedSites.includes("linkedin");
-          const multiSite = _selectedSites.length >= 2;
-          const scrapeEst = _selectedSites.length >= 3 ? 60 : 40;
-          const est = [scrapeEst, 60, 2][si - 1];
-          const soFar = [scrapeEst, scrapeEst + 60, scrapeEst + 62][si - 1];
-          const remaining = Math.max(1, soFar - elapsed);
-          etaEl.textContent = `~${remaining}s`;
-          etaEl.classList.remove("hidden");
-        } else {
-          etaEl.classList.add("hidden");
-        }
+      // Only update timeline while waiting for first results
+      if (!_searchComplete && lastRenderedCount === 0) {
+        renderTimeline(d.logs || [], d.status);
       }
 
       if (d.status === "running") {
@@ -1033,48 +1187,23 @@ function pollResults() {
         const genChanged = d.filtered_gen !== lastFilteredGen;
         const countChanged = d.last_scrape_relevant !== lastRenderedCount;
 
-        if (d.last_scrape_raw > 0) {
-          if (d.last_scrape_relevant > 0) {
-            if (genChanged && inPass) {
-              setStatus(`Batch ${d.pass_num}/${d.max_passes} processed \u2014 ${d.last_scrape_relevant} matches found`, "blue");
-            } else if (countChanged) {
-              setStatus(`AI evaluating candidates... (${d.last_scrape_relevant} matches)`, "blue");
-            } else if (d.pass_num > lastPassNum && lastPassNum > 0) {
-              setStatus(`${d.last_scrape_relevant} matches found, scanning further (Batch ${d.pass_num}/${d.max_passes})...`, "amber");
-            } else {
-              setStatus(`${d.last_scrape_relevant} relevant roles found so far`, "blue");
-            }
-            await loadResultsIncremental(d.filtered_gen);
+        if (d.last_scrape_relevant > 0) {
+          if (genChanged && inPass) {
+            setStatus(`Batch ${d.pass_num}/${d.max_passes} processed \u2014 ${d.last_scrape_relevant} matches`, "blue");
+          } else if (countChanged) {
+            setStatus(`Evaluating... ${d.last_scrape_relevant} matches so far`, "blue");
+          } else if (d.pass_num > lastPassNum && lastPassNum > 0) {
+            setStatus(`${d.last_scrape_relevant} matches, scanning deeper (pass ${d.pass_num}/${d.max_passes})`, "amber");
           } else {
-            document.title = "🤖 Scoring... - AI Job Agent";
-            if (d.pass_num > lastPassNum && lastPassNum > 0) {
-              setStepProgress([
-                { status: "done", msg: `Scraped ${d.last_scrape_raw} jobs` },
-                { status: "active", msg: `Filtering generic roles, scanning deeper (Batch ${d.pass_num}/${d.max_passes})...` },
-                { status: "pending", msg: "Waiting for AI results..." }
-              ]);
-            } else if (genChanged && inPass) {
-              setStepProgress([
-                { status: "done", msg: `Scraped ${d.last_scrape_raw} jobs` },
-                { status: "active", msg: `Batch ${d.pass_num}/${d.max_passes} scored, analyzing...` },
-                { status: "pending", msg: "Waiting for AI results..." }
-              ]);
-            } else {
-              setStepProgress([
-                { status: "done", msg: `Scraped ${d.last_scrape_raw} jobs` },
-                { status: "active", msg: `AI scoring ${d.last_scrape_raw} results...` },
-                { status: "pending", msg: "Waiting for AI results..." }
-              ]);
-            }
+            setStatus(`${d.last_scrape_relevant} matches found`, "blue");
           }
+          await loadResultsIncremental(d.filtered_gen);
         } else {
-          setStepProgress([
-            { status: "active", msg: `Gathering data from networks${inPass ? ` (Batch ${d.pass_num}/${d.max_passes})` : ""}...` },
-            { status: "pending", msg: "Waiting for data..." },
-            { status: "pending", msg: "Waiting..." }
-          ]);
-          document.title = "📡 Scraping... - AI Job Agent";
+          setStatus(d.last_scrape_raw > 0 ? "Scoring results..." : "Collecting job data...", "blue");
         }
+        document.title = d.last_scrape_relevant > 0
+          ? `(${d.last_scrape_relevant}) Jobs - AI Job Agent`
+          : (d.last_scrape_raw > 0 ? "🤖 Scoring... - AI Job Agent" : "📡 Scraping... - AI Job Agent");
         lastFilteredGen = d.filtered_gen;
         lastPassNum = d.pass_num;
       }
@@ -1082,19 +1211,16 @@ function pollResults() {
       if (d.status === "done" || d.status === "error") {
         clearInterval(pollTimer); pollTimer = null;
         if (d.status === "error") {
-          hideElement("stepProgress");
           document.title = "AI Job Agent";
           setStatus("Data collection encountered an error.", "red");
           logEvent("search_error", { status: "error" }, Math.round((Date.now() - _searchStart) / 1000));
           await loadResults(d);
         } else {
-          setStepProgress([
-            { status: "done", msg: `Scraped ${d.last_scrape_raw || 0} jobs` },
-            { status: "done", msg: `Found ${d.last_scrape_relevant || 0} matches` },
-            { status: "done", msg: "Analysis complete" }
-          ]);
-          await new Promise(r => setTimeout(r, 500));
-          hideStepProgress();
+          if (lastRenderedCount === 0) {
+            renderTimeline(d.logs || [], "done");
+            await new Promise(r => setTimeout(r, 800));
+            hideStepProgress();
+          }
           await loadResults(d);
         }
       } else if (scrapeAttempts > 80 && !shownSlowWarning) {
@@ -1154,7 +1280,12 @@ async function loadResults(statusData) {
     }));
     let msg;
     if (allJobs.length) {
-      const passSummary = statusData && statusData.max_passes > 0 && statusData.pass_num > 0 ? ` across ${statusData.pass_num} sources` : "";
+      const siteCount = (statusData?.logs || []).reduce((acc, log) => {
+        const m = (log.event || log.message || "").match(/\[SCRAPE\] (\w+) returned \d+ jobs/);
+        if (m) acc.add(m[1]);
+        return acc;
+      }, new Set()).size;
+      const passSummary = siteCount > 0 ? ` across ${siteCount} sources` : "";
       msg = `Analysis complete: ${allJobs.length} matches found${passSummary}.`;
       document.title = `(${allJobs.length}) Jobs - AI Job Agent`;
       logEvent("search_completed", { jobs_count: allJobs.length }, Math.round((Date.now() - _searchStart) / 1000));
@@ -1225,11 +1356,6 @@ function renderJobs(jobs) {
               <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400">Match</div>
               <div class="px-2.5 py-1 rounded-lg border font-mono text-sm font-bold ${scoreClass}">${sc}</div>
             </div>
-            <button class="bookmark-btn p-1 -mr-0.5 transition-colors duration-200" data-url="${j.url || ''}" onclick="toggleSaveJob(event)" title="Save job">
-              <svg class="w-5 h-5 ${isSaved ? 'text-indigo-500' : 'text-slate-600'} transition-colors" fill="${isSaved ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/>
-              </svg>
-            </button>
           </div>
           <div class="text-[10px] text-slate-400 mt-1 flex items-center gap-1.5">
             <span title="AI Relevancy">AI <span class="font-medium text-slate-600">${j.ai_score || 0}</span></span>
@@ -1245,9 +1371,17 @@ function renderJobs(jobs) {
       </div>` : ""}
 
       <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
-        <div class="flex flex-wrap gap-1.5 flex-1 pr-4 overflow-hidden h-6">
-          ${j.tags && j.tags.length ? j.tags.slice(0, 5).map(t => `<span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md whitespace-nowrap">${t}</span>`).join('') : ""}
-          ${j.tags && j.tags.length > 5 ? `<span class="text-[10px] text-slate-400 px-1 py-0.5 whitespace-nowrap">+${j.tags.length - 5} more</span>` : ""}
+        <div class="flex items-center gap-2 flex-1 pr-4 min-w-0">
+          <button class="bookmark-btn shrink-0 text-xs font-medium transition-all duration-200 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border ${isSaved ? 'bg-indigo-500 text-white border-indigo-500 hover:bg-indigo-600' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 active:bg-indigo-200'}" data-url="${j.url || ''}" onclick="toggleSaveJob(event)" title="Save job">
+            ${isSaved
+              ? '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> Saved'
+              : '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg> Save'
+            }
+          </button>
+          <div class="flex items-center gap-1.5 overflow-hidden">
+            ${j.tags && j.tags.length ? j.tags.slice(0, 5).map(t => `<span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md whitespace-nowrap">${t}</span>`).join('') : ""}
+            ${j.tags && j.tags.length > 5 ? `<span class="text-[10px] text-slate-400 px-1 py-0.5 whitespace-nowrap">+${j.tags.length - 5} more</span>` : ""}
+          </div>
         </div>
         <div class="flex items-center gap-1.5 text-[11px] font-medium text-slate-400 shrink-0">
           <span>via ${siteName}</span>

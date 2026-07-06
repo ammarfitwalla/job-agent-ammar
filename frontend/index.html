@@ -181,69 +181,8 @@
       <div id="filterBar" class="hidden flex flex-wrap items-center gap-2 text-xs mb-2"></div>
 
       <!-- Step Progress -->
-      <div id="stepProgress" class="hidden premium-card p-10 min-h-[460px]">
-        <div class="flex flex-col max-w-sm mx-auto w-full gap-0">
-
-          <div class="flex items-start gap-5 step-pending" id="step1">
-            <div class="step-icon shrink-0">
-              <div class="step-circle step-pending-circle" id="step1Circle">1</div>
-              <svg class="step-spinner hidden w-10 h-10 text-blue-500 animate-spin" id="step1Spinner" viewBox="0 0 24 24" fill="none">
-                <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor"/>
-              </svg>
-              <svg class="step-check hidden w-10 h-10 text-green-600" id="step1Check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M5 13l4 4L19 7"/>
-              </svg>
-            </div>
-            <div class="flex-1 min-w-0 pt-0.5">
-              <div class="text-base font-bold step-label">Scrape</div>
-              <div class="text-sm text-slate-500 mt-0.5" id="step1Msg">Initializing...</div>
-              <span class="step-eta text-sm text-slate-400 font-medium ml-2" id="step1Eta"></span>
-            </div>
-          </div>
-
-          <div class="ml-8 pl-4 h-12 flex items-center">
-            <div class="w-px h-full connector-line bg-slate-200" id="conn1"></div>
-          </div>
-
-          <div class="flex items-start gap-5 step-pending" id="step2">
-            <div class="step-icon shrink-0">
-              <div class="step-circle step-pending-circle" id="step2Circle">2</div>
-              <svg class="step-spinner hidden w-10 h-10 text-blue-500 animate-spin" id="step2Spinner" viewBox="0 0 24 24" fill="none">
-                <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor"/>
-              </svg>
-              <svg class="step-check hidden w-10 h-10 text-green-600" id="step2Check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M5 13l4 4L19 7"/>
-              </svg>
-            </div>
-            <div class="flex-1 min-w-0 pt-0.5">
-              <div class="text-base font-bold step-label">AI Scoring</div>
-              <div class="text-sm text-slate-500 mt-0.5" id="step2Msg">Waiting for data...</div>
-              <span class="step-eta text-sm text-slate-400 font-medium ml-2" id="step2Eta"></span>
-            </div>
-          </div>
-
-          <div class="ml-8 pl-4 h-12 flex items-center">
-            <div class="w-px h-full connector-line bg-slate-200" id="conn2"></div>
-          </div>
-
-          <div class="flex items-start gap-5 step-pending" id="step3">
-            <div class="step-icon shrink-0">
-              <div class="step-circle step-pending-circle" id="step3Circle">3</div>
-              <svg class="step-spinner hidden w-10 h-10 text-blue-500 animate-spin" id="step3Spinner" viewBox="0 0 24 24" fill="none">
-                <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor"/>
-              </svg>
-              <svg class="step-check hidden w-10 h-10 text-green-600" id="step3Check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M5 13l4 4L19 7"/>
-              </svg>
-            </div>
-            <div class="flex-1 min-w-0 pt-0.5">
-              <div class="text-base font-bold step-label">Results</div>
-              <div class="text-sm text-slate-500 mt-0.5" id="step3Msg">Waiting for AI scoring...</div>
-              <span class="step-eta text-sm text-slate-400 font-medium ml-2" id="step3Eta"></span>
-            </div>
-          </div>
-
-        </div>
+      <div id="stepProgress" class="hidden premium-card p-6 min-h-[200px]">
+        <div class="flex flex-col gap-1 text-sm font-mono" id="timeline"></div>
       </div>
       <!-- Results -->
       <div id="results" class="space-y-4">

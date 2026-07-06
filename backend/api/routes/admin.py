@@ -37,7 +37,7 @@ def _get_session_events(sids: list[str]) -> dict[str, list[str]]:
 
 @router.get("/stats")
 async def admin_stats():
-    from db import _get_conn
+    from db import _get_conn, get_visit_stats
 
     conn, cur = _get_conn()
 
@@ -56,11 +56,18 @@ async def admin_stats():
     cur.execute("SELECT COUNT(*) FROM sessions WHERE status = 'done' AND cancel = 0")
     completed = cur.fetchone()[0]
 
+    cur.execute("SELECT COUNT(*) FROM users")
+    total_users = cur.fetchone()[0]
+
     cur.execute("SELECT COUNT(*) FROM leads")
     total_leads = cur.fetchone()[0]
 
-    cur.execute("SELECT SUM(scraped) FROM sessions")
-    total_raw = cur.fetchone()[0] or 0
+    cur.execute("""
+        SELECT COALESCE(SUM(CASE WHEN s.scraped > j.cnt THEN s.scraped ELSE j.cnt END), 0)
+        FROM sessions s
+        LEFT JOIN (SELECT session_id, COUNT(*) as cnt FROM jobs WHERE is_raw = 0 GROUP BY session_id) j ON j.session_id = s.id
+    """)
+    total_raw = cur.fetchone()[0]
 
     cur.execute("SELECT COUNT(*) FROM jobs WHERE is_raw = 0")
     total_relevant = cur.fetchone()[0]
@@ -91,18 +98,25 @@ async def admin_stats():
             "total": r["total"], "cancelled": r["cancelled"], "completed": r["completed"],
         }
 
+    visit_stats = get_visit_stats()
+
     return {
         "total_sessions": total_sessions,
         "completed": completed,
         "cancelled": cancelled,
         "abandoned": abandoned,
         "errors": errors,
+        "total_users": total_users,
         "total_leads": total_leads,
         "total_raw_jobs": total_raw,
         "total_relevant_jobs": total_relevant,
         "avg_duration_seconds": avg_duration,
         "daily": daily,
         "by_mode": by_mode,
+        "total_visits": visit_stats["total_visits"],
+        "unique_visitors": visit_stats["unique_visitors"],
+        "visit_avg_duration_seconds": visit_stats["avg_duration_seconds"],
+        "devices": visit_stats["devices"],
     }
 
 
@@ -226,6 +240,20 @@ async def admin_scores():
     distribution = [{"range": f"{k}-{k+9}", "count": v} for k, v in sorted(bins.items())]
 
     return {"scores": scores, "distribution": distribution}
+
+
+@router.get("/registrations")
+async def admin_registrations():
+    from db import get_all_users
+
+    return {"registrations": get_all_users(limit=500)}
+
+
+@router.get("/visits")
+async def admin_visits():
+    from db import get_visits, get_visit_stats
+
+    return {"visits": get_visits(limit=200), "stats": get_visit_stats()}
 
 
 @router.get("/leads")

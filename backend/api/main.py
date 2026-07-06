@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Mount
-from api.routes import jobs, scrape, email, resume, roles, states, events, leads, admin, auth, profile, saved_jobs
+from api.routes import jobs, scrape, email, resume, roles, states, events, leads, admin, auth, profile, saved_jobs, visits
 import json
 from db import init_db
 
@@ -44,17 +44,8 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def log_visitors(request: Request, call_next):
-    response = await call_next(request)
-    path = request.url.path
-    if path not in ("/health", "/logs", "/favicon.ico") and not path.startswith("/static") and not path.startswith("/api"):
-        from utils.visitor_log import log_visitor
-        ip = request.client.host if request.client else "unknown"
-        ua = request.headers.get("user-agent", "")
-        ref = request.headers.get("referer", "")
-        log_visitor(ip, path, ua, ref)
-    return response
+# Visit logging is handled client-side via the frontend beacon (/api/visit/start, /api/visit/end)
+# which captures device type, duration, path, and referer accurately.
 
 
 app.include_router(jobs.router)
@@ -69,6 +60,7 @@ app.include_router(admin.router)
 app.include_router(auth.router)
 app.include_router(profile.router)
 app.include_router(saved_jobs.router)
+app.include_router(visits.router)
 
 
 @app.on_event("startup")
@@ -103,11 +95,13 @@ async def health():
 
 @app.get("/logs")
 async def view_logs():
-    from utils.visitor_log import LOG_FILE
-    if os.path.isfile(LOG_FILE):
-        with open(LOG_FILE, encoding="utf-8") as f:
-            return PlainTextResponse(f.read())
-    return PlainTextResponse("(no visitors yet)")
+    from db import get_visits
+    visits = get_visits(limit=500)
+    lines = ["timestamp | ip | location | path | device | duration"]
+    for v in visits:
+        loc = ", ".join(filter(None, [v.get("country", ""), v.get("region", ""), v.get("city", "")])) or "-"
+        lines.append(f"{v['created_at']} | {v['ip_address']} | {loc} | {v['path']} | {v['device_type']} | {v['duration_seconds']}s")
+    return PlainTextResponse("\n".join(lines) if lines else "(no visits yet)")
 
 
 # Admin dashboard redirect

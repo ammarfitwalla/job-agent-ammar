@@ -146,52 +146,20 @@ aside::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
 
 /* ===== Step Progress ===== */
-.step-icon {
-  position: relative;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.step-icon > svg,
-.step-icon > .step-circle {
-  position: absolute;
-  inset: 0;
-}
-.step-circle {
-  width: 36px;
-  height: 36px;
+.timeline-active::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 700;
-  margin: 2px;
+  background: #3b82f6;
+  animation: timeline-pulse 1.2s ease-in-out infinite;
 }
-.step-pending-circle {
-  background: #e2e8f0;
-  color: #94a3b8;
+@keyframes timeline-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.3; transform: scale(0.7); }
 }
-
-.step-pending {
-  opacity: 0.4;
-}
-.step-active {
-  opacity: 1;
-}
-.step-completed {
-  opacity: 1;
-}
-.step-completed .step-circle {
-  background: #dcfce7;
-  color: #16a34a;
-}
-.step-label {
-  color: #1e293b;
-}
-
 @keyframes fadeOutUp {
   from { opacity: 1; transform: translateY(0); }
   to   { opacity: 0; transform: translateY(-10px); }
