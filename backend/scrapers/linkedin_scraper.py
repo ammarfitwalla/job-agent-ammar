@@ -298,6 +298,7 @@ def _scrape_http(roles=None, location="", internship_mode=False, results_wanted=
     seen_urls = set()
     all_jobs = []
 
+    results_wanted = results_wanted * 2 if internship_mode else results_wanted
     per_role = max(1, results_wanted // len(roles))
 
     for i, role in enumerate(roles):

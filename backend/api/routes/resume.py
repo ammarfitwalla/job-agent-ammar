@@ -98,23 +98,24 @@ async def delete_resumes():
 
 @router.post("/keywords", response_model=ResumeKeywordsResponse)
 async def extract_keywords(req: ResumeKeywordsRequest):
-    try:
-        prompt = EXTRACT_PROMPT.format(resume=req.resume_text)
-        print(f"[KEYWORDS] Calling Groq API (prompt_len={len(prompt)})")
-        response = _groq.chat(prompt, max_tokens=2000)
-        print(f"[KEYWORDS] LLM response received ({len(response)} chars)")
-        if response:
-            print(f"[KEYWORDS] First 200 chars: {response[:200]}")
-
-        parsed = extract_json(response)
-        if isinstance(parsed, list):
-            words = parsed[:30]
-        else:
-            print(f"[KEYWORDS] LLM parse failed, returning empty")
-            words = []
-    except Exception as e:
-        print(f"[KEYWORDS] Exception: {e}, returning empty")
-        words = []
+    words = []
+    for attempt in range(2):
+        try:
+            prompt = EXTRACT_PROMPT.format(resume=req.resume_text)
+            print(f"[KEYWORDS] Calling Groq API attempt {attempt+1}/2 (prompt_len={len(prompt)})")
+            response = _groq.chat(prompt, max_tokens=2000)
+            print(f"[KEYWORDS] LLM response received ({len(response)} chars)")
+            if response:
+                print(f"[KEYWORDS] First 200 chars: {response[:200]}")
+                parsed = extract_json(response)
+                if isinstance(parsed, list):
+                    words = parsed[:30]
+                    break
+                print(f"[KEYWORDS] Parse failed, attempt {attempt+1}/2")
+            else:
+                print(f"[KEYWORDS] Empty response, attempt {attempt+1}/2")
+        except Exception as e:
+            print(f"[KEYWORDS] Exception on attempt {attempt+1}/2: {e}")
 
     keywords = [{"word": w, "suggested": True, "selected": True} for w in words]
     return ResumeKeywordsResponse(keywords=keywords)

@@ -880,7 +880,15 @@ function renderRoles(categories) {
     allRoles = allRoles.filter(r => words.every(w => r.toLowerCase().includes(w)));
   }
   if (!allRoles.length && q) {
-    c.innerHTML = '<span class="text-xs text-slate-400 italic px-2">No matching roles</span>';
+    const alreadyAdded = customRoles.includes(q);
+    if (alreadyAdded) {
+      c.innerHTML = '<span class="text-xs text-slate-400 italic px-2">Role already added</span>';
+    } else {
+      c.innerHTML = `<button class="w-full text-left flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-emerald-50 cursor-pointer text-xs text-emerald-700 font-medium transition-colors" onclick="addRoleFromSearch('${q.replace(/'/g, "\\'")}')">
+        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        <span>Add <strong>${q}</strong> role</span>
+      </button>`;
+    }
     return;
   }
   c.innerHTML = allRoles.map(r =>
@@ -891,12 +899,26 @@ function renderRoles(categories) {
   ).join("");
 }
 
+function toggleRoleClearBtn() {
+  const btn = document.getElementById("clearRoleSearch");
+  if (!btn) return;
+  btn.classList.toggle("hidden", !document.getElementById("roleSearchInput").value);
+}
+
 function filterRoles() {
   roleSearchQuery = document.getElementById("roleSearchInput").value;
+  toggleRoleClearBtn();
   if (roleCategories) renderRoles(roleCategories);
 }
 
 document.getElementById("roleSearchInput").addEventListener("input", filterRoles);
+document.getElementById("clearRoleSearch").addEventListener("click", () => {
+  document.getElementById("roleSearchInput").value = "";
+  roleSearchQuery = "";
+  toggleRoleClearBtn();
+  if (roleCategories) renderRoles(roleCategories);
+  document.getElementById("roleSearchInput").focus();
+});
 
 document.getElementById("roleSearchInput").addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
@@ -913,17 +935,15 @@ document.getElementById("roleSearchInput").addEventListener("keydown", (e) => {
       }
       document.getElementById("roleSearchInput").value = "";
       roleSearchQuery = "";
+      toggleRoleClearBtn();
       if (roleCategories) renderRoles(roleCategories);
     } else {
       addRoleFromSearch(val);
+      toggleRoleClearBtn();
     }
   }
 });
 
-document.getElementById("addRoleBtn").addEventListener("click", () => {
-  const val = document.getElementById("roleSearchInput").value.trim();
-  if (val) addRoleFromSearch(val);
-});
 
 function renderCustomRoles() {
   const c = document.getElementById("customRoles");

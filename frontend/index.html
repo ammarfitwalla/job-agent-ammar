@@ -99,10 +99,11 @@
             <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
               <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
-            <input id="roleSearchInput" type="text" class="w-full border border-slate-200 rounded-lg pl-8 pr-10 py-1.5 text-xs outline-none focus:border-slate-400 transition-colors bg-white" placeholder="Search or add a role..." autocomplete="off">
-            <button id="addRoleBtn" class="absolute inset-y-0 right-0 pr-2.5 flex items-center text-indigo-500 hover:text-indigo-700 transition-colors" title="Add typed text as a custom role" tabindex="-1">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            <input id="roleSearchInput" type="text" class="w-full border border-slate-200 rounded-lg pl-8 pr-8 py-1.5 text-xs outline-none focus:border-slate-400 transition-colors bg-white" placeholder="Search or add a role..." autocomplete="off">
+            <button id="clearRoleSearch" class="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors hidden" title="Clear search">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
+
           </div>
           <div id="roles" class="space-y-1.5 max-h-60 overflow-y-auto no-scrollbar pr-1"></div>
           <div id="selectedRoles" class="flex flex-wrap gap-1.5"></div>
