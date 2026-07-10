@@ -40,3 +40,7 @@ python-jobspy
 python-multipart
 PyMuPDF
 python-docx
+
+# Twitter marketing
+httpx
+apscheduler

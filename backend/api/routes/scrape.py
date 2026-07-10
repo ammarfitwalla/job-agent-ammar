@@ -1,6 +1,7 @@
 import os
 import threading
 import tempfile
+from typing import Optional
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Query
 from api.schemas import ScrapeRequest
@@ -82,7 +83,8 @@ _TECH_KEYWORDS = {
 
 
 def _score_jobs(jobs: list, keywords: list[str], resume_text: str,
-                sid: str = None, internship_mode: bool = False) -> list:
+                sid: str = None, internship_mode: bool = False,
+                roles: Optional[list] = None) -> list:
     from match_engine.relevance_engine import filter_jobs
 
     def on_scored(job):
@@ -95,6 +97,7 @@ def _score_jobs(jobs: list, keywords: list[str], resume_text: str,
         min_threshold = 0
     kw = dict(llm_weight=0.85, kw_weight=0.15) if internship_mode else {}
     relevant = filter_jobs(jobs, min_score=min_threshold, keywords=keywords, resume=resume_text,
+                           roles=roles,
                            progress_callback=on_scored if sid else None,
                            internship_mode=internship_mode, sid=sid, **kw,
                            cancel_check=lambda: _is_cancelled(sid))
@@ -216,7 +219,7 @@ def _scrape_normal(sid, sites, keywords, resume_text, roles,
         update_session(sid, status="done")
         return
 
-    relevant = _score_jobs(all_jobs, keywords, resume_text, sid=sid, internship_mode=False)
+    relevant = _score_jobs(all_jobs, keywords, resume_text, sid=sid, internship_mode=False, roles=roles)
     set_filtered_jobs(sid, relevant)
     _save_elapsed(sid)
     update_session(sid, status="done", filtered_gen=1)
@@ -316,6 +319,7 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
             min_threshold = 35
             batch = filter_jobs(new_candidates, min_score=min_threshold,
                                 keywords=keywords, resume=resume_text,
+                                roles=roles,
                                 progress_callback=lambda j: add_filtered_job(sid, j),
                                 internship_mode=True, sid=sid,
                                 llm_weight=0.85, kw_weight=0.15,

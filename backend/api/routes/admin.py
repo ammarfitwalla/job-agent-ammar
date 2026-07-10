@@ -261,3 +261,28 @@ async def admin_leads():
     from db import get_leads
 
     return {"leads": get_leads(limit=500)}
+
+
+@router.get("/twitter/status")
+async def twitter_status():
+    from config import X_ENABLED, X_SCHEDULE, X_TEMPLATES, X_ACCESS_TOKEN, X_REFRESH_TOKEN
+
+    return {
+        "enabled": X_ENABLED,
+        "has_tokens": bool(X_ACCESS_TOKEN) and bool(X_REFRESH_TOKEN),
+        "schedule": X_SCHEDULE,
+        "templates": X_TEMPLATES,
+    }
+
+
+@router.post("/twitter/tweet")
+async def twitter_post(req: dict):
+    text = req.get("text", "").strip()
+    if not text:
+        return {"ok": False, "error": "Tweet text is required"}
+    if len(text) > 280:
+        return {"ok": False, "error": "Tweet exceeds 280 characters"}
+    from marketing.twitter import TwitterClient
+    client = TwitterClient()
+    ok, err = client.post_tweet(text)
+    return {"ok": ok, "error": err if not ok else None}

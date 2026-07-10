@@ -1,5 +1,6 @@
 # AI + keyword scoring engine
 import copy
+import re
 import json
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -17,6 +18,39 @@ _internship_provider = CerebrasProvider(
     base_url=CEREBRAS_API_URL,
     rate_limit=INTERNSHIP_CEREBRAS_RATE,
 )
+
+
+def role_match_count(title: str, roles: Optional[list] = None) -> int:
+    if not roles:
+        return 0
+    title_lower = title.lower()
+    count = 0
+    for role in roles:
+        role_lower = role.lower()
+        words = role_lower.split()
+        if not words:
+            continue
+        if all(
+            any(
+                _word_match(tw, w)
+                for tw in re.findall(r'[a-z]+', title_lower)
+            )
+            for w in words
+        ):
+            count += 1
+    return count
+
+
+def _word_match(tw: str, rw: str) -> bool:
+    """Check if two words match via exact, prefix, or ≥60% common prefix."""
+    if tw == rw:
+        return True
+    if tw.startswith(rw) or rw.startswith(tw):
+        return True
+    i = 0
+    while i < min(len(tw), len(rw)) and tw[i] == rw[i]:
+        i += 1
+    return i >= 3 and i / min(len(tw), len(rw)) >= 0.6
 
 
 def keyword_score(
@@ -192,7 +226,8 @@ def filter_jobs(
     min_score: int = 50,
     keywords: Optional[list] = None,
     resume: Optional[str] = None,
-    llm_candidate_limit: int = 10,
+    llm_candidate_limit: int = 20,
+    roles: Optional[list] = None,
     llm_weight: float = 0.7,
     kw_weight: float = 0.3,
     max_workers: int = 3,
@@ -207,23 +242,23 @@ def filter_jobs(
 
     log(f"[MATCH ENGINE] {len(jobs)} jobs received", sid)
 
-    limit = llm_candidate_limit * 2 if internship_mode else llm_candidate_limit
+    limit = min(llm_candidate_limit * 2, 30) if internship_mode else llm_candidate_limit
     # print(f"[DBG RE] filter_jobs: limit={limit} (internship_boost={'yes' if internship_mode else 'no'})")
 
-    kw_scored = [
-        (job, keyword_score(job["title"], job["description"], job.get("tags"), keywords))
+    scored = [
+        (job, keyword_score(job["title"], job["description"], job.get("tags"), keywords), role_match_count(job["title"], roles))
         for job in jobs
     ]
 
-    candidates = sorted(kw_scored, key=lambda x: x[1], reverse=True)[:limit]
-    print(f"[DBG RE] filter_jobs: top {len(candidates)} kw_scores: {[s for _,s in candidates[:5]]}")
+    candidates = sorted(scored, key=lambda x: (x[2] > 0, x[1]), reverse=True)[:limit]
+    print(f"[DBG RE] filter_jobs: top {len(candidates)} kw_scores: {[s for _,s,_ in candidates[:5]]}")
 
     batch_size = BATCH_SIZE_RATIO[internship_mode]
     # print(f"[DBG RE] filter_jobs: batch_size={batch_size} (internship={internship_mode})")
 
     log(f"[MATCH ENGINE] {len(candidates)}/{len(jobs)} sent to LLM (limit={llm_candidate_limit}, batch_size={batch_size})", sid)
 
-    candidate_jobs = [job for job, _ in candidates]
+    candidate_jobs = [job for job, _, _ in candidates]
     batches = [candidate_jobs[i:i + batch_size] for i in range(0, len(candidate_jobs), batch_size)]
 
     log(f"[MATCH ENGINE] {len(batches)} batch(es) of up to {batch_size}", sid)
