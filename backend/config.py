@@ -131,3 +131,20 @@ EMAIL_PORT=int(os.environ.get("EMAIL_PORT", "587"))
 EMAIL_USER=os.environ.get("EMAIL_USER", "")
 EMAIL_PASSWORD=os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_TO=os.environ.get("EMAIL_TO", "")
+
+X_ENABLED = "True"
+X_CLIENT_ID = os.environ.get("X_CLIENT_ID", "")
+X_CLIENT_SECRET = os.environ.get("X_CLIENT_SECRET", "")
+X_BEARER_TOKEN = os.environ.get("X_BEARER_TOKEN", "")
+X_ACCESS_TOKEN = os.environ.get("X_ACCESS_TOKEN", "")
+X_REFRESH_TOKEN = os.environ.get("X_REFRESH_TOKEN", "")
+
+X_SCHEDULE = [
+    {"day": "mon", "window": "09:00-11:00", "template": "promo_1"},
+    {"day": "tue", "window": "10:00-12:00", "template": "feature_1"},
+]
+
+X_TEMPLATES = {
+    "promo_1": "🚀 AI Job Agent scans LinkedIn, Indeed, RemoteOK & 5 more job boards — finds roles matching YOUR resume. Try it free \u2192 https://job-agent.space",
+    "feature_1": "🆕 Internship mode is live! Finds intern & entry-level roles across 8 job boards with AI scoring. #internship #jobs",
+}
