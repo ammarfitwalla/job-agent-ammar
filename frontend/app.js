@@ -755,6 +755,8 @@ function clearSearchState() {
   if (fb) fb.classList.add("hidden");
   const tl = document.getElementById("timeline");
   if (tl) tl.innerHTML = "";
+  const sr = document.getElementById("suggestedRoles");
+  if (sr) { sr.innerHTML = ""; sr.classList.add("hidden"); }
   hideElement("stepProgress");
   document.title = "AI Job Agent";
   setStatus("", "");
@@ -1518,3 +1520,22 @@ function renderJobs(jobs) {
     }
   } catch {}
 })();
+
+// ===== HOW IT WORKS MODAL =====
+document.getElementById('howItWorksBtn').addEventListener('click', function() {
+  const m = document.getElementById('howItWorksModal');
+  m.classList.remove('hidden');
+  m.classList.add('flex');
+});
+document.getElementById('howItWorksClose').addEventListener('click', closeHowItWorks);
+document.getElementById('howItWorksModal').addEventListener('click', function(e) {
+  if (e.target === this) closeHowItWorks();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeHowItWorks();
+});
+function closeHowItWorks() {
+  const m = document.getElementById('howItWorksModal');
+  m.classList.add('hidden');
+  m.classList.remove('flex');
+}
