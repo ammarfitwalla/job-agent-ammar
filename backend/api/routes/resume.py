@@ -1,14 +1,12 @@
-import os, shutil, zipfile, io, time
+import os, shutil, zipfile, io, time, json
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from utils.json_parser import extract_json
+from llm.llm_client import LLMClient
+from config import TARGET_ROLES
 
 router = APIRouter(prefix="/resume", tags=["resume"])
-
-from config import GROQ_API_KEY, GROQ_MODEL
-from llm.providers import GroqProvider
-_groq = GroqProvider(api_key=GROQ_API_KEY, model=GROQ_MODEL)
 
 RESUME_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
 os.makedirs(RESUME_DIR, exist_ok=True)
@@ -20,19 +18,23 @@ class ResumeKeywordsRequest(BaseModel):
 
 class ResumeKeywordsResponse(BaseModel):
     keywords: list[dict]
+    suggested_roles: list[str] = []
 
 
-EXTRACT_PROMPT = """Extract the top 20 most relevant keywords from this resume. Only include skills, tools, software, concepts, certifications, and domain expertise that explicitly appear in the resume text.
+EXTRACT_PROMPT = """You are a career coach. Given a resume, do TWO things:
 
-Rules:
-- ONLY extract keywords that are literally written in the resume
-- Do NOT guess, infer, or add related terms
-- Return ONLY a JSON array of lowercase strings
-- No markdown, no explanation
-- Max 20 items
+PART 1: Extract the top 20 most relevant keywords (skills, tools, certifications, domain expertise) that explicitly appear in the resume text. ONLY extract what is literally written.
+
+PART 2: Suggest 0-3 job roles from the available list that best match the candidate's OVERALL career track and domain (e.g., data analytics, healthcare, finance, engineering). Consider education, work history titles, and primary domain FIRST. Do NOT suggest roles based on a single skill keyword. ONLY suggest if highly confident (80%+). Fewer is better than wrong.
+
+Available roles: {available_roles}
 
 Resume:
-{resume}"""
+{resume}
+
+Return ONLY this JSON (no markdown, no explanation):
+{{"keywords": ["keyword1", "keyword2", ...], "suggested_roles": ["Role 1", "Role 2"]}}
+"""
 
 
 def _extract_text(filepath: str) -> str:
@@ -99,23 +101,33 @@ async def delete_resumes():
 @router.post("/keywords", response_model=ResumeKeywordsResponse)
 async def extract_keywords(req: ResumeKeywordsRequest):
     words = []
+    suggested = []
     for attempt in range(2):
         try:
-            prompt = EXTRACT_PROMPT.format(resume=req.resume_text)
-            print(f"[KEYWORDS] Calling Groq API attempt {attempt+1}/2 (prompt_len={len(prompt)})")
-            response = _groq.chat(prompt, max_tokens=2000)
+            prompt = EXTRACT_PROMPT.format(available_roles=json.dumps(TARGET_ROLES), resume=req.resume_text)
+            print(f"[KEYWORDS] Calling LLM attempt {attempt+1}/2 (prompt_len={len(prompt)})")
+            response = LLMClient.chat(prompt, max_tokens=2000)
             print(f"[KEYWORDS] LLM response received ({len(response)} chars)")
             if response:
                 print(f"[KEYWORDS] First 200 chars: {response[:200]}")
                 parsed = extract_json(response)
-                if isinstance(parsed, list):
+                if isinstance(parsed, dict):
+                    words = parsed.get("keywords", [])[:30]
+                    suggested = parsed.get("suggested_roles", [])[:3]
+                    if words:
+                        break
+                    print(f"[KEYWORDS] Dict parsed but empty keywords, attempt {attempt+1}/2")
+                elif isinstance(parsed, list):
                     words = parsed[:30]
-                    break
-                print(f"[KEYWORDS] Parse failed, attempt {attempt+1}/2")
+                    print(f"[KEYWORDS] Legacy list format, attempt {attempt+1}/2")
+                    if words:
+                        break
+                else:
+                    print(f"[KEYWORDS] Parse failed type={type(parsed).__name__}, attempt {attempt+1}/2")
             else:
                 print(f"[KEYWORDS] Empty response, attempt {attempt+1}/2")
         except Exception as e:
             print(f"[KEYWORDS] Exception on attempt {attempt+1}/2: {e}")
 
     keywords = [{"word": w, "suggested": True, "selected": True} for w in words]
-    return ResumeKeywordsResponse(keywords=keywords)
+    return ResumeKeywordsResponse(keywords=keywords, suggested_roles=suggested)

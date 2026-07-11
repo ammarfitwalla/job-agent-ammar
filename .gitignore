@@ -8,3 +8,5 @@ resumes/
 server_log.txt
 *.db
 backend/config.py
+
+backend/scrapers/linkedin_debug/

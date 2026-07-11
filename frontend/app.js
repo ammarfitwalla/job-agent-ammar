@@ -809,6 +809,7 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
     const r = await fetch("/resume/keywords", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resume_text: resume }) });
     const d = await r.json();
     renderKeywords(d.keywords);
+    if (d.suggested_roles) renderSuggestedRoles(d.suggested_roles);
     setStatus("Keywords successfully extracted.", "green");
   } catch (e) { setStatus("Failed to extract keywords.", "red"); }
   finally { btn.textContent = "✨ Auto-Extract Keywords"; btn.disabled = false; }
@@ -823,6 +824,36 @@ function renderKeywords(kws) {
       <span>${k.word}</span>
     </label>`).join("");
   updateKwCount();
+}
+
+function renderSuggestedRoles(roles) {
+  const c = document.getElementById("suggestedRoles");
+  if (!c || !roles || !roles.length) { if (c) c.classList.add("hidden"); return; }
+  const allRoles = Object.values(roleCategories || {}).flat();
+    c.innerHTML = '<span class="text-[10px] font-medium text-indigo-500 mr-1 self-center">✨ Recommended</span>' +
+    roles.map(r => {
+      const exists = allRoles.includes(r);
+      const isSelected = selectedRoles.has(r) || customRoles.includes(r);
+      return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border cursor-pointer transition-colors ${isSelected ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100'}" onclick="selectSuggestedRole('${r.replace(/'/g, "\\'")}')">
+        ${r} <span class="text-indigo-400">+</span>
+      </span>`;
+    }).join("");
+  c.classList.remove("hidden");
+}
+
+function selectSuggestedRole(role) {
+  const allRoles = Object.values(roleCategories || {}).flat();
+  if (allRoles.includes(role)) {
+    const cb = document.querySelector(`.role-cb[value="${role}"]`);
+    if (cb) {
+      cb.checked = true;
+      selectedRoles.add(role);
+      cb.dispatchEvent(new Event("change"));
+    }
+  } else {
+    addRoleFromSearch(role);
+  }
+  updateRoleCount();
 }
 
 function updateKwCount() {
