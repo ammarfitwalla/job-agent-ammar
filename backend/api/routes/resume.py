@@ -25,7 +25,13 @@ EXTRACT_PROMPT = """You are a career coach. Given a resume, do TWO things:
 
 PART 1: Extract the top 20 most relevant keywords (skills, tools, certifications, domain expertise) that explicitly appear in the resume text. ONLY extract what is literally written.
 
-PART 2: Suggest 0-3 job roles from the available list that best match the candidate's OVERALL career track and domain (e.g., data analytics, healthcare, finance, engineering). Consider education, work history titles, and primary domain FIRST. Do NOT suggest roles based on a single skill keyword. ONLY suggest if highly confident (80%+). Fewer is better than wrong.
+PART 2: From the available roles list, decide 0-3 roles matching the candidate's career track.
+
+Priority: (1) job titles AND what the bullet points under each role actually describe doing/building — a title alone (e.g. "Senior Associate", "Consultant") is often uninformative, so read the bullets to determine real domain, (2) dominant domain across most recent/primary work experience, (3) degree/field of study — use only as a tiebreaker, or when work history is too sparse/early-career to judge on its own.
+Do NOT suggest a role based on one skill (Python ≠ "Data Scientist", Excel ≠ "Financial Analyst", SQL ≠ "Database Administrator").
+No clear match -> return an empty array. Empty is correct and preferred over a weak guess.
+
+First think step-by-step about what the titles and bullets actually show for domain, then return ONLY the JSON below.
 
 Available roles: {available_roles}
 
