@@ -52,15 +52,18 @@ def _save_elapsed(sid):
 
 def _harvest_companies(jobs: list):
     from config import COMPANIES
-    from db import add_custom_company
+    from db import batch_add_custom_companies
 
     seen = set()
+    companies = []
     for job in jobs:
         company = job.get("company", "").strip()
         if company and company not in seen:
             seen.add(company)
             if company not in COMPANIES:
-                add_custom_company(company)
+                companies.append(company)
+    if companies:
+        batch_add_custom_companies(companies)
 
 
 def _run_scrape(req: ScrapeRequest):

@@ -941,6 +941,25 @@ def add_custom_company(name: str) -> bool:
             return False
 
 
+def batch_add_custom_companies(names: list[str]) -> int:
+    """Insert multiple companies in a single transaction. Returns count inserted."""
+    names = sorted(set(n.strip() for n in names if n.strip()))
+    if not names:
+        return 0
+    now = _now()
+    count = 0
+    with _write_lock:
+        conn, cur = _get_conn()
+        for name in names:
+            try:
+                cur.execute("INSERT INTO custom_companies (name, created_at) VALUES (?, ?)", (name, now))
+                count += 1
+            except sqlite3.IntegrityError:
+                pass
+        conn.commit()
+    return count
+
+
 def get_custom_companies() -> list[str]:
     conn, cur = _get_conn()
     cur.execute("SELECT name FROM custom_companies ORDER BY name")
