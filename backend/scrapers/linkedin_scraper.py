@@ -10,7 +10,7 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from utils.rate_limiter import delay
+from utils.delay import delay
 
 DEBUG_DIR = os.path.join(os.path.dirname(__file__), "linkedin_debug")
 

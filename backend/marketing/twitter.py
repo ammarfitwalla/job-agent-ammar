@@ -2,7 +2,7 @@ import httpx
 from utils.logger import log
 from config import X_CLIENT_ID, X_CLIENT_SECRET, X_ACCESS_TOKEN, X_REFRESH_TOKEN
 
-_TOKEN_URL = "https://api.oauth2.twitter.com/oauth2/token"
+_TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
 _API_URL = "https://api.twitter.com/2"
 
 
@@ -17,12 +17,15 @@ class TwitterClient:
             log("[X] Cannot refresh — missing refresh_token or client_id")
             return False
         try:
+            import base64
+            basic = base64.b64encode(f"{X_CLIENT_ID}:{X_CLIENT_SECRET}".encode()).decode()
             r = self._http.post(_TOKEN_URL, data={
                 "grant_type": "refresh_token",
-                "client_id": X_CLIENT_ID,
-                "client_secret": X_CLIENT_SECRET,
                 "refresh_token": self._refresh_token,
-            }, headers={"Content-Type": "application/x-www-form-urlencoded"})
+            }, headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Authorization": f"Basic {basic}",
+            })
             if r.status_code == 200:
                 data = r.json()
                 self._access_token = data.get("access_token", self._access_token)

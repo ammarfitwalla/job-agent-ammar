@@ -95,7 +95,7 @@ def scrape_remoteok(roles=None):
 
                 log(f"[REMOTEOK] Match '{matched_role}': {jobs[-1]['title']} @ {jobs[-1]['company']}")
 
-            from utils.rate_limiter import delay as _rd
+            from utils.delay import delay as _rd
             _rd(1, 2)
 
         log(f"[SCRAPER] RemoteOK done: {len(jobs)} jobs across {page} pages")

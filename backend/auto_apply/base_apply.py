@@ -47,5 +47,5 @@ def fill_common_fields(page, job, resume_path, cover_letter_text):
                 page.click('button[type="submit"]')
                 log("[APPLY] Submitted application automatically")
                 time.sleep(2)
-        except:
+        except Exception:
             log("[APPLY] No submit button detected")

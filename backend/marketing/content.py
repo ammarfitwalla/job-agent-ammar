@@ -21,5 +21,5 @@ def pick_time(window: str) -> tuple[int, int]:
         end_min = int(eh) * 60 + int(em)
         pick = random.randint(start_min, end_min)
         return divmod(pick, 60)
-    except:
+    except Exception:
         return 9, 0

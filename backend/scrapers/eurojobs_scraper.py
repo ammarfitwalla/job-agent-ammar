@@ -54,7 +54,7 @@ def scrape_eurojobs():
                         "url": job_url,
                         "description": f"Job: {title}"
                     })
-                except: continue
+                except Exception: continue
             
             if jobs:
                 log(f"[SCRAPER] EuroJobs found: {len(jobs)} jobs (via fallback)")

@@ -8,14 +8,14 @@
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  @import url('/style.css');
+
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: #f8fafc; /* slate-50 */
     color: #0f172a; /* slate-900 */
     -webkit-font-smoothing: antialiased;
   }
-  
-  @import url('/style.css');
 
   /* Custom Select Dropdown Arrow */
   .status-select {
@@ -50,7 +50,7 @@
       <div class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-sm shadow-sm transition-colors duration-300">JA</div>
       <div>
         <h1 class="text-base font-semibold tracking-tight text-slate-900 leading-tight">AI Job Agent</h1>
-        <p class="text-[11px] text-slate-500 leading-tight mt-0.5">Find jobs where you actually have a shot.</p>
+        <p class="text-xs text-slate-500 leading-tight mt-0.5">Find jobs where you actually have a shot.</p>
       </div>
     </a>
     <div class="flex items-center gap-3">
@@ -67,7 +67,12 @@
       </a>
     </div>
   </div>
-</header>
+  </header>
+
+  <!-- Stats Bar -->
+  <div id="statsBar" class="hidden border-b border-slate-100 bg-white/80 backdrop-blur-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 text-xs text-slate-400 flex items-center justify-center gap-2.5 flex-wrap" id="statsContent"></div>
+  </div>
 
 <!-- Main Content -->
 <main class="max-w-4xl mx-auto px-4 sm:px-6 pt-8" id="pageContent">
@@ -100,21 +105,8 @@
       <div class="w-20 h-20 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-3xl font-bold text-white shadow-inner flex-shrink-0" id="avatarLetter">U</div>
       
       <div class="flex-1 min-w-0">
-        <div id="nameDisplay" class="group flex items-center gap-3">
+        <div id="nameDisplay">
           <h2 id="nameText" class="text-2xl font-bold text-slate-900 truncate"></h2>
-          <button class="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100" onclick="enableNameEdit()" title="Edit name">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>
-          </button>
-        </div>
-        
-        <div id="nameEdit" class="hidden my-1">
-          <div class="flex items-center gap-2">
-            <input id="nameInput" type="text" maxlength="50" class="text-2xl font-bold text-slate-900 bg-slate-50 border border-slate-300 rounded-lg px-3 py-1 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 w-full max-w-xs transition-all">
-            <button onclick="saveName()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Save</button>
-            <button onclick="disableNameEdit()" class="text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 p-2 rounded-lg transition-colors">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-          </div>
         </div>
         
         <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-1">
@@ -128,7 +120,55 @@
             <span id="joinedDate"></span>
           </div>
         </div>
+        <div class="flex items-center gap-2 mt-1">
+          <button onclick="enableProfileEdit()" class="text-xs text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 px-2.5 py-1 rounded-lg transition-colors font-medium">Edit Profile</button>
+        </div>
+        <div class="flex flex-wrap gap-3 mt-2 text-sm">
+          <div id="companyDisplay" class="hidden text-slate-600 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21l18 0M3 10l18 0M3 7l9-4 9 4M4 10l0 11M20 10l0 11M8 14l0 3M12 14l0 3M16 14l0 3"/></svg>
+            <span id="companyText"></span>
+          </div>
+          <div id="positionDisplay" class="hidden text-slate-600 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            <span id="positionText"></span>
+          </div>
+          <a id="linkedinDisplay" class="hidden text-indigo-600 hover:text-indigo-700 flex items-center gap-1.5 font-medium" target="_blank" rel="noopener">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            LinkedIn
+          </a>
+          <span id="creditDisplay" class="text-xs text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg font-medium flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            0 referral credits
+          </span>
+        </div>
       </div>
+    </div>
+
+    <!-- Profile Edit Section -->
+    <div id="profileEdit" class="hidden bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-slate-800">Edit Profile</h3>
+        <button onclick="disableProfileEdit()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <input id="profileName" type="text" placeholder="Your name" maxlength="50" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors">
+      <div class="flex flex-wrap gap-1.5">
+        <button type="button" onclick="profileSelectEmploymentStatus('employed')" class="employment-pill active-pill" data-status="employed">Employed</button>
+        <button type="button" onclick="profileSelectEmploymentStatus('student')" class="employment-pill" data-status="student">Student</button>
+        <button type="button" onclick="profileSelectEmploymentStatus('graduate')" class="employment-pill" data-status="graduate">Graduate</button>
+        <button type="button" onclick="profileSelectEmploymentStatus('laid_off')" class="employment-pill" data-status="laid_off">Laid Off</button>
+        <button type="button" onclick="profileSelectEmploymentStatus('career_break')" class="employment-pill" data-status="career_break">Career Break</button>
+      </div>
+      <div id="profileCompanyGroup">
+        <div class="relative">
+          <input id="profileCompany" type="text" placeholder="Company (type to search)" autocomplete="off" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors" oninput="filterProfileCompanyDropdown()" onfocus="filterProfileCompanyDropdown()">
+          <div id="profileCompanyDropdown" class="hidden absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
+        </div>
+      </div>
+      <input id="profilePosition" type="text" placeholder="Position" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors">
+      <input id="profileLinkedin" type="url" placeholder="LinkedIn URL (optional)" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors">
+      <button onclick="saveProfile()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors">Save</button>
     </div>
 
     <!-- Job Tracking Section -->
@@ -142,6 +182,23 @@
 
       <!-- Job List -->
       <div id="jobList" class="space-y-3"></div>
+    </div>
+
+    <!-- Referral Dashboard Section -->
+    <div class="space-y-4 mt-8">
+      <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+        <h3 class="text-lg font-bold text-slate-900">Referral Requests</h3>
+      </div>
+
+      <div class="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 hide-scrollbar" id="referralTabs">
+        <button class="tab-btn px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border flex items-center gap-2 whitespace-nowrap bg-slate-900 text-white shadow-md border-transparent" onclick="switchReferralTab('incoming')" id="tabIncoming">Incoming <span id="incomingCount" class="px-2 py-0.5 rounded-full text-xs font-bold bg-white/20 text-white">0</span></button>
+        <button class="tab-btn px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border flex items-center gap-2 whitespace-nowrap bg-white text-slate-600 border-slate-200 hover:bg-slate-50" onclick="switchReferralTab('outgoing')" id="tabOutgoing">Sent <span id="outgoingCount" class="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500">0</span></button>
+        <button class="tab-btn px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border flex items-center gap-2 whitespace-nowrap bg-white text-slate-600 border-slate-200 hover:bg-slate-50" onclick="switchReferralTab('history')" id="tabHistory">History</button>
+      </div>
+
+      <div id="referralList" class="space-y-3">
+        <div class="text-center text-sm text-slate-400 py-8">Sign in to see referral requests</div>
+      </div>
     </div>
   </div>
 </main>
@@ -221,17 +278,38 @@ async function sendEmailJS(templateParams) {
 }
 document.addEventListener("DOMContentLoaded", initEmailJS);
 
+let _profile = null;
+
 function getProfile() {
-  try {
-    const raw = localStorage.getItem("jobagent_profile");
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
+  if (_profile) return _profile;
+  const raw = localStorage.getItem("jobagent_profile_email");
+  if (raw) return { email: raw };
+  const old = localStorage.getItem("jobagent_profile");
+  if (old) {
+    try {
+      const data = JSON.parse(old);
+      if (data && data.email) {
+        localStorage.setItem("jobagent_profile_email", data.email);
+        localStorage.removeItem("jobagent_profile");
+        return { email: data.email };
+      }
+    } catch {}
+  }
+  return null;
 }
+
 function setProfile(data) {
-  localStorage.setItem("jobagent_profile", JSON.stringify(data));
+  _profile = data;
+  if (data && data.email) {
+    localStorage.setItem("jobagent_profile_email", data.email);
+  } else {
+    localStorage.removeItem("jobagent_profile_email");
+  }
 }
+
 function clearProfile() {
-  localStorage.removeItem("jobagent_profile");
+  _profile = null;
+  localStorage.removeItem("jobagent_profile_email");
 }
 
 function updateNavIcon() {
@@ -240,9 +318,10 @@ function updateNavIcon() {
   link.classList.remove("bg-indigo-50", "border-indigo-200", "hover:bg-indigo-100",
     "text-slate-600", "hover:text-indigo-500", "hover:bg-indigo-50", "bg-slate-100", "border-2", "border-slate-300", "hover:border-indigo-200");
   if (profile) {
-    link.innerHTML = `<span class="w-[20px] h-[20px] rounded-full bg-indigo-500 text-white flex items-center justify-center text-[11px] font-bold leading-none" style="line-height:0">${profile.name.charAt(0).toUpperCase()}</span>`;
+    const initial = profile.name ? profile.name.charAt(0).toUpperCase() : (profile.email ? profile.email.charAt(0).toUpperCase() : "?");
+    link.innerHTML = `<span class="w-[22px] h-[22px] rounded-full bg-indigo-500 text-white flex items-center justify-center text-xs font-bold leading-none" style="line-height:0">${initial}</span>`;
     link.classList.add("bg-indigo-50", "border-indigo-200", "hover:bg-indigo-100");
-    link.title = profile.name;
+    link.title = profile.name || profile.email || "Profile";
   } else {
     link.innerHTML = '<svg class="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>';
     link.classList.add("text-slate-600", "hover:text-indigo-500", "hover:bg-indigo-50", "bg-slate-100", "border-2", "border-slate-300", "hover:border-indigo-200");
@@ -372,7 +451,7 @@ function verifyCode() {
     body: JSON.stringify({ email: _authEmail, code }),
   }).then(r => r.json()).then(d => {
     if (d.ok) {
-      setProfile({ email: d.user.email, name: d.user.name });
+      setProfile({ email: d.user.email, name: d.user.name, company: d.user.company || "", position: d.user.position || "", linkedin_url: d.user.linkedin_url || "", referral_credits: d.user.referral_credits || 0 });
       closeAuthModal();
       loadProfile();
       showToast("Successfully signed in");
@@ -387,8 +466,29 @@ function verifyCode() {
 }
 
 // Setup code inputs
-document.addEventListener("DOMContentLoaded", function() {
-  document.querySelectorAll("#authModal .code-digit").forEach(inp => {
+  async function loadStatsBar() {
+    // Stats come from /api/stats/public — counts are real from the database
+    // Low numbers like "2 onboarded" are just dev/local data, not production
+    const bar = document.getElementById("statsBar");
+    const content = document.getElementById("statsContent");
+    if (!bar || !content) return;
+    try {
+      const r = await fetch("/api/stats/public");
+      const d = await r.json();
+      if (d.total_users === undefined) return;
+      content.innerHTML = [
+        // { label: "onboarded", value: d.total_users },
+        { label: "searches", value: d.total_searches },
+        { label: "scraped", value: d.total_raw_jobs },
+        { label: "matches", value: d.total_relevant_jobs },
+      ].map(s => `<span class="inline-flex items-center gap-1"><span class="font-semibold text-slate-700">${s.value.toLocaleString()}</span> <span class="text-slate-400">${s.label}</span></span>`).join('<span class="text-slate-200">·</span>');
+      bar.classList.remove("hidden");
+    } catch {}
+  }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    loadStatsBar();
+    document.querySelectorAll("#authModal .code-digit").forEach(inp => {
     inp.addEventListener("input", function() {
       if (this.value && this.dataset.idx < "5") {
         const next = document.querySelector(`#authModal .code-digit[data-idx="${parseInt(this.dataset.idx)+1}"]`);
@@ -413,6 +513,7 @@ document.addEventListener("DOMContentLoaded", function() {
   });
   updateNavIcon();
   loadProfile();
+  loadProfileCompanyList();
 });
 
 // ── Profile ──
@@ -436,6 +537,7 @@ async function loadProfile() {
     const r = await fetch(`/api/profile?email=${encodeURIComponent(profile.email)}`);
     const d = await r.json();
     if (d.error) { showToast(d.error); return; }
+    setProfile(d);
     renderProfile(d);
   } catch { 
     // Show mock profile visually if api fails for demo purposes
@@ -446,6 +548,7 @@ async function loadProfile() {
       status_counts: { total: 0 }
     });
   }
+  loadReferrals();
 }
 
 function renderProfile(data) {
@@ -454,50 +557,189 @@ function renderProfile(data) {
   const d = new Date(data.created_at);
   document.getElementById("joinedDate").textContent = "Member since " + d.toLocaleDateString("en-US", { year: "numeric", month: "long" });
   document.getElementById("avatarLetter").textContent = data.name.charAt(0).toUpperCase();
+  const credits = data.referral_credits || 0;
+  const creditEl = document.getElementById("creditDisplay");
+  if (creditEl) creditEl.textContent = credits + " referral credits";
+  
+  const company = data.company || "";
+  const position = data.position || "";
+  const linkedin = data.linkedin_url || "";
+  
+  if (company) {
+    document.getElementById("companyDisplay").classList.remove("hidden");
+    document.getElementById("companyText").textContent = company;
+  } else {
+    document.getElementById("companyDisplay").classList.add("hidden");
+  }
+  if (position) {
+    document.getElementById("positionDisplay").classList.remove("hidden");
+    document.getElementById("positionText").textContent = position;
+  } else {
+    document.getElementById("positionDisplay").classList.add("hidden");
+  }
+  if (linkedin) {
+    document.getElementById("linkedinDisplay").classList.remove("hidden");
+    document.getElementById("linkedinDisplay").href = linkedin;
+  } else {
+    document.getElementById("linkedinDisplay").classList.add("hidden");
+  }
+  
   renderStatusTabs(data.status_counts || {});
   loadSavedJobs();
 }
 
-function enableNameEdit() {
-  document.getElementById("nameDisplay").classList.add("hidden");
-  document.getElementById("nameDisplay").classList.remove("flex");
-  document.getElementById("nameEdit").classList.remove("hidden");
-  document.getElementById("nameInput").value = document.getElementById("nameText").textContent;
-  document.getElementById("nameInput").focus();
+let _profileCompanyList = [];
+
+async function loadProfileCompanyList() {
+  if (_profileCompanyList.length > 0) return;
+  try {
+    const r = await fetch("/api/auth/companies");
+    const d = await r.json();
+    _profileCompanyList = d.companies || [];
+  } catch {}
 }
-function disableNameEdit() {
-  document.getElementById("nameDisplay").classList.remove("hidden");
-  document.getElementById("nameDisplay").classList.add("flex");
-  document.getElementById("nameEdit").classList.add("hidden");
+
+function filterProfileCompanyDropdown() {
+  const input = document.getElementById("profileCompany");
+  const dropdown = document.getElementById("profileCompanyDropdown");
+  const val = input.value.toLowerCase().trim();
+  const matches = val ? _profileCompanyList.filter(c => c.toLowerCase().includes(val)) : _profileCompanyList;
+  let html = matches.slice(0, 30).map(c =>
+    `<div class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 transition-colors" onclick="selectProfileCompany('${c.replace(/'/g, "\\'")}')">${c}</div>`
+  ).join("");
+  if (val && !_profileCompanyList.some(c => c.toLowerCase() === val)) {
+    html += `<div class="px-3 py-2 text-sm cursor-pointer text-indigo-600 border-t border-slate-100 hover:bg-indigo-50 transition-colors font-medium" onclick="addCustomProfileCompany('${val.replace(/'/g, "\\'")}', event)">+ Add "${input.value.trim()}"</div>`;
+  }
+  if (!html) {
+    dropdown.classList.add("hidden");
+    return;
+  }
+  dropdown.innerHTML = html;
+  dropdown.classList.remove("hidden");
 }
-async function saveName() {
+
+async function addCustomProfileCompany(name, event) {
+  event.stopPropagation();
+  await fetch("/api/auth/companies", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ name }),
+  });
+  if (!_profileCompanyList.includes(name)) {
+    _profileCompanyList.push(name);
+    _profileCompanyList.sort();
+  }
+  selectProfileCompany(name);
+}
+
+function selectProfileCompany(name) {
+  document.getElementById("profileCompany").value = name;
+  document.getElementById("profileCompanyDropdown").classList.add("hidden");
+}
+
+const _PROFILE_EMPLOYMENT_LABELS = {
+  employed: "",
+  student: "Student",
+  graduate: "Graduate",
+  laid_off: "Laid Off",
+  career_break: "Career Break",
+};
+
+const _PROFILE_LABEL_TO_STATUS = {
+  "Student": "student",
+  "Graduate": "graduate",
+  "Laid Off": "laid_off",
+  "Career Break": "career_break",
+};
+
+function profileSelectEmploymentStatus(status) {
+  document.querySelectorAll("#profileEdit .employment-pill").forEach(p => p.classList.remove("active-pill"));
+  const pill = document.querySelector(`#profileEdit .employment-pill[data-status="${status}"]`);
+  if (pill) pill.classList.add("active-pill");
+  const group = document.getElementById("profileCompanyGroup");
+  if (group) {
+    group.classList.toggle("hidden", status !== "employed");
+    if (status !== "employed") {
+      document.getElementById("profileCompany").value = "";
+    }
+  }
+}
+
+function enableProfileEdit() {
   const profile = getProfile();
   if (!profile) return;
-  const name = document.getElementById("nameInput").value.trim();
-  if (!name) return;
+  document.getElementById("profileEdit").classList.remove("hidden");
+  document.getElementById("profileName").value = document.getElementById("nameText").textContent || "";
+  const currentCompany = document.getElementById("companyText").textContent || "";
+  const matchedStatus = _PROFILE_LABEL_TO_STATUS[currentCompany];
+  if (matchedStatus) {
+    profileSelectEmploymentStatus(matchedStatus);
+    document.getElementById("profileCompany").value = "";
+  } else {
+    profileSelectEmploymentStatus("employed");
+    document.getElementById("profileCompany").value = currentCompany;
+  }
+  loadProfileCompanyList();
+  filterProfileCompanyDropdown();
+  document.getElementById("profilePosition").value = document.getElementById("positionText").textContent || "";
+  document.getElementById("profileLinkedin").value = document.getElementById("linkedinDisplay").classList.contains("hidden") ? "" : document.getElementById("linkedinDisplay").href;
+  document.getElementById("profileName").focus();
+}
+function disableProfileEdit() {
+  document.getElementById("profileEdit").classList.add("hidden");
+}
+async function saveProfile() {
+  const profile = getProfile();
+  if (!profile) return;
+  const name = document.getElementById("profileName").value.trim();
+  if (!name) {
+    showToast("Name is required");
+    return;
+  }
+  const status = document.querySelector("#profileEdit .employment-pill.active-pill")?.dataset?.status || "employed";
+  const position = document.getElementById("profilePosition").value.trim();
+  const linkedin = document.getElementById("profileLinkedin").value.trim();
+  let company;
+  if (status === "employed") {
+    company = document.getElementById("profileCompany").value.trim();
+  } else {
+    company = _PROFILE_EMPLOYMENT_LABELS[status] || "";
+  }
   try {
-    const r = await fetch("/api/profile/name", {
+    const r = await fetch("/api/profile", {
       method: "PUT", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ email: profile.email, name }),
+      body: JSON.stringify({ email: profile.email, company, position, linkedin_url: linkedin }),
     });
     const d = await r.json();
     if (d.ok) {
-      profile.name = name;
-      setProfile(profile);
-      document.getElementById("nameText").textContent = name;
-      document.getElementById("avatarLetter").textContent = name.charAt(0).toUpperCase();
-      disableNameEdit();
-      showToast("Name updated successfully");
+      setProfile(d.user);
+      saveNameLocally(profile.email, name);
+    } else {
+      showToast("Failed to update");
     }
-  } catch { 
-    // Mock success if api fails for UI purposes
-    profile.name = name;
-    setProfile(profile);
-    document.getElementById("nameText").textContent = name;
-    document.getElementById("avatarLetter").textContent = name.charAt(0).toUpperCase();
-    disableNameEdit();
-    showToast("Name updated successfully");
+  } catch {
+    showToast("Network error");
   }
+}
+
+async function saveNameLocally(email, name) {
+  document.getElementById("nameText").textContent = name;
+  document.getElementById("avatarLetter").textContent = name.charAt(0).toUpperCase();
+  try {
+    const r = await fetch("/api/profile/name", {
+      method: "PUT", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ email, name }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      const profile = getProfile();
+      if (profile) {
+        profile.name = name;
+        setProfile(profile);
+      }
+    }
+  } catch {}
+  disableProfileEdit();
+  showToast("Profile updated");
 }
 
 function renderStatusTabs(counts) {
@@ -512,14 +754,14 @@ function renderStatusTabs(counts) {
   const getCountClass = (isActive) => isActive ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500";
 
   let html = `<button class="tab-btn px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border flex items-center gap-2 whitespace-nowrap ${getTabClass(!_filterStatus)}" onclick="filterJobs('')">
-    All <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${getCountClass(!_filterStatus)}">${counts.total || 0}</span>
+    All <span class="px-2 py-0.5 rounded-full text-xs font-bold ${getCountClass(!_filterStatus)}">${counts.total || 0}</span>
   </button>`;
   
   for (const s of all) {
     if ((counts[s] || 0) > 0 || _filterStatus === s) {
       const isActive = _filterStatus === s;
       html += `<button class="tab-btn px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border flex items-center gap-2 whitespace-nowrap ${getTabClass(isActive)}" data-status="${s}" onclick="filterJobs('${s}')">
-        ${labels[s]} <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${getCountClass(isActive)}">${counts[s] || 0}</span>
+        ${labels[s]} <span class="px-2 py-0.5 rounded-full text-xs font-bold ${getCountClass(isActive)}">${counts[s] || 0}</span>
       </button>`;
     }
   }
@@ -663,6 +905,212 @@ async function removeJob(jobId) {
     showToast("Job removed from saved list");
   }
 }
+
+// ── Referral Dashboard ──
+let _referralTab = "incoming";
+
+function htmlEscape(str) {
+  const div = document.createElement("div");
+  div.appendChild(document.createTextNode(str || ""));
+  return div.innerHTML;
+}
+
+function switchReferralTab(tab) {
+  _referralTab = tab;
+  const tabs = ["incoming", "outgoing", "history"];
+  tabs.forEach(t => {
+    const el = document.getElementById("tab" + t.charAt(0).toUpperCase() + t.slice(1));
+    el.className = tab === t
+      ? "tab-btn px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border flex items-center gap-2 whitespace-nowrap bg-slate-900 text-white shadow-md border-transparent"
+      : "tab-btn px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border flex items-center gap-2 whitespace-nowrap bg-white text-slate-600 border-slate-200 hover:bg-slate-50";
+  });
+  loadReferrals();
+}
+
+async function loadReferrals() {
+  const profile = getProfile();
+  if (!profile) return;
+  const el = document.getElementById("referralList");
+  try {
+    let reqs = [];
+    if (_referralTab === "history") {
+      const [inc, out] = await Promise.all([
+        fetch(`/api/referrals/incoming?email=${encodeURIComponent(profile.email)}`).then(r => r.json()),
+        fetch(`/api/referrals/outgoing?email=${encodeURIComponent(profile.email)}`).then(r => r.json()),
+      ]);
+      reqs = [...(inc.requests || []).map(r => ({ ...r, _direction: "from" })),
+              ...(out.requests || []).map(r => ({ ...r, _direction: "to" }))];
+      reqs.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+    } else {
+      const r = await fetch(`/api/referrals/${_referralTab}?email=${encodeURIComponent(profile.email)}`);
+      const d = await r.json();
+      reqs = d.requests || [];
+    }
+    
+    if (_referralTab === "incoming") {
+      const countEl = document.getElementById("incomingCount");
+      if (countEl) countEl.textContent = reqs.length;
+    }
+    if (_referralTab === "outgoing") {
+      const countEl = document.getElementById("outgoingCount");
+      if (countEl) countEl.textContent = reqs.length;
+    }
+
+    if (reqs.length === 0) {
+      el.innerHTML = `<div class="text-center text-sm text-slate-400 py-8">No ${_referralTab} requests</div>`;
+      return;
+    }
+
+    el.innerHTML = reqs.map(r => {
+      const name = r.from_name || r.to_name || "Unknown";
+      const isIncoming = _referralTab === "incoming" || (_referralTab === "history" && r._direction === "from");
+      const statusColors = {
+        pending: "bg-amber-50 text-amber-700 border-amber-200",
+        accepted: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        declined: "bg-red-50 text-red-700 border-red-200",
+      };
+      const sc = statusColors[r.status] || "bg-slate-50 text-slate-600 border-slate-200";
+
+      let directionLabel = "";
+      if (_referralTab === "history") {
+        directionLabel = r._direction === "from"
+          ? `<span class="text-xs text-slate-400 font-medium">from ${htmlEscape(name)}</span>`
+          : `<span class="text-xs text-slate-400 font-medium">to ${htmlEscape(name)}</span>`;
+      }
+
+      let actions = "";
+      if (isIncoming && r.status === "pending") {
+        actions = `
+          <div class="flex gap-2 mt-2">
+            <button class="text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors" onclick="acceptReferral(${r.id})">Accept</button>
+            <button class="text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg transition-colors" onclick="declineReferral(${r.id})">Decline</button>
+          </div>`;
+      }
+      if (r.status === "accepted" && isIncoming) {
+        actions = r.credit_awarded
+          ? `<p class="text-xs text-emerald-600 font-medium mt-1">✅ Referred — 10 credits earned</p>`
+          : `<button class="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-lg transition-colors mt-2" onclick="completeReferral(${r.id})">Mark as Referred (+10 credits)</button>`;
+      }
+      if (r.status === "accepted" && !isIncoming) {
+        actions = `<p class="text-xs text-emerald-600 font-medium mt-1">✅ Accepted — they can see your contact</p>`;
+      }
+      if (!isIncoming && r.status === "pending") {
+        actions = `<button class="text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg transition-colors mt-2" onclick="withdrawReferral(${r.id})">Withdraw</button>`;
+      }
+
+      return `
+      <div class="bg-white border border-slate-200 rounded-xl p-4">
+        <div class="flex items-start justify-between">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="font-medium text-slate-900 text-sm">${htmlEscape(name)}</span>
+              <span class="text-xs font-medium px-2 py-0.5 rounded-full border ${sc}">${r.status}</span>
+            </div>
+            ${directionLabel}
+            <p class="text-xs text-slate-500 mt-0.5">${htmlEscape(r.job_title || "Job at " + r.company)}</p>
+            ${r.match_score ? `<p class="text-xs text-indigo-600 font-medium mt-0.5">Match score: ${r.match_score}/100</p>` : ""}
+            ${r.message ? `<p class="text-xs text-slate-500 mt-1 italic">${htmlEscape(r.message)}</p>` : ""}
+            ${r.status === "accepted" && isIncoming ? `
+            <div class="mt-2 p-2 bg-indigo-50 border border-indigo-100 rounded-lg space-y-1">
+              <p class="text-xs text-indigo-700 font-medium">Contact revealed</p>
+              <p class="text-xs text-slate-600">${htmlEscape(r.from_email)}</p>
+              ${r.from_linkedin_url ? `<a href="${htmlEscape(r.from_linkedin_url)}" target="_blank" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>LinkedIn Profile</a>` : ""}
+            </div>` : ""}
+          </div>
+          ${r.match_score ? `<div class="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-600 shrink-0">${r.match_score}</div>` : ""}
+        </div>
+        ${actions}
+      </div>`;
+    }).join("");
+  } catch {
+    el.innerHTML = `<div class="text-center text-sm text-slate-400 py-8">Failed to load referrals</div>`;
+  }
+}
+
+async function acceptReferral(id) {
+  const profile = getProfile();
+  if (!profile) return;
+  try {
+    const r = await fetch(`/api/referrals/${id}/accept`, {
+      method: "PUT", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ email: profile.email }),
+    });
+    const d = await r.json();
+    if (d.ok && d.contact) {
+      showToast(`Contact revealed: ${d.contact.email}`);
+      loadReferrals();
+    }
+  } catch {
+    showToast("Failed to accept");
+  }
+}
+
+async function declineReferral(id) {
+  const profile = getProfile();
+  if (!profile) return;
+  try {
+    const r = await fetch(`/api/referrals/${id}/decline`, {
+      method: "PUT", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ email: profile.email }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showToast("Referral declined");
+      loadReferrals();
+    }
+  } catch {
+    showToast("Failed to decline");
+  }
+}
+
+async function completeReferral(id) {
+  const profile = getProfile();
+  if (!profile) return;
+  try {
+    const r = await fetch(`/api/referrals/${id}/complete`, {
+      method: "PUT", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ email: profile.email }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showToast("Referral marked complete! +10 credits");
+      loadReferrals();
+      loadProfile();
+    } else {
+      showToast(d.error || "Failed");
+    }
+  } catch {
+    showToast("Network error");
+  }
+}
+
+async function withdrawReferral(id) {
+  const profile = getProfile();
+  if (!profile) return;
+  if (!confirm("Withdraw this referral request?")) return;
+  try {
+    const r = await fetch(`/api/referrals/${id}/withdraw`, {
+      method: "PUT", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ email: profile.email }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showToast("Referral withdrawn");
+      loadReferrals();
+    } else {
+      showToast(d.error || "Failed to withdraw");
+    }
+  } catch {
+    showToast("Network error");
+  }
+}
+
+document.addEventListener("click", function(e) {
+  const dd = document.getElementById("profileCompanyDropdown");
+  if (dd && !e.target.closest("#profileCompany") && !e.target.closest("#profileCompanyDropdown")) {
+    dd.classList.add("hidden");
+  }
+});
 </script>
 </body>
 </html>

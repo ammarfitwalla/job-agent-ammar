@@ -50,11 +50,24 @@ def _save_elapsed(sid):
         update_session(sid, elapsed_seconds=round(elapsed, 1))
 
 
+def _harvest_companies(jobs: list):
+    from config import COMPANIES
+    from db import add_custom_company
+
+    seen = set()
+    for job in jobs:
+        company = job.get("company", "").strip()
+        if company and company not in seen:
+            seen.add(company)
+            if company not in COMPANIES:
+                add_custom_company(company)
+
+
 def _run_scrape(req: ScrapeRequest):
     run_scrape(req.search_id, req.sites, req.keywords, req.resume_text, req.roles,
                req.adzuna_country, req.location, req.indeed_country,
                req.internship_mode, req.min_relevant, req.max_passes,
-               original_resume=req.original_resume)
+               original_resume=req.original_resume, user_email=req.user_email)
 
 
 SITE_MAP = {
@@ -84,12 +97,21 @@ _TECH_KEYWORDS = {
 
 def _score_jobs(jobs: list, keywords: list[str], resume_text: str,
                 sid: str = None, internship_mode: bool = False,
-                roles: Optional[list] = None) -> list:
+                roles: Optional[list] = None,
+                user_email: str = "") -> list:
     from match_engine.relevance_engine import filter_jobs
+    from db import get_company_user_counts, get_user
 
     def on_scored(job):
         if sid:
             add_filtered_job(sid, job)
+
+    companies = list({j.get("company", "") for j in jobs if j.get("company")})
+    company_counts = get_company_user_counts(companies, exclude_email=user_email or None)
+    user_data = get_user(user_email) if user_email else None
+    user_company = user_data.get("company", "").lower() if user_data else ""
+    if user_company and user_company in company_counts:
+        company_counts[user_company] = 0
 
     if internship_mode:
         min_threshold = 35
@@ -100,7 +122,8 @@ def _score_jobs(jobs: list, keywords: list[str], resume_text: str,
                            roles=roles,
                            progress_callback=on_scored if sid else None,
                            internship_mode=internship_mode, sid=sid, **kw,
-                           cancel_check=lambda: _is_cancelled(sid))
+                           cancel_check=lambda: _is_cancelled(sid),
+                           company_user_counts=company_counts)
     log(f"[SCORE] {len(relevant)} relevant out of {len(jobs)}", sid)
     return relevant
 
@@ -118,7 +141,7 @@ def _resumes_dir():
 def run_scrape(sid: str, sites: list[str], keywords: list[str], resume_text: str,
                roles=None, adzuna_country="us", location="", indeed_country="USA",
                internship_mode=False, min_relevant=5, max_passes=3,
-               original_resume=""):
+               original_resume="", user_email=""):
     if not sid:
         log(f"[SCRAPE] No search_id provided, aborting", sid)
         return
@@ -139,7 +162,7 @@ def run_scrape(sid: str, sites: list[str], keywords: list[str], resume_text: str
                 import shutil
                 shutil.copy2(src, dst)
                 os.remove(src)
-            except:
+            except Exception:
                 pass
 
     d = _resumes_dir()
@@ -159,10 +182,11 @@ def run_scrape(sid: str, sites: list[str], keywords: list[str], resume_text: str
         if internship_mode:
             _scrape_internship(sid, sites, keywords, resume_text, roles,
                                adzuna_country, location, indeed_country,
-                               min_relevant, max_passes)
+                               min_relevant, max_passes, user_email=user_email)
         else:
             _scrape_normal(sid, sites, keywords, resume_text, roles,
-                           adzuna_country, location, indeed_country)
+                           adzuna_country, location, indeed_country,
+                           user_email=user_email)
     except Exception as e:
         log(f"[SCRAPE] Pipeline error: {e}", sid)
         import traceback
@@ -171,7 +195,8 @@ def run_scrape(sid: str, sites: list[str], keywords: list[str], resume_text: str
 
 
 def _scrape_normal(sid, sites, keywords, resume_text, roles,
-                   adzuna_country, location, indeed_country):
+                   adzuna_country, location, indeed_country,
+                   user_email=""):
     import importlib
 
     all_jobs = []
@@ -204,13 +229,15 @@ def _scrape_normal(sid, sites, keywords, resume_text, roles,
                 jobs = scraper_fn()
             log(f"[SCRAPE] {site_key} returned {len(jobs)} jobs", sid)
             all_jobs.extend(jobs)
-            from utils.rate_limiter import delay as _rd
+            from utils.delay import delay as _rd
             _rd(3, 6)
         except Exception as e:
             log(f"[SCRAPE] {site_key} failed: {e}", sid)
 
     log(f"[SCRAPE] Total raw jobs: {len(all_jobs)}", sid)
     update_session(sid, scraped=len(all_jobs))
+
+    _harvest_companies(all_jobs)
 
     if not all_jobs:
         log(f"[SCRAPE] No jobs found, skipping relevance engine", sid)
@@ -219,7 +246,7 @@ def _scrape_normal(sid, sites, keywords, resume_text, roles,
         update_session(sid, status="done")
         return
 
-    relevant = _score_jobs(all_jobs, keywords, resume_text, sid=sid, internship_mode=False, roles=roles)
+    relevant = _score_jobs(all_jobs, keywords, resume_text, sid=sid, internship_mode=False, roles=roles, user_email=user_email)
     set_filtered_jobs(sid, relevant)
     _save_elapsed(sid)
     update_session(sid, status="done", filtered_gen=1)
@@ -228,10 +255,12 @@ def _scrape_normal(sid, sites, keywords, resume_text, roles,
 
 def _scrape_internship(sid, sites, keywords, resume_text, roles,
                        adzuna_country, location, indeed_country,
-                       min_relevant, max_passes):
+                       min_relevant, max_passes,
+                       user_email=""):
     import importlib
     from utils.experience_level import detect_experience_level
     from match_engine.relevance_engine import filter_jobs
+    from db import get_company_user_counts, get_user
 
     seen_urls = set()
     all_jobs = []
@@ -295,7 +324,7 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
                         new_count += 1
 
                 log(f"[SCRAPE] {site_key}: {len(jobs)} fetched, {new_count} new (total {len(all_jobs)})", sid)
-                from utils.rate_limiter import delay as _rd
+                from utils.delay import delay as _rd
                 _rd(3, 6)
             except Exception as e:
                 log(f"[SCRAPE] {site_key} failed: {e}", sid)
@@ -316,6 +345,12 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
         if new_candidates:
             log(f"[SCRAPE] Pass {pass_num}: {len(new_candidates)} new candidates "
                   f"to score (total {len(all_relevant)} relevant so far)", sid)
+            companies = list({j.get("company", "") for j in new_candidates if j.get("company")})
+            company_counts = get_company_user_counts(companies, exclude_email=user_email or None)
+            user_data = get_user(user_email) if user_email else None
+            user_company = user_data.get("company", "").lower() if user_data else ""
+            if user_company and user_company in company_counts:
+                company_counts[user_company] = 0
             min_threshold = 35
             batch = filter_jobs(new_candidates, min_score=min_threshold,
                                 keywords=keywords, resume=resume_text,
@@ -323,7 +358,8 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
                                 progress_callback=lambda j: add_filtered_job(sid, j),
                                 internship_mode=True, sid=sid,
                                 llm_weight=0.85, kw_weight=0.15,
-                                cancel_check=lambda: _is_cancelled(sid))
+                                cancel_check=lambda: _is_cancelled(sid),
+                                company_user_counts=company_counts)
 
             if batch:
                 all_relevant.extend(batch)
@@ -338,6 +374,8 @@ def _scrape_internship(sid, sites, keywords, resume_text, roles,
         if len(all_relevant) >= min_relevant:
             log(f"[SCRAPE] Enough relevant ({len(all_relevant)} >= {min_relevant}), stopping", sid)
             break
+
+    _harvest_companies(all_jobs)
 
     s = get_session(sid)
     if not did_write:

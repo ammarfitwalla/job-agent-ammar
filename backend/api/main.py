@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Mount
-from api.routes import jobs, scrape, email, resume, roles, states, events, leads, admin, auth, profile, saved_jobs, visits
+from api.routes import jobs, scrape, email, resume, roles, states, events, leads, admin, auth, profile, saved_jobs, visits, users, referrals, stats
 import json
 from db import init_db
 
@@ -22,7 +22,7 @@ def _load_votes() -> int:
         try:
             with open(VOTE_FILE) as f:
                 return json.load(f).get("votes", 0)
-        except: pass
+        except Exception: pass
     return 0
 
 def _save_votes(count: int):
@@ -61,6 +61,9 @@ app.include_router(auth.router)
 app.include_router(profile.router)
 app.include_router(saved_jobs.router)
 app.include_router(visits.router)
+app.include_router(users.router)
+app.include_router(referrals.router)
+app.include_router(stats.router)
 
 
 @app.on_event("startup")

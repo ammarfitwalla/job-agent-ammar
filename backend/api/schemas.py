@@ -41,3 +41,4 @@ class ScrapeRequest(BaseModel):
     min_relevant: int = 5
     max_passes: int = 3
     original_resume: str = ""
+    user_email: str = ""

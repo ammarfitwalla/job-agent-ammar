@@ -31,6 +31,15 @@ ADZUNA_APP_ID = os.environ.get("ADZUNA_APP_ID", "")
 ADZUNA_KEY = os.environ.get("ADZUNA_KEY", "")
 
 # ==============
+# CURATED COMPANY LIST (used for referral marketplace)
+# ==============
+COMPANIES = sorted(set([
+    "Google", "Meta", "Apple", "Amazon", "Microsoft", "Netflix", "Nvidia",
+    "Deloitte", "PwC", "EY", "KPMG", "Accenture", "Capgemini",
+    "Tata Consultancy Services", "Infosys", "Wipro", "HCL Technologies", "Cognizant",
+]))
+
+# ==============
 # JOB SEARCH SETTINGS
 # ==============
 ROLES_BY_CATEGORY = {
@@ -158,7 +167,7 @@ EMAIL_USER=os.environ.get("EMAIL_USER", "")
 EMAIL_PASSWORD=os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_TO=os.environ.get("EMAIL_TO", "")
 
-X_ENABLED = "True"
+X_ENABLED = True
 X_CLIENT_ID = os.environ.get("X_CLIENT_ID", "")
 X_CLIENT_SECRET = os.environ.get("X_CLIENT_SECRET", "")
 X_BEARER_TOKEN = os.environ.get("X_BEARER_TOKEN", "")
@@ -166,11 +175,27 @@ X_ACCESS_TOKEN = os.environ.get("X_ACCESS_TOKEN", "")
 X_REFRESH_TOKEN = os.environ.get("X_REFRESH_TOKEN", "")
 
 X_SCHEDULE = [
-    {"day": "mon", "window": "09:00-11:00", "template": "promo_1"},
+    {"day": "mon", "window": "08:00-10:00", "template": "promo_1"},
+    {"day": "mon", "window": "15:00-17:00", "template": "feature_2"},
     {"day": "tue", "window": "10:00-12:00", "template": "feature_1"},
+    {"day": "tue", "window": "17:00-19:00", "template": "tip_1"},
+    {"day": "wed", "window": "08:00-10:00", "template": "feature_3"},
+    {"day": "wed", "window": "14:00-16:00", "template": "social_proof"},
+    {"day": "thu", "window": "10:00-12:00", "template": "feature_4"},
+    {"day": "thu", "window": "16:00-18:00", "template": "promo_1"},
+    {"day": "fri", "window": "08:00-10:00", "template": "tip_2"},
+    {"day": "fri", "window": "13:00-15:00", "template": "feature_1"},
+    {"day": "sat", "window": "10:00-12:00", "template": "social_proof"},
+    {"day": "sun", "window": "11:00-13:00", "template": "feature_3"},
 ]
 
 X_TEMPLATES = {
-    "promo_1": "🚀 AI Job Agent scans LinkedIn, Indeed, RemoteOK & 5 more job boards — finds roles matching YOUR resume. Try it free \u2192 https://job-agent.space",
-    "feature_1": "🆕 Internship mode is live! Finds intern & entry-level roles across 8 job boards with AI scoring. #internship #jobs",
+    "promo_1": "Stop scrolling through irrelevant jobs. AI Job Agent matches your resume to roles on LinkedIn & Indeed — scored by AI, ranked by fit. Try it free https://ammarfitwalla-job-agent.hf.space",
+    "feature_1": "Looking for an internship or entry-level role? Internship mode filters out senior roles and finds what's actually meant for you. https://ammarfitwalla-job-agent.hf.space #internship",
+    "feature_2": "Every job gets an AI score out of 100 — based on your actual resume, not keywords alone. See what fits before you apply. https://ammarfitwalla-job-agent.hf.space",
+    "feature_3": "Upload your resume once. AI extracts your skills and suggests the right roles automatically. No more guessing what to search for. https://ammarfitwalla-job-agent.hf.space",
+    "feature_4": "Pick from 120+ job titles or search any role. AI scans LinkedIn & Indeed for listings that match your profile. https://ammarfitwalla-job-agent.hf.space",
+    "social_proof": "5000+ jobs scored and counting. AI matches real people to real roles. Your next opportunity is one search away. https://ammarfitwalla-job-agent.hf.space",
+    "tip_1": "Tip: Always upload your resume before searching. Without it, AI scoring can't compare jobs against your actual skills and experience. https://ammarfitwalla-job-agent.hf.space",
+    "tip_2": "Tip: Be specific with your target roles. The more focused your search, the better the AI matches. Try adding 2-3 related titles. https://ammarfitwalla-job-agent.hf.space",
 }

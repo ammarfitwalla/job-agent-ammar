@@ -1,6 +1,6 @@
 import re
 from jobspy import scrape_jobs
-from utils.rate_limiter import delay
+from utils.delay import delay
 
 
 def _valid_num(val):

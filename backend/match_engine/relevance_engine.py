@@ -77,7 +77,6 @@ def _apply_scoring(
     internship_mode: bool,
 ) -> Optional[dict]:
     """Apply parsed AI result and keyword score to a single job."""
-    print(f"[DBG RE] _apply_scoring entry: job='{job['title']}', min_score={min_score}, internship={internship_mode}")
     kw_score = keyword_score(job["title"], job["description"], job.get("tags"), keywords)
     # print(f"[DBG RE] kw_score={kw_score}")
 
@@ -85,8 +84,6 @@ def _apply_scoring(
     ai_relevant = ai_result.get("is_relevant", False)
     matched = ai_result.get("matched_skills", []) or []
     required_years = ai_result.get("required_years")
-    print(f"[DBG RE]   ai_score={ai_score} relevant={ai_relevant} matched={matched} yrs={required_years} kw={kw_score}")
-
     if internship_mode and required_years is not None:
         try:
             if int(required_years) >= 3:
@@ -174,7 +171,6 @@ def _score_batch(
     sid: str = None,
     cancel_check: Optional[callable] = None,
 ) -> list[dict]:
-    print(f"[DBG RE] _score_batch: n={len(batch_jobs)} [{', '.join(j['title'][:40] for j in batch_jobs)}] intern={internship_mode}")
     if cancel_check and cancel_check():
         return []
     prompt = batch_relevance_prompt(
@@ -235,8 +231,8 @@ def filter_jobs(
     internship_mode: bool = False,
     sid: str = None,
     cancel_check: Optional[callable] = None,
+    company_user_counts: dict = None,
 ) -> list:
-    print(f"[DBG RE] filter_jobs: {len(jobs)} jobs, min_score={min_score}, intern={internship_mode}")
     if not jobs:
         return []
 
@@ -250,8 +246,12 @@ def filter_jobs(
         for job in jobs
     ]
 
-    candidates = sorted(scored, key=lambda x: (x[2] > 0, x[1]), reverse=True)[:limit]
-    print(f"[DBG RE] filter_jobs: top {len(candidates)} kw_scores: {[s for _,s,_ in candidates[:5]]}")
+    counts = company_user_counts or {}
+    candidates = sorted(scored, key=lambda x: (
+        x[2] > 0,
+        counts.get(str(x[0].get("company", "")).lower(), 0) if x[2] > 0 else 0,
+        x[1]
+    ), reverse=True)[:limit]
 
     batch_size = BATCH_SIZE_RATIO[internship_mode]
     # print(f"[DBG RE] filter_jobs: batch_size={batch_size} (internship={internship_mode})")
@@ -292,6 +292,5 @@ def filter_jobs(
                 log(f"[MATCH ENGINE] Error scoring {label}: {e}", sid)
 
     filtered.sort(key=lambda j: j["total_score"], reverse=True)
-    print(f"[DBG RE] filter_jobs: final {len(filtered)} relevant, top: {[j['total_score'] for j in filtered[:5]]}")
     log(f"[MATCH ENGINE] {len(filtered)} relevant jobs returned", sid)
     return filtered

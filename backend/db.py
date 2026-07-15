@@ -88,6 +88,10 @@ def init_db():
             CREATE TABLE IF NOT EXISTS users (
                 email TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
+                company TEXT DEFAULT '',
+                position TEXT DEFAULT '',
+                linkedin_url TEXT DEFAULT '',
+                referral_credits INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -160,6 +164,27 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_jobs_session ON jobs(session_id);
             CREATE INDEX IF NOT EXISTS idx_jobs_raw ON jobs(session_id, is_raw);
             CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
+            CREATE TABLE IF NOT EXISTS referral_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_email TEXT NOT NULL,
+                to_email TEXT NOT NULL,
+                job_url TEXT DEFAULT '',
+                job_title TEXT DEFAULT '',
+                company TEXT DEFAULT '',
+                match_score INTEGER DEFAULT 0,
+                message TEXT DEFAULT '',
+                status TEXT DEFAULT 'pending',
+                credit_awarded INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS custom_companies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_ref_req_from ON referral_requests(from_email);
+            CREATE INDEX IF NOT EXISTS idx_ref_req_to ON referral_requests(to_email, status);
         """)
         # Migrate existing visits table — add location columns if missing
         for col in ("country", "city", "region"):
@@ -167,22 +192,33 @@ def init_db():
                 cur.execute(f"ALTER TABLE visits ADD COLUMN {col} TEXT DEFAULT ''")
             except Exception:
                 pass
+        # Migrate existing users table — add employment columns if missing
+        for col in ("company TEXT DEFAULT ''", "position TEXT DEFAULT ''", "linkedin_url TEXT DEFAULT ''", "referral_credits INTEGER DEFAULT 0"):
+            try:
+                cur.execute(f"ALTER TABLE users ADD COLUMN {col}")
+            except Exception:
+                pass
+        # Migrate existing referral_requests table
+        try:
+            cur.execute("ALTER TABLE referral_requests ADD COLUMN credit_awarded INTEGER DEFAULT 0")
+        except Exception:
+            pass
         conn.commit()
         try:
             cur.execute("ALTER TABLE sessions ADD COLUMN elapsed_seconds REAL DEFAULT 0")
-        except:
+        except Exception:
             pass
         try:
             cur.execute("ALTER TABLE sessions ADD COLUMN keywords TEXT DEFAULT '[]'")
-        except:
+        except Exception:
             pass
         try:
             cur.execute("ALTER TABLE sessions ADD COLUMN roles TEXT DEFAULT '[]'")
-        except:
+        except Exception:
             pass
         try:
             cur.execute("ALTER TABLE sessions ADD COLUMN location TEXT DEFAULT ''")
-        except:
+        except Exception:
             pass
     finally:
         conn.close()
@@ -432,14 +468,15 @@ def get_all_users(limit: int = 500) -> list[dict]:
     return [dict(r) for r in cur.fetchall()]
 
 
-def create_user(email: str, name: str) -> dict:
+def create_user(email: str, name: str, company: str = "", position: str = "", linkedin_url: str = "") -> dict:
     now = _now()
     with _write_lock:
         conn, cur = _get_conn()
-        cur.execute("INSERT OR IGNORE INTO users (email, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
-                     (email, name, now, now))
+        cur.execute(
+            "INSERT OR IGNORE INTO users (email, name, company, position, linkedin_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (email, name, company, position, linkedin_url, now, now))
         conn.commit()
-    return {"email": email, "name": name, "created_at": now}
+    return {"email": email, "name": name, "company": company, "position": position, "linkedin_url": linkedin_url, "referral_credits": 0, "created_at": now}
 
 
 def update_user_name(email: str, name: str):
@@ -448,6 +485,54 @@ def update_user_name(email: str, name: str):
         cur.execute("UPDATE users SET name = ?, updated_at = ? WHERE email = ?",
                      (name, _now(), email))
         conn.commit()
+
+def update_user_profile(email: str, name: str = None, company: str = None, position: str = None, linkedin_url: str = None):
+    fields = []
+    values = []
+    if name is not None:
+        fields.append("name = ?")
+        values.append(name)
+    if company is not None:
+        fields.append("company = ?")
+        values.append(company)
+    if position is not None:
+        fields.append("position = ?")
+        values.append(position)
+    if linkedin_url is not None:
+        fields.append("linkedin_url = ?")
+        values.append(linkedin_url)
+    if not fields:
+        return
+    fields.append("updated_at = ?")
+    values.append(_now())
+    values.append(email)
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute(f"UPDATE users SET {', '.join(fields)} WHERE email = ?", values)
+        conn.commit()
+
+def get_users_by_company(company: str) -> list[dict]:
+    conn, cur = _get_conn()
+    cur.execute("SELECT email, name, position, linkedin_url FROM users WHERE LOWER(company) = LOWER(?)", (company,))
+    return [dict(r) for r in cur.fetchall()]
+
+
+def get_company_user_counts(companies: list[str], exclude_email: str = None) -> dict[str, int]:
+    """Returns dict of {lowercased_company: user_count}, optionally excluding a user."""
+    if not companies:
+        return {}
+    conn, cur = _get_conn()
+    params = [c.lower() for c in companies]
+    placeholders = ",".join("?" * len(params))
+    query = f"SELECT LOWER(company), COUNT(*) FROM users WHERE LOWER(company) IN ({placeholders}) AND company != ''"
+    if exclude_email:
+        query += " AND email != ?"
+        params.append(exclude_email)
+    query += " GROUP BY LOWER(company)"
+    cur.execute(query, params)
+    counts = dict(cur.fetchall())
+    conn.close()
+    return counts
 
 
 # ── Verification Codes ──
@@ -759,3 +844,104 @@ def _store_geo(ip: str, visit_id: str):
                 conn2.close()
     except Exception:
         pass
+
+
+# ── Referral Requests ──
+
+def get_pending_referral(from_email: str, to_email: str, job_url: str) -> Optional[dict]:
+    conn, cur = _get_conn()
+    cur.execute(
+        "SELECT * FROM referral_requests WHERE from_email = ? AND to_email = ? AND job_url = ? AND status = 'pending' ORDER BY id DESC LIMIT 1",
+        (from_email, to_email, job_url))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_monthly_sent_count(email: str) -> int:
+    conn, cur = _get_conn()
+    cur.execute("SELECT COUNT(*) FROM referral_requests WHERE from_email = ? AND created_at >= date('now', 'start of month') AND status != 'cancelled'", (email,))
+    count = cur.fetchone()[0]
+    conn.close()
+    return count
+
+
+def create_referral_request(from_email: str, to_email: str, job_url: str, job_title: str,
+                            company: str, match_score: int = 0, message: str = "") -> Optional[int]:
+    now = _now()
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute(
+            "INSERT INTO referral_requests (from_email, to_email, job_url, job_title, company, match_score, message, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
+            (from_email, to_email, job_url, job_title, company, match_score, message, now, now))
+        conn.commit()
+        return cur.lastrowid
+
+
+def get_incoming_referrals(email: str) -> list[dict]:
+    conn, cur = _get_conn()
+    cur.execute(
+        "SELECT * FROM referral_requests WHERE to_email = ? ORDER BY created_at DESC", (email,))
+    return [dict(r) for r in cur.fetchall()]
+
+
+def get_outgoing_referrals(email: str) -> list[dict]:
+    conn, cur = _get_conn()
+    cur.execute(
+        "SELECT * FROM referral_requests WHERE from_email = ? ORDER BY created_at DESC", (email,))
+    return [dict(r) for r in cur.fetchall()]
+
+
+def update_referral_status(req_id: int, status: str) -> bool:
+    now = _now()
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("UPDATE referral_requests SET status = ?, updated_at = ? WHERE id = ?",
+                     (status, now, req_id))
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def get_referral_request(req_id: int) -> Optional[dict]:
+    conn, cur = _get_conn()
+    cur.execute("SELECT * FROM referral_requests WHERE id = ?", (req_id,))
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def complete_referral(req_id: int, referrer_email: str) -> bool:
+    req = get_referral_request(req_id)
+    if not req or req["to_email"] != referrer_email:
+        return False
+    if req["status"] != "accepted" or req.get("credit_awarded"):
+        return False
+    now = _now()
+    with _write_lock:
+        conn, cur = _get_conn()
+        cur.execute("UPDATE referral_requests SET credit_awarded = 1, updated_at = ? WHERE id = ?",
+                     (now, req_id))
+        cur.execute("UPDATE users SET referral_credits = referral_credits + 10, updated_at = ? WHERE email = ?",
+                     (now, referrer_email))
+        conn.commit()
+        return True
+
+
+def add_custom_company(name: str) -> bool:
+    name = name.strip()
+    if not name:
+        return False
+    now = _now()
+    with _write_lock:
+        conn, cur = _get_conn()
+        try:
+            cur.execute("INSERT INTO custom_companies (name, created_at) VALUES (?, ?)", (name, now))
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+
+def get_custom_companies() -> list[str]:
+    conn, cur = _get_conn()
+    cur.execute("SELECT name FROM custom_companies ORDER BY name")
+    return [r["name"] for r in cur.fetchall()]
