@@ -31,7 +31,8 @@ WORKDIR /app
 COPY --chown=user backend/ backend/
 COPY --chown=user frontend/ frontend/
 
-# config.py is now tracked — use the pushed file directly
+# config.py is gitignored — copy from example if not provided
+RUN if [ ! -f backend/config.py ] && [ -f backend/config.example.py ]; then cp backend/config.example.py backend/config.py; fi
 
 USER user
 ENV PATH="/home/user/.local/bin:$PATH"
