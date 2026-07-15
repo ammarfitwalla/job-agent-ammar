@@ -400,7 +400,7 @@ function showReferralUsers(company) {
         </div>
       </div>
       ${profile
-        ? `<button class="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors" onclick="askReferral(${JSON.stringify(u.email)}, ${JSON.stringify(u.name)})">Ask for Referral</button>`
+        ? `<button class="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors" onclick="askReferral(event, ${JSON.stringify(u.email)}, ${JSON.stringify(u.name)})">Ask for Referral</button>`
         : `<button class="text-xs font-medium text-slate-400 bg-slate-50 px-3 py-1.5 rounded-lg" onclick="closeReferralModal(); showAuthModal()">Sign in to ask</button>`
       }
     </div>
@@ -414,14 +414,14 @@ function closeReferralModal() {
   document.getElementById("referralModal").classList.remove("flex");
 }
 
-function askReferral(toEmail, toName) {
+function askReferral(event, toEmail, toName) {
   const profile = getProfile();
   if (!profile) { closeReferralModal(); showAuthModal(); return; }
   if (toEmail === profile.email) {
     showToast("You can't refer yourself");
     return;
   }
-  const btn = event.target;
+  const btn = event.currentTarget;
   btn.disabled = true;
   btn.textContent = "Sending...";
   fetch("/api/referrals/request", {
