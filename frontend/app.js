@@ -74,7 +74,7 @@ let _authEmail = "";
   });
 })();
 
-const DEV_MODE = false;
+const DEV_MODE = true;
 
 const EMAILJS_SERVICE_ID = "service_hm8m45q";
 const EMAILJS_TEMPLATE_ID = "template_6hlgxz5";
@@ -335,7 +335,7 @@ function htmlEscape(str) {
   return div.innerHTML;
 }
 
-function showReferralUsers(company) {
+async function showReferralUsers(company) {
   const cu = _companyUserCache[company];
   const users = cu && cu.users ? cu.users : [];
   _referralCompany = company;
@@ -390,7 +390,31 @@ function showReferralUsers(company) {
     modal.classList.add("flex");
     return;
   }
-  list.innerHTML = users.map(u => `
+  let outgoingRequests = [];
+  if (profile) {
+    try {
+      const r = await fetch(`/api/referrals/outgoing?email=${encodeURIComponent(profile.email)}`);
+      const d = await r.json();
+      outgoingRequests = d.requests || [];
+    } catch {}
+  }
+  list.innerHTML = users.map(u => {
+    const existing = outgoingRequests.find(req =>
+      req.to_email === u.email && req.job_url === _referralJobUrl
+    );
+    let btnHtml = "";
+    if (!profile) {
+      btnHtml = `<button class="text-xs font-medium text-slate-400 bg-slate-50 px-3 py-1.5 rounded-lg" onclick="closeReferralModal(); showAuthModal()">Sign in to ask</button>`;
+    } else if (existing && existing.status === "pending") {
+      btnHtml = `<button class="text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors" onclick="withdrawReferralRequest(${existing.id}, this, '${u.email.replace(/'/g, "\\'")}', '${u.name.replace(/'/g, "\\'")}')">Withdraw</button>`;
+    } else if (existing && existing.status === "cancelled") {
+      btnHtml = `<button class="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors" onclick="askReferral(this, '${u.email.replace(/'/g, "\\'")}', '${u.name.replace(/'/g, "\\'")}')">Ask for Referral</button>`;
+    } else if (existing) {
+      btnHtml = `<span class="text-xs font-medium text-slate-400 px-3 py-1.5">${existing.status}</span>`;
+    } else {
+      btnHtml = `<button class="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors" onclick="askReferral(this, '${u.email.replace(/'/g, "\\'")}', '${u.name.replace(/'/g, "\\'")}')">Ask for Referral</button>`;
+    }
+    return `
     <div class="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
       <div class="flex items-center gap-3 min-w-0">
         <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-bold shrink-0">${htmlEscape(u.name.charAt(0).toUpperCase())}</div>
@@ -399,12 +423,9 @@ function showReferralUsers(company) {
           <div class="text-xs text-slate-500 truncate">${htmlEscape(u.position || 'Works at ' + company)}</div>
         </div>
       </div>
-      ${profile
-        ? `<button class="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors" onclick="askReferral(this, ${JSON.stringify(u.email)}, ${JSON.stringify(u.name)})">Ask for Referral</button>`
-        : `<button class="text-xs font-medium text-slate-400 bg-slate-50 px-3 py-1.5 rounded-lg" onclick="closeReferralModal(); showAuthModal()">Sign in to ask</button>`
-      }
-    </div>
-  `).join("");
+      ${btnHtml}
+    </div>`;
+  }).join("");
   modal.classList.remove("hidden");
   modal.classList.add("flex");
 }
@@ -414,6 +435,22 @@ function closeReferralModal() {
   document.getElementById("referralModal").classList.remove("flex");
 }
 
+function refreshReferralRemaining() {
+  const profile = getProfile();
+  if (!profile) return;
+  const el = document.getElementById("referralRemaining");
+  fetch(`/api/referrals/remaining?email=${encodeURIComponent(profile.email)}`)
+    .then(r => r.json())
+    .then(d => {
+      if (d.remaining > 0) {
+        el.textContent = `${d.remaining}/${d.limit} requests remaining this month`;
+        el.classList.remove("hidden");
+      } else {
+        el.classList.add("hidden");
+      }
+    }).catch(() => {});
+}
+
 function askReferral(btn, toEmail, toName) {
   const profile = getProfile();
   if (!profile) { closeReferralModal(); showAuthModal(); return; }
@@ -421,6 +458,7 @@ function askReferral(btn, toEmail, toName) {
     showToast("You can't refer yourself");
     return;
   }
+  if (!confirm(`Send referral request to ${toName}?`)) return;
   btn.disabled = true;
   btn.textContent = "Sending...";
   fetch("/api/referrals/request", {
@@ -436,7 +474,11 @@ function askReferral(btn, toEmail, toName) {
   }).then(r => r.json()).then(d => {
     if (d.ok) {
       showToast(`Referral request sent to ${toName}!`);
-      closeReferralModal();
+      btn.textContent = "Withdraw";
+      btn.onclick = function() { withdrawReferralRequest(d.id, btn, toEmail, toName); };
+      btn.disabled = false;
+      btn.className = "text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors";
+      refreshReferralRemaining();
     } else {
       showToast(d.error || "Failed to send request");
       btn.disabled = false;
@@ -446,6 +488,37 @@ function askReferral(btn, toEmail, toName) {
     showToast("Network error");
     btn.disabled = false;
     btn.textContent = "Ask for Referral";
+  });
+}
+
+function withdrawReferralRequest(id, btn, toEmail, toName) {
+  if (!confirm("Withdraw this referral request?")) return;
+  btn.disabled = true;
+  btn.textContent = "Withdrawing...";
+  fetch(`/api/referrals/${id}/withdraw`, {
+    method: "PUT", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ email: getProfile().email }),
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      showToast("Referral withdrawn");
+      refreshReferralRemaining();
+      if (toEmail && toName) {
+        btn.textContent = "Ask for Referral";
+        btn.onclick = function() { askReferral(btn, toEmail, toName); };
+        btn.disabled = false;
+        btn.className = "text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors";
+      } else {
+        loadReferrals();
+      }
+    } else {
+      showToast(d.error || "Failed to withdraw");
+      btn.disabled = false;
+      btn.textContent = "Withdraw";
+    }
+  }).catch(() => {
+    showToast("Network error");
+    btn.disabled = false;
+    btn.textContent = "Withdraw";
   });
 }
 

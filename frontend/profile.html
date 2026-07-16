@@ -3,21 +3,53 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Profile — Job Agent</title>
+<title>Profile — AI Job Agent</title>
 <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: { sans: ['Inter', 'sans-serif'] },
+      colors: {
+        brand: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 900: '#1e3a8a' }
+      },
+      animation: {
+        'fade-in': 'fadeIn 0.4s ease-out forwards',
+        'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+      },
+      keyframes: {
+        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+        slideUp: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+      }
+    }
+  }
+}
+</script>
 <style>
   @import url('/style.css');
 
   body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: #f8fafc; /* slate-50 */
-    color: #0f172a; /* slate-900 */
+    background-color: #f8fafc;
+    color: #0f172a;
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Custom Select Dropdown Arrow */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  .glass-header {
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  }
+
   .status-select {
     appearance: none;
     background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
@@ -27,177 +59,276 @@
     padding-right: 2rem !important;
   }
 
-  /* Custom Scrollbar */
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-  /* Smooth reveal animation */
   .fade-in { animation: fadeIn 0.3s ease-out forwards; }
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(5px); }
     to { opacity: 1; transform: translateY(0); }
   }
+
+  .dashboard-tab {
+    position: relative;
+    color: #64748b;
+    transition: all 0.2s;
+  }
+  .dashboard-tab:hover { color: #0f172a; }
+  .dashboard-tab.active { color: #0f172a; font-weight: 600; }
+  .dashboard-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: #4f46e5;
+    border-radius: 2px 2px 0 0;
+  }
 </style>
 </head>
-<body class="min-h-screen pb-12">
+<body class="min-h-screen pb-12 flex flex-col">
 
-<!-- Header -->
 <header class="glass-header sticky top-0 z-50 transition-colors duration-300" id="mainHeader">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-    <a href="/" class="flex items-center gap-3">
-      <div class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-sm shadow-sm transition-colors duration-300">JA</div>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <a href="/" class="flex items-center gap-3 group">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-900 to-slate-800 text-white flex items-center justify-center font-bold text-sm shadow-md transition-transform group-hover:scale-105">JA</div>
       <div>
-        <h1 class="text-base font-semibold tracking-tight text-slate-900 leading-tight">AI Job Agent</h1>
-        <p class="text-xs text-slate-500 leading-tight mt-0.5">Find jobs where you actually have a shot.</p>
+        <h1 class="text-sm font-bold tracking-tight text-slate-900 leading-tight">AI Job Agent</h1>
+        <p class="text-[10px] font-semibold text-indigo-500 uppercase tracking-wider leading-tight mt-0.5">Career Hub</p>
       </div>
     </a>
-    <div class="flex items-center gap-3">
-      <a href="/" class="text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors flex items-center gap-1.5">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-        Back to Search
+
+    <div class="flex items-center gap-4">
+      <a href="/" class="hidden sm:flex text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        Find Jobs
       </a>
+
+      <div class="h-4 w-px bg-slate-200 hidden sm:block"></div>
+
       <button id="logoutBtn" onclick="logout()" class="hidden text-sm font-medium text-slate-500 hover:text-red-500 transition-colors flex items-center gap-1.5">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
         Log Out
       </button>
-      <a href="/profile.html" class="w-9 h-9 rounded-full flex items-center justify-center text-slate-600 hover:text-indigo-500 hover:bg-indigo-50 bg-slate-100 border-2 border-slate-300 hover:border-indigo-200 transition-all" id="profileLink" title="Your Profile">
-        <svg class="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
+
+      <a href="/profile.html" class="w-10 h-10 rounded-full flex items-center justify-center text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 bg-slate-100 border border-slate-200 transition-all shadow-sm" id="profileLink" title="Your Profile">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
       </a>
     </div>
   </div>
-  </header>
+</header>
 
-  <!-- Stats Bar -->
-  <div id="statsBar" class="hidden border-b border-slate-100 bg-white/80 backdrop-blur-sm">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 text-xs text-slate-400 flex items-center justify-center gap-2.5 flex-wrap" id="statsContent"></div>
-  </div>
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex-grow pt-8" id="pageContent">
 
-<!-- Main Content -->
-<main class="max-w-4xl mx-auto px-4 sm:px-6 pt-8" id="pageContent">
-  
   <!-- Auth Prompt -->
-  <div id="authPrompt" class="hidden fade-in max-w-lg mx-auto mt-20 sm:mt-28 bg-white rounded-3xl p-10 shadow-lg border border-slate-200/80 text-center">
-    <div class="w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-lg shadow-indigo-500/20">
-      <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
-    </div>
-    <h2 class="text-2xl font-bold text-slate-900 mb-3">Sign in to your profile</h2>
-    <p class="text-sm text-slate-500 mb-10 leading-relaxed max-w-sm mx-auto">Enter your email to save jobs, track applications, and manage everything across sessions.</p>
-    
-    <div class="space-y-4">
-      <div class="flex flex-col sm:flex-row gap-3">
-        <input id="promptEmail" type="email" placeholder="name@example.com" class="flex-1 border border-slate-200 rounded-xl px-5 py-3.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400 bg-slate-50 focus:bg-white">
-        <button id="promptSendBtn" onclick="promptSendCode()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-xl text-sm font-semibold transition-all shadow-sm hover:shadow-lg active:scale-95 whitespace-nowrap flex items-center gap-2">
-          <span id="promptSendText">Send Code</span>
-          <svg id="promptSendSpinner" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-        </button>
+  <div id="authPrompt" class="hidden animate-slide-up max-w-md mx-auto mt-16 sm:mt-24 relative">
+    <div class="absolute -top-12 -left-12 w-32 h-32 bg-indigo-200 rounded-full mix-blend-multiply filter blur-2xl opacity-60"></div>
+    <div class="absolute -top-12 -right-12 w-32 h-32 bg-purple-200 rounded-full mix-blend-multiply filter blur-2xl opacity-60"></div>
+
+    <div class="bg-white/80 backdrop-blur-xl rounded-3xl p-8 shadow-xl border border-white relative z-10 text-center">
+      <div class="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-500/30 transform -rotate-3">
+        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
       </div>
-      <p id="promptError" class="hidden text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3 font-medium border border-red-100"></p>
+      <h2 class="text-2xl font-bold text-slate-900 mb-2">Welcome to your Profile</h2>
+      <p class="text-sm text-slate-500 mb-8">Sign in to track applications, manage referrals, and boost your hireability.</p>
+
+      <div class="space-y-4">
+        <div class="flex flex-col sm:flex-row gap-3">
+          <input id="promptEmail" type="email" placeholder="name@company.com" class="flex-1 border border-slate-200 rounded-xl px-5 py-3.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400 bg-slate-50 focus:bg-white">
+          <button id="promptSendBtn" onclick="promptSendCode()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-xl text-sm font-semibold transition-all shadow-sm hover:shadow-lg active:scale-95 whitespace-nowrap flex items-center gap-2">
+            <span id="promptSendText">Send Code</span>
+            <svg id="promptSendSpinner" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          </button>
+        </div>
+        <p id="promptError" class="hidden text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3 font-medium border border-red-100"></p>
+      </div>
     </div>
   </div>
 
-  <!-- Profile View -->
-  <div id="profileContent" class="hidden fade-in space-y-8">
-    
-    <!-- Profile Card -->
-    <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-slate-200/60 flex flex-col sm:flex-row items-start sm:items-center gap-6">
-      <div class="w-20 h-20 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-3xl font-bold text-white shadow-inner flex-shrink-0" id="avatarLetter">U</div>
-      
-      <div class="flex-1 min-w-0">
-        <div id="nameDisplay">
-          <h2 id="nameText" class="text-2xl font-bold text-slate-900 truncate"></h2>
+  <!-- Dashboard View -->
+  <div id="profileContent" class="hidden animate-slide-up grid grid-cols-1 lg:grid-cols-12 gap-8 pb-20">
+
+    <!-- Loading Skeleton -->
+    <div id="profileSkeleton" class="lg:col-span-12 animate-pulse">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div class="lg:col-span-4 space-y-6">
+          <div class="bg-white rounded-3xl border border-slate-200/60 overflow-hidden">
+            <div class="h-24 bg-slate-200"></div>
+            <div class="px-6 pb-6 relative">
+              <div class="-mt-12 mb-4">
+                <div class="w-24 h-24 rounded-2xl bg-slate-200 ring-4 ring-white"></div>
+              </div>
+              <div class="space-y-3 pt-2">
+                <div class="h-6 bg-slate-200 rounded w-48"></div>
+                <div class="h-4 bg-slate-200 rounded w-64"></div>
+                <div class="flex gap-2"><div class="h-6 bg-slate-200 rounded-full w-20"></div><div class="h-6 bg-slate-200 rounded-full w-28"></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white rounded-3xl border border-slate-200/60 p-6">
+            <div class="h-4 bg-slate-200 rounded w-24 mb-4"></div>
+            <div class="grid grid-cols-2 gap-3"><div class="h-20 bg-slate-200 rounded-2xl"></div><div class="h-20 bg-slate-200 rounded-2xl"></div></div>
+          </div>
         </div>
-        
-        <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-1">
-          <div class="text-slate-500 flex items-center gap-1.5 text-sm">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-            <span id="emailDisplay"></span>
+        <div class="lg:col-span-8 space-y-6">
+          <div class="h-12 bg-slate-200 rounded-lg"></div>
+          <div class="space-y-3">
+            <div class="h-24 bg-slate-200 rounded-xl"></div>
+            <div class="h-24 bg-slate-200 rounded-xl"></div>
           </div>
-          <span class="hidden sm:inline text-slate-300">•</span>
-          <div class="text-slate-400 text-sm flex items-center gap-1.5">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-            <span id="joinedDate"></span>
-          </div>
-        </div>
-        <div class="flex items-center gap-2 mt-1">
-          <button onclick="enableProfileEdit()" class="text-xs text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 px-2.5 py-1 rounded-lg transition-colors font-medium">Edit Profile</button>
-        </div>
-        <div class="flex flex-wrap gap-3 mt-2 text-sm">
-          <div id="companyDisplay" class="hidden text-slate-600 flex items-center gap-1.5">
-            <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21l18 0M3 10l18 0M3 7l9-4 9 4M4 10l0 11M20 10l0 11M8 14l0 3M12 14l0 3M16 14l0 3"/></svg>
-            <span id="companyText"></span>
-          </div>
-          <div id="positionDisplay" class="hidden text-slate-600 flex items-center gap-1.5">
-            <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-            <span id="positionText"></span>
-          </div>
-          <a id="linkedinDisplay" class="hidden text-indigo-600 hover:text-indigo-700 flex items-center gap-1.5 font-medium" target="_blank" rel="noopener">
-            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
-            LinkedIn
-          </a>
-          <span id="creditDisplay" class="text-xs text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg font-medium flex items-center gap-1">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            0 referral credits
-          </span>
         </div>
       </div>
     </div>
 
-    <!-- Profile Edit Section -->
-    <div id="profileEdit" class="hidden bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3">
-      <div class="flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-slate-800">Edit Profile</h3>
-        <button onclick="disableProfileEdit()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition-colors">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    <!-- Left Sidebar -->
+    <div class="lg:col-span-4 space-y-6 hidden" id="dashboardSidebar">
+
+      <!-- Profile Card -->
+      <div class="bg-white rounded-3xl shadow-sm border border-slate-200/60 overflow-hidden relative">
+        <div class="h-24 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+
+        <div class="px-6 pb-6 pt-0 relative">
+          <div class="relative flex justify-between items-end -mt-12 mb-4">
+            <div class="relative">
+              <div class="w-24 h-24 rounded-2xl bg-slate-900 flex items-center justify-center text-4xl font-bold text-white shadow-xl ring-4 ring-white" id="profileAvatar">U</div>
+              <div class="absolute -bottom-1 -right-1 bg-emerald-500 border-2 border-white w-5 h-5 rounded-full" title="Active"></div>
+            </div>
+            <button onclick="enableProfileEdit()" class="mb-2 text-xs font-semibold text-slate-500 hover:text-indigo-600 flex items-center gap-1.5 bg-slate-50 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors border border-slate-200">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              Edit
+            </button>
+          </div>
+
+          <!-- Display Mode -->
+          <div id="profileDisplayMode">
+            <h2 id="profileName" class="text-xl font-bold text-slate-900 leading-tight"></h2>
+            <p id="profileHeadline" class="text-sm font-medium text-indigo-600 mt-1 mb-4"></p>
+
+            <div class="flex flex-wrap gap-2 mb-5">
+              <span id="profileStatusBadge" class="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700"></span>
+              <span id="profileCredits" class="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span id="profileCreditsText">0 referral credits</span>
+              </span>
+            </div>
+
+            <div class="space-y-3 pt-4 border-t border-slate-100">
+              <div class="flex items-center text-sm text-slate-600 gap-3">
+                <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                <span id="profileEmail" class="truncate"></span>
+              </div>
+              <div class="flex items-center text-sm text-slate-600 gap-3">
+                <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                <span id="profileJoined"></span>
+              </div>
+              <div class="flex items-center text-sm text-slate-600 gap-3">
+                <svg class="w-4 h-4 text-slate-400 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+                <a href="#" id="profileLinkedin" class="text-indigo-600 hover:underline truncate"></a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Edit Mode -->
+          <div id="profileEditMode" class="hidden space-y-4 pt-2">
+            <div>
+              <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Full Name</label>
+              <input type="text" id="editName" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:bg-white transition-colors" maxlength="50">
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Status</label>
+              <div class="flex flex-wrap gap-1.5" id="profileEditPills">
+                <button type="button" onclick="profileSelectEmploymentStatus('employed')" class="employment-pill active-pill" data-status="employed">Employed</button>
+                <button type="button" onclick="profileSelectEmploymentStatus('student')" class="employment-pill" data-status="student">Student</button>
+                <button type="button" onclick="profileSelectEmploymentStatus('graduate')" class="employment-pill" data-status="graduate">Graduate</button>
+                <button type="button" onclick="profileSelectEmploymentStatus('laid_off')" class="employment-pill" data-status="laid_off">Laid Off</button>
+                <button type="button" onclick="profileSelectEmploymentStatus('career_break')" class="employment-pill" data-status="career_break">Career Break</button>
+              </div>
+            </div>
+            <div id="editCompanyGroup">
+              <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Company</label>
+              <div class="relative">
+                <input type="text" id="editCompany" placeholder="Type to search" autocomplete="off" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:bg-white transition-colors" oninput="filterProfileCompanyDropdown()" onfocus="filterProfileCompanyDropdown()">
+                <div id="editCompanyDropdown" class="hidden absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
+              </div>
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Position</label>
+              <input type="text" id="editRole" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:bg-white transition-colors">
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">LinkedIn URL</label>
+              <input type="url" id="editLinkedin" placeholder="https://linkedin.com/in/..." class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:bg-white transition-colors">
+            </div>
+            <div class="flex gap-2 pt-2">
+              <button onclick="saveProfile()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm">Save</button>
+              <button onclick="disableProfileEdit()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg text-sm font-semibold transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity Summary Widget -->
+      <div class="bg-white rounded-3xl shadow-sm border border-slate-200/60 p-6 hidden lg:block">
+        <h3 class="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+          <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+          Activity Snapshot
+        </h3>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-slate-50 rounded-2xl p-3 border border-slate-100 text-center">
+            <div class="text-2xl font-bold text-slate-900" id="statSaved">0</div>
+            <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mt-1">Saved Jobs</div>
+          </div>
+          <div class="bg-slate-50 rounded-2xl p-3 border border-slate-100 text-center">
+            <div class="text-2xl font-bold text-slate-900" id="statReferrals">0</div>
+            <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mt-1">Referrals</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Main Content -->
+    <div class="lg:col-span-8 space-y-6 hidden" id="dashboardMain">
+
+      <!-- Dashboard Tabs -->
+      <div class="flex items-center border-b border-slate-200">
+        <button onclick="switchDashboardTab('jobs')" id="tab-jobs" class="dashboard-tab active px-6 py-4 text-sm font-medium flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          Job Tracker
+        </button>
+        <button onclick="switchDashboardTab('referrals')" id="tab-referrals" class="dashboard-tab px-6 py-4 text-sm font-medium flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+          Referral Network
         </button>
       </div>
-      <input id="profileName" type="text" placeholder="Your name" maxlength="50" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors">
-      <div class="flex flex-wrap gap-1.5">
-        <button type="button" onclick="profileSelectEmploymentStatus('employed')" class="employment-pill active-pill" data-status="employed">Employed</button>
-        <button type="button" onclick="profileSelectEmploymentStatus('student')" class="employment-pill" data-status="student">Student</button>
-        <button type="button" onclick="profileSelectEmploymentStatus('graduate')" class="employment-pill" data-status="graduate">Graduate</button>
-        <button type="button" onclick="profileSelectEmploymentStatus('laid_off')" class="employment-pill" data-status="laid_off">Laid Off</button>
-        <button type="button" onclick="profileSelectEmploymentStatus('career_break')" class="employment-pill" data-status="career_break">Career Break</button>
+
+      <!-- Jobs View -->
+      <div id="viewJobs" class="animate-fade-in space-y-4">
+        <div class="flex gap-2 overflow-x-auto hide-scrollbar pb-1" id="jobFilters"></div>
+        <div id="jobListContainer" class="space-y-3"></div>
       </div>
-      <div id="profileCompanyGroup">
-        <div class="relative">
-          <input id="profileCompany" type="text" placeholder="Company (type to search)" autocomplete="off" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors" oninput="filterProfileCompanyDropdown()" onfocus="filterProfileCompanyDropdown()">
-          <div id="profileCompanyDropdown" class="hidden absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
+
+      <!-- Referrals View -->
+      <div id="viewReferrals" class="hidden animate-fade-in space-y-4">
+
+        <!-- CTA Banner -->
+        <div class="bg-slate-900 rounded-2xl p-6 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 relative overflow-hidden">
+          <div class="absolute right-0 top-0 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 transform translate-x-1/2 -translate-y-1/2"></div>
+          <div class="relative z-10 text-center sm:text-left">
+            <h3 class="text-lg font-bold mb-1">Leverage the Community</h3>
+            <p class="text-slate-300 text-sm max-w-md">Request referrals from verified employees at your target companies. Use your credits wisely.</p>
+          </div>
+          <button class="relative z-10 shrink-0 bg-white text-slate-900 hover:bg-indigo-50 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors shadow-sm" onclick="openReferralFromCTA()">Find Connections</button>
         </div>
-      </div>
-      <input id="profilePosition" type="text" placeholder="Position" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors">
-      <input id="profileLinkedin" type="url" placeholder="LinkedIn URL (optional)" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors">
-      <button onclick="saveProfile()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors">Save</button>
-    </div>
 
-    <!-- Job Tracking Section -->
-    <div class="space-y-4">
-      <div class="flex items-center justify-between border-b border-slate-200 pb-2">
-        <h3 class="text-lg font-bold text-slate-900">Saved Jobs</h3>
-      </div>
-      
-      <!-- Tabs -->
-      <div class="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 hide-scrollbar" id="statusTabs"></div>
+        <!-- Referral Filters -->
+        <div class="flex gap-2 overflow-x-auto hide-scrollbar pb-1" id="referralFilters">
+          <button class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-50 text-indigo-700 transition-colors flex items-center gap-2 whitespace-nowrap" onclick="switchReferralTab('incoming')" id="tabIncoming">Incoming <span id="incomingCount" class="bg-indigo-200 text-indigo-800 py-0.5 px-2 rounded-full text-xs">0</span></button>
+          <button class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors flex items-center gap-2 whitespace-nowrap" onclick="switchReferralTab('outgoing')" id="tabOutgoing">Sent <span id="outgoingCount" class="bg-slate-100 text-slate-600 py-0.5 px-2 rounded-full text-xs">0</span></button>
+          <button class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors flex items-center gap-2 whitespace-nowrap" onclick="switchReferralTab('accepted')" id="tabAccepted">Accepted <span id="acceptedCount" class="bg-slate-100 text-slate-600 py-0.5 px-2 rounded-full text-xs">0</span></button>
+          <button class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors flex items-center gap-2 whitespace-nowrap" onclick="switchReferralTab('declined')" id="tabDeclined">Declined <span id="declinedCount" class="bg-slate-100 text-slate-600 py-0.5 px-2 rounded-full text-xs">0</span></button>
+        </div>
 
-      <!-- Job List -->
-      <div id="jobList" class="space-y-3"></div>
-    </div>
-
-    <!-- Referral Dashboard Section -->
-    <div class="space-y-4 mt-8">
-      <div class="flex items-center justify-between border-b border-slate-200 pb-2">
-        <h3 class="text-lg font-bold text-slate-900">Referral Requests</h3>
-      </div>
-
-      <div class="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 hide-scrollbar" id="referralTabs">
-        <button class="tab-btn px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border flex items-center gap-2 whitespace-nowrap bg-slate-900 text-white shadow-md border-transparent" onclick="switchReferralTab('incoming')" id="tabIncoming">Incoming <span id="incomingCount" class="px-2 py-0.5 rounded-full text-xs font-bold bg-white/20 text-white">0</span></button>
-        <button class="tab-btn px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border flex items-center gap-2 whitespace-nowrap bg-white text-slate-600 border-slate-200 hover:bg-slate-50" onclick="switchReferralTab('outgoing')" id="tabOutgoing">Sent <span id="outgoingCount" class="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500">0</span></button>
-        <button class="tab-btn px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border flex items-center gap-2 whitespace-nowrap bg-white text-slate-600 border-slate-200 hover:bg-slate-50" onclick="switchReferralTab('history')" id="tabHistory">History</button>
-      </div>
-
-      <div id="referralList" class="space-y-3">
-        <div class="text-center text-sm text-slate-400 py-8">Sign in to see referral requests</div>
+        <div id="referralListContainer" class="space-y-3">
+          <div class="text-center text-sm text-slate-400 py-8">Sign in to see referral requests</div>
+        </div>
       </div>
     </div>
   </div>
@@ -231,7 +362,7 @@
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
-      
+
       <div class="flex gap-2 justify-between mt-6 mb-2" id="codeInputs">
         <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="0" autofocus>
         <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="1">
@@ -240,9 +371,9 @@
         <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="4">
         <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="5">
       </div>
-      
+
       <p id="authCodeError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center font-medium my-4 border border-red-100"></p>
-      
+
       <button onclick="verifyCode()" class="w-full bg-slate-900 hover:bg-slate-800 text-white py-3.5 rounded-xl text-sm font-semibold transition-all shadow-sm hover:shadow-md active:scale-95 mt-6">
         Verify & Sign In
       </button>
@@ -304,1150 +435,12 @@
   </div>
 </div>
 
-<script>
-const DEV_MODE = false;
-const EMAILJS_SERVICE_ID = "service_hm8m45q";
-const EMAILJS_TEMPLATE_ID = "template_6hlgxz5";
-const EMAILJS_PUBLIC_KEY = "wqGQqAkbZLnEpEOjq";
-let emailjsInitialized = false;
-
-function initEmailJS() {
-  if (typeof emailjs !== "undefined" && EMAILJS_PUBLIC_KEY) {
-    emailjs.init(EMAILJS_PUBLIC_KEY);
-    emailjsInitialized = true;
-  }
-}
-
-async function sendEmailJS(templateParams) {
-  if (!emailjsInitialized) {
-    console.warn("EmailJS not initialized.");
-    return { ok: false, error: "EmailJS not configured" };
-  }
-  try {
-    const res = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
-    return { ok: true, res };
-  } catch (err) {
-    return { ok: false, error: err.text || err.message };
-  }
-}
-document.addEventListener("DOMContentLoaded", initEmailJS);
-
-let _profile = null;
-
-function getProfile() {
-  if (_profile) return _profile;
-  const raw = localStorage.getItem("jobagent_profile_email");
-  if (raw) return { email: raw };
-  const old = localStorage.getItem("jobagent_profile");
-  if (old) {
-    try {
-      const data = JSON.parse(old);
-      if (data && data.email) {
-        localStorage.setItem("jobagent_profile_email", data.email);
-        localStorage.removeItem("jobagent_profile");
-        return { email: data.email };
-      }
-    } catch {}
-  }
-  return null;
-}
-
-function setProfile(data) {
-  _profile = data;
-  if (data && data.email) {
-    localStorage.setItem("jobagent_profile_email", data.email);
-  } else {
-    localStorage.removeItem("jobagent_profile_email");
-  }
-}
-
-function clearProfile() {
-  _profile = null;
-  localStorage.removeItem("jobagent_profile_email");
-}
-
-function updateNavIcon() {
-  const link = document.getElementById("profileLink");
-  const profile = getProfile();
-  link.classList.remove("bg-indigo-50", "border-indigo-200", "hover:bg-indigo-100",
-    "text-slate-600", "hover:text-indigo-500", "hover:bg-indigo-50", "bg-slate-100", "border-2", "border-slate-300", "hover:border-indigo-200");
-  if (profile) {
-    const initial = profile.name ? profile.name.charAt(0).toUpperCase() : (profile.email ? profile.email.charAt(0).toUpperCase() : "?");
-    link.innerHTML = `<span class="w-[22px] h-[22px] rounded-full bg-indigo-500 text-white flex items-center justify-center text-xs font-bold leading-none" style="line-height:0">${initial}</span>`;
-    link.classList.add("bg-indigo-50", "border-indigo-200", "hover:bg-indigo-100");
-    link.title = profile.name || profile.email || "Profile";
-  } else {
-    link.innerHTML = '<svg class="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>';
-    link.classList.add("text-slate-600", "hover:text-indigo-500", "hover:bg-indigo-50", "bg-slate-100", "border-2", "border-slate-300", "hover:border-indigo-200");
-    link.title = "Your Profile";
-  }
-}
-
-function logout() {
-  document.getElementById("logoutModal").classList.remove("hidden");
-}
-
-function confirmLogout() {
-  document.getElementById("logoutModal").classList.add("hidden");
-  clearProfile();
-  window.location.href = "/";
-}
-
-function cancelLogout() {
-  document.getElementById("logoutModal").classList.add("hidden");
-}
-
-let _authEmail = "";
-let allSavedJobs = [];
-
-function showToast(msg) {
-  const existing = document.getElementById('toast-msg');
-  if(existing) existing.remove();
-
-  const el = document.createElement("div");
-  el.id = 'toast-msg';
-  el.className = "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-sm font-medium px-5 py-3 rounded-full shadow-xl flex items-center gap-2 fade-in";
-  el.innerHTML = `<svg class="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> ${msg}`;
-  document.body.appendChild(el);
-  setTimeout(() => {
-    el.style.opacity = '0';
-    el.style.transform = 'translate(-50%, 10px)';
-    el.style.transition = 'all 0.3s ease';
-    setTimeout(() => el.remove(), 300);
-  }, 2500);
-}
-
-// ── Auth ──
-function promptSendCode() {
-  const email = document.getElementById("promptEmail").value.trim();
-  const errEl = document.getElementById("promptError");
-  const btn = document.getElementById("promptSendBtn");
-  const text = document.getElementById("promptSendText");
-  const spinner = document.getElementById("promptSendSpinner");
-  if (!email || !email.includes("@")) {
-    errEl.textContent = "Please enter a valid email address.";
-    errEl.classList.remove("hidden");
-    return;
-  }
-  errEl.classList.add("hidden");
-  btn.disabled = true;
-  text.textContent = "Sending";
-  spinner.classList.remove("hidden");
-  _authEmail = email;
-  let emailFailed = false;
-  fetch("/api/auth/send-code", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ email }),
-  }).then(r => r.json()).then(d => {
-    if (d.ok) {
-      if (DEV_MODE) {
-        document.getElementById("modalEmail").textContent = email;
-        document.getElementById("authModal").style.display = "flex";
-        document.querySelectorAll(".code-digit").forEach(inp => { inp.value = ""; });
-        setTimeout(() => document.querySelector(".code-digit").focus(), 100);
-        btn.disabled = false;
-        text.textContent = "Send Code";
-        spinner.classList.add("hidden");
-        return;
-      }
-      sendEmailJS({
-        email: email,
-        subject: "Your Job Agent verification code",
-        passcode: d.code,
-      }).then(emailRes => {
-        if (!emailRes.ok) {
-          errEl.textContent = emailRes.error || "Failed to send email.";
-          errEl.classList.remove("hidden");
-          emailFailed = true;
-          btn.disabled = false;
-          text.textContent = "Send Code";
-          spinner.classList.add("hidden");
-          return;
-        }
-        document.getElementById("modalEmail").textContent = email;
-        document.getElementById("authModal").style.display = "flex";
-        document.querySelectorAll(".code-digit").forEach(inp => { inp.value = ""; });
-        setTimeout(() => document.querySelector(".code-digit").focus(), 100);
-        btn.disabled = false;
-        text.textContent = "Send Code";
-        spinner.classList.add("hidden");
-      });
-    } else {
-      errEl.textContent = d.error || "Failed to send code.";
-      errEl.classList.remove("hidden");
-    }
-    if (!emailFailed) {
-      btn.disabled = false;
-      text.textContent = "Send Code";
-      spinner.classList.add("hidden");
-    }
-  }).catch(() => {
-    errEl.textContent = "Network error. Please try again.";
-    errEl.classList.remove("hidden");
-    btn.disabled = false;
-    text.textContent = "Send Code";
-    spinner.classList.add("hidden");
-  });
-}
-
-function closeAuthModal() {
-  document.getElementById("authModal").style.display = "none";
-  document.getElementById("authStep1").classList.remove("hidden");
-  const s4 = document.getElementById("authStep4");
-  if (s4) s4.classList.add("hidden");
-}
-
-function verifyCode() {
-  const digits = document.querySelectorAll("#authModal .code-digit");
-  const code = Array.from(digits).map(d => d.value).join("");
-  const errEl = document.getElementById("authCodeError");
-  if (code.length !== 6) { errEl.textContent = "Please enter the full 6-digit code."; errEl.classList.remove("hidden"); return; }
-  errEl.classList.add("hidden");
-  fetch("/api/auth/verify-code", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ email: _authEmail, code }),
-  }).then(r => r.json()).then(d => {
-    if (d.ok) {
-      if (d.user.company) {
-        setProfile({ email: d.user.email, name: d.user.name, company: d.user.company, position: d.user.position || "", linkedin_url: d.user.linkedin_url || "", referral_credits: d.user.referral_credits || 0 });
-        closeAuthModal();
-        loadProfile();
-        showToast("Successfully signed in");
-      } else {
-        document.getElementById("authStep1").classList.add("hidden");
-        document.getElementById("authStep4").classList.remove("hidden");
-        document.getElementById("authName").value = d.user.name || d.user.email.split("@")[0];
-        document.getElementById("authName").focus();
-      }
-    } else {
-      errEl.textContent = d.error || "Invalid code provided.";
-      errEl.classList.remove("hidden");
-    }
-  }).catch(() => {
-    errEl.textContent = "Network error. Please try again.";
-    errEl.classList.remove("hidden");
-  });
-}
-
-let _authCompanyList = [];
-const _EMPLOYMENT_LABELS = {
-  employed: "",
-  student: "Student",
-  graduate: "Graduate",
-  laid_off: "Laid Off",
-  career_break: "Career Break",
-};
-
-function selectEmploymentStatus(status) {
-  document.querySelectorAll("#authStep4 .employment-pill").forEach(p => p.classList.remove("active-pill"));
-  const pill = document.querySelector(`#authStep4 .employment-pill[data-status="${status}"]`);
-  if (pill) pill.classList.add("active-pill");
-  const group = document.getElementById("authCompanyGroup");
-  if (group) {
-    group.classList.toggle("hidden", status !== "employed");
-    if (status !== "employed") {
-      document.getElementById("authCompany").value = "";
-    }
-  }
-}
-
-async function loadAuthCompanyList() {
-  if (_authCompanyList.length > 0) return;
-  try {
-    const r = await fetch("/api/auth/companies");
-    const d = await r.json();
-    _authCompanyList = d.companies || [];
-  } catch {}
-}
-
-function filterCompanyDropdown() {
-  const input = document.getElementById("authCompany");
-  const dropdown = document.getElementById("companyDropdown");
-  const val = input.value.toLowerCase().trim();
-  const matches = val ? _authCompanyList.filter(c => c.toLowerCase().includes(val)) : _authCompanyList;
-  let html = matches.slice(0, 30).map(c =>
-    `<div class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 transition-colors" onclick="selectCompany('${c.replace(/'/g, "\\'")}')">${c}</div>`
-  ).join("");
-  if (val && !_authCompanyList.some(c => c.toLowerCase() === val)) {
-    html += `<div class="px-3 py-2 text-sm cursor-pointer text-indigo-600 border-t border-slate-100 hover:bg-indigo-50 transition-colors font-medium" onclick="addCustomCompany('${val.replace(/'/g, "\\'")}', event)">+ Add "${input.value.trim()}"</div>`;
-  }
-  if (!html) {
-    dropdown.classList.add("hidden");
-    return;
-  }
-  dropdown.innerHTML = html;
-  dropdown.classList.remove("hidden");
-}
-
-async function addCustomCompany(name, event) {
-  event.stopPropagation();
-  await fetch("/api/auth/companies", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ name }),
-  });
-  if (!_authCompanyList.includes(name)) {
-    _authCompanyList.push(name);
-    _authCompanyList.sort();
-  }
-  selectCompany(name);
-}
-
-function selectCompany(name) {
-  document.getElementById("authCompany").value = name;
-  document.getElementById("companyDropdown").classList.add("hidden");
-}
-
-document.addEventListener("click", function(e) {
-  const dd = document.getElementById("companyDropdown");
-  if (dd && !e.target.closest("#authCompany") && !e.target.closest("#companyDropdown")) {
-    dd.classList.add("hidden");
-  }
-});
-
-async function authRegister() {
-  if (!_authEmail) return;
-  const status = document.querySelector("#authStep4 .employment-pill.active-pill")?.dataset?.status || "employed";
-  const name = document.getElementById("authName").value.trim();
-  const position = document.getElementById("authPosition").value.trim();
-  const linkedin = document.getElementById("authLinkedin").value.trim();
-  const btn = document.getElementById("authRegisterBtn");
-  const errEl = document.getElementById("authRegisterError");
-  if (!name) {
-    errEl.textContent = "Please enter your name.";
-    errEl.classList.remove("hidden");
-    return;
-  }
-  let company;
-  if (status === "employed") {
-    company = document.getElementById("authCompany").value.trim();
-    if (!company) {
-      errEl.textContent = "Please enter your company.";
-      errEl.classList.remove("hidden");
-      return;
-    }
-  } else {
-    company = _EMPLOYMENT_LABELS[status] || "";
-  }
-  errEl.classList.add("hidden");
-  btn.disabled = true;
-  btn.textContent = "Saving...";
-  try {
-    const r = await fetch("/api/auth/register", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ email: _authEmail, name, company, position, linkedin_url: linkedin }),
-    });
-    const d = await r.json();
-    if (!d.ok) {
-      errEl.textContent = d.error || "Failed to save profile.";
-      errEl.classList.remove("hidden");
-      btn.disabled = false;
-      btn.textContent = "Complete Profile";
-      return;
-    }
-    setProfile(d.user);
-    document.getElementById("authStep4").classList.add("hidden");
-    closeAuthModal();
-    loadProfile();
-    showToast("Profile complete!");
-  } catch {
-    errEl.textContent = "Network error. Try again.";
-    errEl.classList.remove("hidden");
-  }
-  btn.disabled = false;
-  btn.textContent = "Complete Profile";
-}
-
-// Setup code inputs
-  async function loadStatsBar() {
-    // Stats come from /api/stats/public — counts are real from the database
-    // Low numbers like "2 onboarded" are just dev/local data, not production
-    const bar = document.getElementById("statsBar");
-    const content = document.getElementById("statsContent");
-    if (!bar || !content) return;
-    try {
-      const r = await fetch("/api/stats/public");
-      const d = await r.json();
-      if (d.total_users === undefined) return;
-      content.innerHTML = [
-        // { label: "onboarded", value: d.total_users },
-        { label: "searches", value: d.total_searches },
-        { label: "scraped", value: d.total_raw_jobs },
-        { label: "matches", value: d.total_relevant_jobs },
-      ].map(s => `<span class="inline-flex items-center gap-1"><span class="font-semibold text-slate-700">${s.value.toLocaleString()}</span> <span class="text-slate-400">${s.label}</span></span>`).join('<span class="text-slate-200">·</span>');
-      bar.classList.remove("hidden");
-    } catch {}
-  }
-
-  document.addEventListener("DOMContentLoaded", function() {
-    loadStatsBar();
-    loadAuthCompanyList();
-    document.querySelectorAll("#authModal .code-digit").forEach(inp => {
-    inp.addEventListener("input", function() {
-      if (this.value && this.dataset.idx < "5") {
-        const next = document.querySelector(`#authModal .code-digit[data-idx="${parseInt(this.dataset.idx)+1}"]`);
-        if (next) next.focus();
-      }
-    });
-    inp.addEventListener("keydown", function(e) {
-      if ((e.key === "Backspace" || e.key === "Backward") && !this.value && this.dataset.idx > "0") {
-        const prev = document.querySelector(`#authModal .code-digit[data-idx="${parseInt(this.dataset.idx)-1}"]`);
-        if (prev) { prev.focus(); prev.value = ""; }
-      }
-      if (e.key === "Enter") verifyCode();
-    });
-    inp.addEventListener("paste", function(e) {
-      e.preventDefault();
-      const text = (e.clipboardData || window.clipboardData).getData("text").replace(/\D/g, "");
-      if (text.length !== 6) return;
-      const inputs = document.querySelectorAll("#authModal .code-digit");
-      inputs.forEach((input, i) => { input.value = text[i] || ""; });
-      inputs[5].focus();
-    });
-  });
-  updateNavIcon();
-  loadProfile();
-  loadProfileCompanyList();
-});
-
-// ── Profile ──
-async function loadProfile() {
-  const profile = getProfile();
-  const logoutBtn = document.getElementById("logoutBtn");
-  if (!profile) {
-    document.getElementById("authPrompt").classList.remove("hidden");
-    document.getElementById("profileContent").classList.add("hidden");
-    logoutBtn.classList.add("hidden");
-    updateNavIcon();
-    setTimeout(() => document.getElementById("promptEmail").focus(), 100);
-    return;
-  }
-  logoutBtn.classList.remove("hidden");
-  updateNavIcon();
-  document.getElementById("authPrompt").classList.add("hidden");
-  document.getElementById("profileContent").classList.remove("hidden");
-
-  try {
-    const r = await fetch(`/api/profile?email=${encodeURIComponent(profile.email)}`);
-    const d = await r.json();
-    if (d.error) { showToast(d.error); return; }
-    setProfile(d);
-    renderProfile(d);
-  } catch { 
-    // Show mock profile visually if api fails for demo purposes
-    renderProfile({
-      name: profile.name || "User",
-      email: profile.email,
-      created_at: new Date().toISOString(),
-      status_counts: { total: 0 }
-    });
-  }
-  loadReferrals();
-}
-
-function renderProfile(data) {
-  document.getElementById("nameText").textContent = data.name;
-  document.getElementById("emailDisplay").textContent = data.email;
-  const d = new Date(data.created_at);
-  document.getElementById("joinedDate").textContent = "Member since " + d.toLocaleDateString("en-US", { year: "numeric", month: "long" });
-  document.getElementById("avatarLetter").textContent = data.name.charAt(0).toUpperCase();
-  const credits = data.referral_credits || 0;
-  const creditEl = document.getElementById("creditDisplay");
-  if (creditEl) creditEl.textContent = credits + " referral credits";
-  
-  const company = data.company || "";
-  const position = data.position || "";
-  const linkedin = data.linkedin_url || "";
-  
-  if (company) {
-    document.getElementById("companyDisplay").classList.remove("hidden");
-    document.getElementById("companyText").textContent = company;
-  } else {
-    document.getElementById("companyDisplay").classList.add("hidden");
-  }
-  if (position) {
-    document.getElementById("positionDisplay").classList.remove("hidden");
-    document.getElementById("positionText").textContent = position;
-  } else {
-    document.getElementById("positionDisplay").classList.add("hidden");
-  }
-  if (linkedin) {
-    document.getElementById("linkedinDisplay").classList.remove("hidden");
-    document.getElementById("linkedinDisplay").href = linkedin;
-  } else {
-    document.getElementById("linkedinDisplay").classList.add("hidden");
-  }
-  
-  renderStatusTabs(data.status_counts || {});
-  loadSavedJobs();
-}
-
-let _profileCompanyList = [];
-
-async function loadProfileCompanyList() {
-  if (_profileCompanyList.length > 0) return;
-  try {
-    const r = await fetch("/api/auth/companies");
-    const d = await r.json();
-    _profileCompanyList = d.companies || [];
-  } catch {}
-}
-
-function filterProfileCompanyDropdown() {
-  const input = document.getElementById("profileCompany");
-  const dropdown = document.getElementById("profileCompanyDropdown");
-  const val = input.value.toLowerCase().trim();
-  const matches = val ? _profileCompanyList.filter(c => c.toLowerCase().includes(val)) : _profileCompanyList;
-  let html = matches.slice(0, 30).map(c =>
-    `<div class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 transition-colors" onclick="selectProfileCompany('${c.replace(/'/g, "\\'")}')">${c}</div>`
-  ).join("");
-  if (val && !_profileCompanyList.some(c => c.toLowerCase() === val)) {
-    html += `<div class="px-3 py-2 text-sm cursor-pointer text-indigo-600 border-t border-slate-100 hover:bg-indigo-50 transition-colors font-medium" onclick="addCustomProfileCompany('${val.replace(/'/g, "\\'")}', event)">+ Add "${input.value.trim()}"</div>`;
-  }
-  if (!html) {
-    dropdown.classList.add("hidden");
-    return;
-  }
-  dropdown.innerHTML = html;
-  dropdown.classList.remove("hidden");
-}
-
-async function addCustomProfileCompany(name, event) {
-  event.stopPropagation();
-  await fetch("/api/auth/companies", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ name }),
-  });
-  if (!_profileCompanyList.includes(name)) {
-    _profileCompanyList.push(name);
-    _profileCompanyList.sort();
-  }
-  selectProfileCompany(name);
-}
-
-function selectProfileCompany(name) {
-  document.getElementById("profileCompany").value = name;
-  document.getElementById("profileCompanyDropdown").classList.add("hidden");
-}
-
-const _PROFILE_EMPLOYMENT_LABELS = {
-  employed: "",
-  student: "Student",
-  graduate: "Graduate",
-  laid_off: "Laid Off",
-  career_break: "Career Break",
-};
-
-const _PROFILE_LABEL_TO_STATUS = {
-  "Student": "student",
-  "Graduate": "graduate",
-  "Laid Off": "laid_off",
-  "Career Break": "career_break",
-};
-
-function profileSelectEmploymentStatus(status) {
-  document.querySelectorAll("#profileEdit .employment-pill").forEach(p => p.classList.remove("active-pill"));
-  const pill = document.querySelector(`#profileEdit .employment-pill[data-status="${status}"]`);
-  if (pill) pill.classList.add("active-pill");
-  const group = document.getElementById("profileCompanyGroup");
-  if (group) {
-    group.classList.toggle("hidden", status !== "employed");
-    if (status !== "employed") {
-      document.getElementById("profileCompany").value = "";
-    }
-  }
-}
-
-function enableProfileEdit() {
-  const profile = getProfile();
-  if (!profile) return;
-  document.getElementById("profileEdit").classList.remove("hidden");
-  document.getElementById("profileName").value = document.getElementById("nameText").textContent || "";
-  const currentCompany = document.getElementById("companyText").textContent || "";
-  const matchedStatus = _PROFILE_LABEL_TO_STATUS[currentCompany];
-  if (matchedStatus) {
-    profileSelectEmploymentStatus(matchedStatus);
-    document.getElementById("profileCompany").value = "";
-  } else {
-    profileSelectEmploymentStatus("employed");
-    document.getElementById("profileCompany").value = currentCompany;
-  }
-  loadProfileCompanyList();
-  filterProfileCompanyDropdown();
-  document.getElementById("profilePosition").value = document.getElementById("positionText").textContent || "";
-  document.getElementById("profileLinkedin").value = document.getElementById("linkedinDisplay").classList.contains("hidden") ? "" : document.getElementById("linkedinDisplay").href;
-  document.getElementById("profileName").focus();
-}
-function disableProfileEdit() {
-  document.getElementById("profileEdit").classList.add("hidden");
-}
-async function saveProfile() {
-  const profile = getProfile();
-  if (!profile) return;
-  const name = document.getElementById("profileName").value.trim();
-  if (!name) {
-    showToast("Name is required");
-    return;
-  }
-  const status = document.querySelector("#profileEdit .employment-pill.active-pill")?.dataset?.status || "employed";
-  const position = document.getElementById("profilePosition").value.trim();
-  const linkedin = document.getElementById("profileLinkedin").value.trim();
-  let company;
-  if (status === "employed") {
-    company = document.getElementById("profileCompany").value.trim();
-  } else {
-    company = _PROFILE_EMPLOYMENT_LABELS[status] || "";
-  }
-  try {
-    const r = await fetch("/api/profile", {
-      method: "PUT", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ email: profile.email, company, position, linkedin_url: linkedin }),
-    });
-    const d = await r.json();
-    if (d.ok) {
-      setProfile(d.user);
-      document.getElementById("companyText").textContent = d.user.company || "";
-      document.getElementById("companyDisplay").classList.toggle("hidden", !d.user.company);
-      document.getElementById("positionText").textContent = d.user.position || "";
-      document.getElementById("positionDisplay").classList.toggle("hidden", !d.user.position);
-      if (d.user.linkedin_url) {
-        document.getElementById("linkedinDisplay").classList.remove("hidden");
-        document.getElementById("linkedinDisplay").href = d.user.linkedin_url;
-      } else {
-        document.getElementById("linkedinDisplay").classList.add("hidden");
-      }
-      saveNameLocally(profile.email, name);
-    } else {
-      showToast("Failed to update");
-    }
-  } catch {
-    showToast("Network error");
-  }
-}
-
-async function saveNameLocally(email, name) {
-  document.getElementById("nameText").textContent = name;
-  document.getElementById("avatarLetter").textContent = name.charAt(0).toUpperCase();
-  try {
-    const r = await fetch("/api/profile/name", {
-      method: "PUT", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ email, name }),
-    });
-    const d = await r.json();
-    if (d.ok) {
-      const profile = getProfile();
-      if (profile) {
-        profile.name = name;
-        setProfile(profile);
-      }
-    }
-  } catch {}
-  disableProfileEdit();
-  showToast("Profile updated");
-}
-
-function renderStatusTabs(counts) {
-  const all = ["saved", "applied", "interviewing", "offer", "rejected"];
-  const labels = { saved: "Saved", applied: "Applied", interviewing: "Interviewing", offer: "Offer", rejected: "Rejected" };
-  const el = document.getElementById("statusTabs");
-  
-  const getTabClass = (isActive) => isActive 
-    ? "bg-slate-900 text-white shadow-md border-transparent" 
-    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300";
-
-  const getCountClass = (isActive) => isActive ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500";
-
-  let html = `<button class="tab-btn px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border flex items-center gap-2 whitespace-nowrap ${getTabClass(!_filterStatus)}" onclick="filterJobs('')">
-    All <span class="px-2 py-0.5 rounded-full text-xs font-bold ${getCountClass(!_filterStatus)}">${counts.total || 0}</span>
-  </button>`;
-  
-  for (const s of all) {
-    if ((counts[s] || 0) > 0 || _filterStatus === s) {
-      const isActive = _filterStatus === s;
-      html += `<button class="tab-btn px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border flex items-center gap-2 whitespace-nowrap ${getTabClass(isActive)}" data-status="${s}" onclick="filterJobs('${s}')">
-        ${labels[s]} <span class="px-2 py-0.5 rounded-full text-xs font-bold ${getCountClass(isActive)}">${counts[s] || 0}</span>
-      </button>`;
-    }
-  }
-  el.innerHTML = html;
-}
-
-let _filterStatus = "";
-
-function filterJobs(status) {
-  _filterStatus = status;
-  // Re-render tabs to update styles based on active status
-  const counts = allSavedJobs.reduce((acc, job) => {
-    const s = job.application_status || "saved";
-    acc[s] = (acc[s] || 0) + 1;
-    acc.total = (acc.total || 0) + 1;
-    return acc;
-  }, {total: 0});
-  renderStatusTabs(counts);
-  renderJobList();
-}
-
-async function loadSavedJobs() {
-  const profile = getProfile();
-  if (!profile) return;
-  try {
-    const r = await fetch(`/api/saved-jobs?email=${encodeURIComponent(profile.email)}`);
-    const d = await r.json();
-    allSavedJobs = d.jobs || [];
-    filterJobs(_filterStatus); // renders both tabs and list correctly calculated
-  } catch {
-    // Mock empty state if API fails
-    allSavedJobs = [];
-    filterJobs(_filterStatus);
-  }
-}
-
-function renderJobList() {
-  const jobs = _filterStatus ? allSavedJobs.filter(j => (j.application_status || 'saved') === _filterStatus) : allSavedJobs;
-  const el = document.getElementById("jobList");
-  if (!jobs.length) {
-    el.innerHTML = `
-      <div class="text-center py-16 px-4 bg-white rounded-2xl border border-slate-200 border-dashed">
-        <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg class="w-8 h-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/></svg>
-        </div>
-        <h3 class="text-slate-900 font-medium mb-1">${_filterStatus ? `No ${_filterStatus} jobs found` : "No saved jobs yet"}</h3>
-        <p class="text-slate-500 text-sm">When you bookmark jobs, they will appear here.</p>
-      </div>`;
-    return;
-  }
-
-  const getStatusStyles = (status) => {
-    switch(status) {
-      case 'applied': return 'bg-blue-50 text-blue-700 border-blue-200 focus:ring-blue-500/20';
-      case 'interviewing': return 'bg-amber-50 text-amber-700 border-amber-200 focus:ring-amber-500/20';
-      case 'offer': return 'bg-emerald-50 text-emerald-700 border-emerald-200 focus:ring-emerald-500/20';
-      case 'rejected': return 'bg-red-50 text-red-700 border-red-200 focus:ring-red-500/20';
-      default: return 'bg-slate-100 text-slate-700 border-slate-200 focus:ring-slate-500/20';
-    }
-  };
-
-  el.innerHTML = jobs.map(j => {
-    const status = j.application_status || "saved";
-    const statusClass = getStatusStyles(status);
-    const savedDate = j.saved_at ? new Date(j.saved_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
-    const tags = (j.tags || []).slice(0, 3);
-    
-    return `
-    <div class="group bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/60 hover:shadow-md hover:border-indigo-200 transition-all duration-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div class="flex-1 min-w-0">
-        <a href="${j.url}" target="_blank" class="text-base sm:text-lg font-bold text-slate-900 hover:text-indigo-600 transition-colors truncate block">
-          ${j.title || "Untitled Position"}
-        </a>
-        <div class="flex flex-wrap items-center gap-2 sm:gap-3 text-sm text-slate-500 mt-1 mb-3">
-          <span class="font-medium text-slate-700 flex items-center gap-1">
-            <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-            ${j.company || "Unknown Company"}
-          </span>
-          ${j.location ? `<span class="flex items-center gap-1"><svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>${j.location}</span>` : ""}
-          ${j.total_score ? `<span class="font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded text-xs flex items-center gap-1"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>${j.total_score}/100</span>` : ""}
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          ${tags.map(t => `<span class="text-xs font-medium bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md border border-slate-200/60">${t}</span>`).join("")}
-          ${savedDate ? `<span class="text-xs text-slate-400 sm:ml-auto flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Saved ${savedDate}</span>` : ""}
-        </div>
-      </div>
-      
-      <div class="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 sm:border-l sm:border-slate-100 sm:pl-5 sm:ml-2 flex-shrink-0">
-        <select class="status-select outline-none border px-3 py-2 rounded-xl text-sm font-semibold transition-all focus:ring-2 cursor-pointer ${statusClass}" onchange="updateStatus(${j.id}, this.value)">
-          <option value="saved" ${status==="saved"?"selected":""}>Saved</option>
-          <option value="applied" ${status==="applied"?"selected":""}>Applied</option>
-          <option value="interviewing" ${status==="interviewing"?"selected":""}>Interviewing</option>
-          <option value="offer" ${status==="offer"?"selected":""}>Offer</option>
-          <option value="rejected" ${status==="rejected"?"selected":""}>Rejected</option>
-        </select>
-        
-        <button class="shrink-0 text-sm font-medium transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100 active:bg-violet-200" onclick="event.preventDefault(); event.stopPropagation(); _referralJobTitle='${(j.title||'').replace(/'/g, "\\'")}'; _referralMatchScore=${j.total_score||0}; _referralJobUrl='${(j.url||'').replace(/'/g, "\\'")}'; showReferralUsers('${(j.company||'').replace(/'/g, "\\'")}')" title="See referrals at this company">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
-          Referrals
-        </button>
-        <button class="flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-red-600 hover:bg-red-50 px-2 py-1.5 rounded-lg transition-all opacity-100 sm:opacity-0 group-hover:opacity-100 focus:opacity-100" onclick="removeJob(${j.id})" title="Remove from saved jobs">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-          <span class="sm:hidden">Remove</span>
-        </button>
-      </div>
-    </div>`;
-  }).join("");
-}
-
-async function updateStatus(jobId, status) {
-  try {
-    const r = await fetch(`/api/saved-jobs/${jobId}/status`, {
-      method: "PATCH", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ status }),
-    });
-    const d = await r.json();
-    if (d.ok) {
-      const job = allSavedJobs.find(j => j.id === jobId);
-      if (job) job.application_status = status;
-      filterJobs(_filterStatus); // update UI
-      showToast("Application status updated");
-    }
-  } catch { 
-    // Mock UI update if api fails
-    const job = allSavedJobs.find(j => j.id === jobId);
-    if (job) job.application_status = status;
-    filterJobs(_filterStatus);
-    showToast("Application status updated");
-  }
-}
-
-async function removeJob(jobId) {
-  try {
-    const r = await fetch(`/api/saved-jobs/${jobId}`, { method: "DELETE" });
-    const d = await r.json();
-    if (d.deleted) {
-      allSavedJobs = allSavedJobs.filter(j => j.id !== jobId);
-      filterJobs(_filterStatus);
-      showToast("Job removed from saved list");
-    }
-  } catch { 
-    // Mock UI removal if api fails
-    allSavedJobs = allSavedJobs.filter(j => j.id !== jobId);
-    filterJobs(_filterStatus);
-    showToast("Job removed from saved list");
-  }
-}
-
-// ── Referral Modal (for saved jobs) ──
-let _referralCompany = "";
-let _referralJobTitle = "";
-let _referralMatchScore = 0;
-let _referralJobUrl = "";
-let _companyUserCache = {};
-
-function closeReferralModal() {
-  document.getElementById("referralModal").classList.add("hidden");
-  document.getElementById("referralModal").classList.remove("flex");
-}
-
-async function showReferralUsers(company) {
-  if (!_companyUserCache[company]) {
-    try {
-      const r = await fetch(`/api/users/at-company?company=${encodeURIComponent(company)}`);
-      const d = await r.json();
-      _companyUserCache[company] = d || { users: [], count: 0 };
-    } catch {
-      _companyUserCache[company] = { users: [], count: 0 };
-    }
-  }
-  const cu = _companyUserCache[company];
-  const users = cu && cu.users ? cu.users : [];
-  _referralCompany = company;
-  const profile = getProfile();
-  const modal = document.getElementById("referralModal");
-  const list = document.getElementById("referralUserList");
-  const title = document.getElementById("referralCompanyTitle");
-  const remainingEl = document.getElementById("referralRemaining");
-  title.textContent = company;
-  if (profile) {
-    fetch(`/api/referrals/remaining?email=${encodeURIComponent(profile.email)}`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.remaining > 0) {
-          remainingEl.textContent = `${d.remaining}/${d.limit} requests remaining this month`;
-          remainingEl.classList.remove("hidden");
-        }
-      }).catch(() => {});
-  } else {
-    remainingEl.classList.add("hidden");
-  }
-  if (users.length === 0 && !profile) {
-    list.innerHTML = `
-      <div class="space-y-2 opacity-50 pointer-events-none select-none">
-        ${[1,2,3].map(i => `
-        <div class="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
-          <div class="flex items-center gap-3 min-w-0">
-            <div class="w-8 h-8 rounded-full bg-slate-300 flex items-center justify-center text-sm font-bold shrink-0 text-slate-500">?</div>
-            <div class="min-w-0">
-              <div class="text-sm font-medium text-slate-500 truncate">????</div>
-              <div class="text-xs text-slate-500 truncate">Position at ${htmlEscape(company)}</div>
-            </div>
-          </div>
-          <button class="text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg">Ask for Referral</button>
-        </div>
-        `).join('')}
-      </div>
-      <button onclick="closeReferralModal(); showAuthModal()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg text-sm font-semibold transition-colors mt-3">Sign in to see the list</button>
-    `;
-    modal.classList.remove("hidden");
-    modal.classList.add("flex");
-    return;
-  }
-  if (users.length === 0) {
-    list.innerHTML = `<div class="text-center py-8">
-      <div class="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-3">
-        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-      </div>
-      <p class="text-sm font-medium text-slate-600">No one from ${htmlEscape(company)} on the platform yet</p>
-    </div>`;
-    modal.classList.remove("hidden");
-    modal.classList.add("flex");
-    return;
-  }
-  list.innerHTML = users.map(u => `
-    <div class="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
-      <div class="flex items-center gap-3 min-w-0">
-        <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-bold shrink-0">${htmlEscape(u.name.charAt(0).toUpperCase())}</div>
-        <div class="min-w-0">
-          <div class="text-sm font-medium text-slate-900 truncate">${htmlEscape(u.name)}</div>
-          <div class="text-xs text-slate-500 truncate">${htmlEscape(u.position || 'Works at ' + company)}</div>
-        </div>
-      </div>
-      ${profile
-        ? `<button class="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors" onclick="askReferral(this, ${JSON.stringify(u.email)}, ${JSON.stringify(u.name)})">Ask for Referral</button>`
-        : `<button class="text-xs font-medium text-slate-400 bg-slate-50 px-3 py-1.5 rounded-lg" onclick="closeReferralModal(); showAuthModal()">Sign in to ask</button>`
-      }
-    </div>
-  `).join("");
-  modal.classList.remove("hidden");
-  modal.classList.add("flex");
-}
-
-function askReferral(btn, toEmail, toName) {
-  const profile = getProfile();
-  if (!profile) { closeReferralModal(); showAuthModal(); return; }
-  if (toEmail === profile.email) {
-    showToast("You can't refer yourself");
-    return;
-  }
-  btn.disabled = true;
-  btn.textContent = "Sending...";
-  fetch("/api/referrals/request", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      from_email: profile.email,
-      to_email: toEmail,
-      job_url: _referralJobUrl || "",
-      job_title: _referralJobTitle || "",
-      company: _referralCompany,
-      match_score: _referralMatchScore || 0,
-    }),
-  }).then(r => r.json()).then(d => {
-    if (d.ok) {
-      showToast(`Referral request sent to ${toName}!`);
-      closeReferralModal();
-    } else {
-      showToast(d.error || "Failed to send request");
-      btn.disabled = false;
-      btn.textContent = "Ask for Referral";
-    }
-  }).catch(() => {
-    showToast("Network error");
-    btn.disabled = false;
-    btn.textContent = "Ask for Referral";
-  });
-}
-
-// ── Referral Dashboard ──
-let _referralTab = "incoming";
-
-function htmlEscape(str) {
-  const div = document.createElement("div");
-  div.appendChild(document.createTextNode(str || ""));
-  return div.innerHTML;
-}
-
-function switchReferralTab(tab) {
-  _referralTab = tab;
-  const tabs = ["incoming", "outgoing", "history"];
-  tabs.forEach(t => {
-    const el = document.getElementById("tab" + t.charAt(0).toUpperCase() + t.slice(1));
-    el.className = tab === t
-      ? "tab-btn px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border flex items-center gap-2 whitespace-nowrap bg-slate-900 text-white shadow-md border-transparent"
-      : "tab-btn px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border flex items-center gap-2 whitespace-nowrap bg-white text-slate-600 border-slate-200 hover:bg-slate-50";
-  });
-  loadReferrals();
-}
-
-async function loadReferrals() {
-  const profile = getProfile();
-  if (!profile) return;
-  const el = document.getElementById("referralList");
-  try {
-    let reqs = [];
-    if (_referralTab === "history") {
-      const [inc, out] = await Promise.all([
-        fetch(`/api/referrals/incoming?email=${encodeURIComponent(profile.email)}`).then(r => r.json()),
-        fetch(`/api/referrals/outgoing?email=${encodeURIComponent(profile.email)}`).then(r => r.json()),
-      ]);
-      reqs = [...(inc.requests || []).map(r => ({ ...r, _direction: "from" })),
-              ...(out.requests || []).map(r => ({ ...r, _direction: "to" }))];
-      reqs.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
-    } else {
-      const r = await fetch(`/api/referrals/${_referralTab}?email=${encodeURIComponent(profile.email)}`);
-      const d = await r.json();
-      reqs = d.requests || [];
-    }
-    
-    if (_referralTab === "incoming") {
-      const countEl = document.getElementById("incomingCount");
-      if (countEl) countEl.textContent = reqs.length;
-    }
-    if (_referralTab === "outgoing") {
-      const countEl = document.getElementById("outgoingCount");
-      if (countEl) countEl.textContent = reqs.length;
-    }
-
-    if (reqs.length === 0) {
-      el.innerHTML = `<div class="text-center text-sm text-slate-400 py-8">No ${_referralTab} requests</div>`;
-      return;
-    }
-
-    el.innerHTML = reqs.map(r => {
-      const name = r.from_name || r.to_name || "Unknown";
-      const isIncoming = _referralTab === "incoming" || (_referralTab === "history" && r._direction === "from");
-      const statusColors = {
-        pending: "bg-amber-50 text-amber-700 border-amber-200",
-        accepted: "bg-emerald-50 text-emerald-700 border-emerald-200",
-        declined: "bg-red-50 text-red-700 border-red-200",
-      };
-      const sc = statusColors[r.status] || "bg-slate-50 text-slate-600 border-slate-200";
-
-      let directionLabel = "";
-      if (_referralTab === "history") {
-        directionLabel = r._direction === "from"
-          ? `<span class="text-xs text-slate-400 font-medium">from ${htmlEscape(name)}</span>`
-          : `<span class="text-xs text-slate-400 font-medium">to ${htmlEscape(name)}</span>`;
-      }
-
-      let actions = "";
-      if (isIncoming && r.status === "pending") {
-        actions = `
-          <div class="flex gap-2 mt-2">
-            <button class="text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors" onclick="acceptReferral(${r.id})">Accept</button>
-            <button class="text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg transition-colors" onclick="declineReferral(${r.id})">Decline</button>
-          </div>`;
-      }
-      if (r.status === "accepted" && isIncoming) {
-        actions = r.credit_awarded
-          ? `<p class="text-xs text-emerald-600 font-medium mt-1">✅ Referred — 10 credits earned</p>`
-          : `<button class="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-lg transition-colors mt-2" onclick="completeReferral(${r.id})">Mark as Referred (+10 credits)</button>`;
-      }
-      if (r.status === "accepted" && !isIncoming) {
-        actions = `<p class="text-xs text-emerald-600 font-medium mt-1">✅ Accepted — they can see your contact</p>`;
-      }
-      if (!isIncoming && r.status === "pending") {
-        actions = `<button class="text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg transition-colors mt-2" onclick="withdrawReferral(${r.id})">Withdraw</button>`;
-      }
-
-      return `
-      <div class="bg-white border border-slate-200 rounded-xl p-4">
-        <div class="flex items-start justify-between">
-          <div class="min-w-0">
-            <div class="flex items-center gap-2">
-              <span class="font-medium text-slate-900 text-sm">${htmlEscape(name)}</span>
-              <span class="text-xs font-medium px-2 py-0.5 rounded-full border ${sc}">${r.status}</span>
-            </div>
-            ${directionLabel}
-            <p class="text-xs text-slate-500 mt-0.5">${htmlEscape(r.job_title || "Job at " + r.company)}</p>
-            ${r.match_score ? `<p class="text-xs text-indigo-600 font-medium mt-0.5">Match score: ${r.match_score}/100</p>` : ""}
-            ${r.message ? `<p class="text-xs text-slate-500 mt-1 italic">${htmlEscape(r.message)}</p>` : ""}
-            ${r.status === "accepted" && isIncoming ? `
-            <div class="mt-2 p-2 bg-indigo-50 border border-indigo-100 rounded-lg space-y-1">
-              <p class="text-xs text-indigo-700 font-medium">Contact revealed</p>
-              <p class="text-xs text-slate-600">${htmlEscape(r.from_email)}</p>
-              ${r.from_linkedin_url ? `<a href="${htmlEscape(r.from_linkedin_url)}" target="_blank" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>LinkedIn Profile</a>` : ""}
-            </div>` : ""}
-          </div>
-          ${r.match_score ? `<div class="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-600 shrink-0">${r.match_score}</div>` : ""}
-        </div>
-        ${actions}
-      </div>`;
-    }).join("");
-  } catch {
-    el.innerHTML = `<div class="text-center text-sm text-slate-400 py-8">Failed to load referrals</div>`;
-  }
-}
-
-async function acceptReferral(id) {
-  const profile = getProfile();
-  if (!profile) return;
-  try {
-    const r = await fetch(`/api/referrals/${id}/accept`, {
-      method: "PUT", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ email: profile.email }),
-    });
-    const d = await r.json();
-    if (d.ok && d.contact) {
-      showToast(`Contact revealed: ${d.contact.email}`);
-      loadReferrals();
-    }
-  } catch {
-    showToast("Failed to accept");
-  }
-}
-
-async function declineReferral(id) {
-  const profile = getProfile();
-  if (!profile) return;
-  try {
-    const r = await fetch(`/api/referrals/${id}/decline`, {
-      method: "PUT", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ email: profile.email }),
-    });
-    const d = await r.json();
-    if (d.ok) {
-      showToast("Referral declined");
-      loadReferrals();
-    }
-  } catch {
-    showToast("Failed to decline");
-  }
-}
-
-async function completeReferral(id) {
-  const profile = getProfile();
-  if (!profile) return;
-  try {
-    const r = await fetch(`/api/referrals/${id}/complete`, {
-      method: "PUT", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ email: profile.email }),
-    });
-    const d = await r.json();
-    if (d.ok) {
-      showToast("Referral marked complete! +10 credits");
-      loadReferrals();
-      loadProfile();
-    } else {
-      showToast(d.error || "Failed");
-    }
-  } catch {
-    showToast("Network error");
-  }
-}
-
-async function withdrawReferral(id) {
-  const profile = getProfile();
-  if (!profile) return;
-  if (!confirm("Withdraw this referral request?")) return;
-  try {
-    const r = await fetch(`/api/referrals/${id}/withdraw`, {
-      method: "PUT", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ email: profile.email }),
-    });
-    const d = await r.json();
-    if (d.ok) {
-      showToast("Referral withdrawn");
-      loadReferrals();
-    } else {
-      showToast(d.error || "Failed to withdraw");
-    }
-  } catch {
-    showToast("Network error");
-  }
-}
-
-document.addEventListener("click", function(e) {
-  const dd = document.getElementById("profileCompanyDropdown");
-  if (dd && !e.target.closest("#profileCompany") && !e.target.closest("#profileCompanyDropdown")) {
-    dd.classList.add("hidden");
-  }
-});
-</script>
+<script type="module" src="js/constants.js"></script>
+<script type="module" src="js/utils.js"></script>
+<script type="module" src="js/auth.js"></script>
+<script type="module" src="js/profile.js"></script>
+<script type="module" src="js/jobs.js"></script>
+<script type="module" src="js/referrals.js"></script>
+<script type="module" src="js/main.js"></script>
 </body>
 </html>

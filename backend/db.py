@@ -9,6 +9,7 @@ from typing import Optional
 _DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "job_agent.db")
 _write_lock = threading.Lock()
 _job_count_cache: dict[str, int] = {}
+DEV_MODE = True
 
 
 def _get_conn():
@@ -91,6 +92,7 @@ def init_db():
                 company TEXT DEFAULT '',
                 position TEXT DEFAULT '',
                 linkedin_url TEXT DEFAULT '',
+                resume_filename TEXT DEFAULT '',
                 referral_credits INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
@@ -175,6 +177,9 @@ def init_db():
                 message TEXT DEFAULT '',
                 status TEXT DEFAULT 'pending',
                 credit_awarded INTEGER DEFAULT 0,
+                accepted_at TEXT DEFAULT '',
+                receiver_confirmed INTEGER DEFAULT 0,
+                sender_confirmed INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -203,6 +208,17 @@ def init_db():
             cur.execute("ALTER TABLE referral_requests ADD COLUMN credit_awarded INTEGER DEFAULT 0")
         except Exception:
             pass
+        # Migrate existing users table — add resume_filename
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN resume_filename TEXT DEFAULT ''")
+        except Exception:
+            pass
+        # Migrate existing referral_requests table — add dual-confirmation columns
+        for col in ("accepted_at TEXT DEFAULT ''", "receiver_confirmed INTEGER DEFAULT 0", "sender_confirmed INTEGER DEFAULT 0"):
+            try:
+                cur.execute(f"ALTER TABLE referral_requests ADD COLUMN {col}")
+            except Exception:
+                pass
         conn.commit()
         try:
             cur.execute("ALTER TABLE sessions ADD COLUMN elapsed_seconds REAL DEFAULT 0")
@@ -486,7 +502,7 @@ def update_user_name(email: str, name: str):
                      (name, _now(), email))
         conn.commit()
 
-def update_user_profile(email: str, name: str = None, company: str = None, position: str = None, linkedin_url: str = None):
+def update_user_profile(email: str, name: str = None, company: str = None, position: str = None, linkedin_url: str = None, resume_filename: str = None):
     fields = []
     values = []
     if name is not None:
@@ -501,6 +517,9 @@ def update_user_profile(email: str, name: str = None, company: str = None, posit
     if linkedin_url is not None:
         fields.append("linkedin_url = ?")
         values.append(linkedin_url)
+    if resume_filename is not None:
+        fields.append("resume_filename = ?")
+        values.append(resume_filename)
     if not fields:
         return
     fields.append("updated_at = ?")
@@ -896,8 +915,12 @@ def update_referral_status(req_id: int, status: str) -> bool:
     now = _now()
     with _write_lock:
         conn, cur = _get_conn()
-        cur.execute("UPDATE referral_requests SET status = ?, updated_at = ? WHERE id = ?",
-                     (status, now, req_id))
+        if status == "accepted":
+            cur.execute("UPDATE referral_requests SET status = ?, accepted_at = ?, updated_at = ? WHERE id = ?",
+                         (status, now, now, req_id))
+        else:
+            cur.execute("UPDATE referral_requests SET status = ?, updated_at = ? WHERE id = ?",
+                         (status, now, req_id))
         conn.commit()
         return cur.rowcount > 0
 
@@ -909,21 +932,73 @@ def get_referral_request(req_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def complete_referral(req_id: int, referrer_email: str) -> bool:
+def confirm_referral(req_id: int, email: str, role: str) -> dict:
+    """
+    role: 'receiver' or 'sender'
+    Returns {ok, credits_awarded, receiver_confirmed, sender_confirmed, error}
+    """
     req = get_referral_request(req_id)
-    if not req or req["to_email"] != referrer_email:
-        return False
-    if req["status"] != "accepted" or req.get("credit_awarded"):
-        return False
+    if not req:
+        return {"ok": False, "error": "Request not found"}
+    if req["status"] != "accepted":
+        return {"ok": False, "error": "Request is not accepted"}
+    if req.get("credit_awarded"):
+        return {"ok": False, "error": "Credits already awarded"}
+
+    if role == "receiver" and req["to_email"] != email:
+        return {"ok": False, "error": "Not authorized"}
+    if role == "sender" and req["from_email"] != email:
+        return {"ok": False, "error": "Not authorized"}
+
+    if req.get("accepted_at"):
+        from datetime import datetime
+        now_ts = datetime.utcnow().timestamp()
+        try:
+            accepted_ts = datetime.fromisoformat(req["accepted_at"]).timestamp()
+        except Exception:
+            accepted_ts = 0
+        elapsed = now_ts - accepted_ts
+        cooldown = 10 if DEV_MODE else 48 * 3600
+        if elapsed < cooldown:
+            remaining = int(cooldown - elapsed)
+            if DEV_MODE:
+                return {"ok": False, "error": f"Please wait {remaining}s before confirming",
+                        "accepted_at": req["accepted_at"]}
+            remaining_h = remaining // 3600
+            remaining_m = remaining % 3600 // 60
+            return {"ok": False, "error": f"Please wait {remaining_h}h {remaining_m}m before confirming",
+                    "accepted_at": req["accepted_at"]}
+
     now = _now()
+    field = "receiver_confirmed" if role == "receiver" else "sender_confirmed"
+
     with _write_lock:
         conn, cur = _get_conn()
-        cur.execute("UPDATE referral_requests SET credit_awarded = 1, updated_at = ? WHERE id = ?",
-                     (now, req_id))
-        cur.execute("UPDATE users SET referral_credits = referral_credits + 10, updated_at = ? WHERE email = ?",
-                     (now, referrer_email))
+        cur.execute(f"UPDATE referral_requests SET {field} = 1, updated_at = ? WHERE id = ?", (now, req_id))
         conn.commit()
-        return True
+
+    updated = get_referral_request(req_id)
+    credits_awarded = False
+    if updated.get("receiver_confirmed") and updated.get("sender_confirmed"):
+        with _write_lock:
+            conn2, cur2 = _get_conn()
+            cur2.execute("UPDATE referral_requests SET credit_awarded = 1, updated_at = ? WHERE id = ?", (now, req_id))
+            cur2.execute("UPDATE users SET referral_credits = referral_credits + 10, updated_at = ? WHERE email = ?",
+                         (now, req["to_email"]))
+            conn2.commit()
+            credits_awarded = True
+
+    return {
+        "ok": True,
+        "credits_awarded": credits_awarded,
+        "receiver_confirmed": 1 if credits_awarded or role == "receiver" else updated.get("receiver_confirmed", 0),
+        "sender_confirmed": 1 if credits_awarded or role == "sender" else updated.get("sender_confirmed", 0),
+    }
+
+def complete_referral(req_id: int, referrer_email: str) -> bool:
+    """Legacy wrapper — kept for backward compat. Delegates to confirm_referral."""
+    result = confirm_referral(req_id, referrer_email, "receiver")
+    return result.get("ok", False)
 
 
 def add_custom_company(name: str) -> bool:

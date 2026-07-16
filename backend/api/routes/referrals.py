@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from db import (
     create_referral_request, get_incoming_referrals, get_outgoing_referrals,
-    update_referral_status, get_referral_request, get_user, complete_referral,
+    update_referral_status, get_referral_request, get_user, confirm_referral,
     get_pending_referral, get_monthly_sent_count,
 )
 from utils.rate_limiter import check_rate_limit
@@ -60,6 +60,7 @@ async def referral_incoming(email: str = ""):
         from_user = get_user(r["from_email"])
         r["from_name"] = from_user["name"] if from_user else "Unknown"
         r["from_linkedin_url"] = from_user.get("linkedin_url", "") if from_user else ""
+        r["from_resume_filename"] = from_user.get("resume_filename", "") if from_user else ""
     return {"requests": reqs}
 
 
@@ -94,6 +95,7 @@ async def referral_accept(req_id: int, body: UpdateStatusRequest):
                 "email": from_user["email"] if from_user else "Unknown",
                 "name": from_user["name"] if from_user else "Unknown",
                 "linkedin_url": from_user.get("linkedin_url", "") if from_user else "",
+                "resume_filename": from_user.get("resume_filename", "") if from_user else "",
             }
         }
     return {"ok": False, "error": "Failed to update"}
@@ -112,10 +114,28 @@ async def referral_decline(req_id: int, body: UpdateStatusRequest):
 
 @router.put("/{req_id}/complete")
 async def referral_complete(req_id: int, body: UpdateStatusRequest):
-    ok = complete_referral(req_id, body.email)
-    if ok:
-        return {"ok": True, "credits_earned": 10}
-    return {"ok": False, "error": "Cannot complete — must be accepted and not already credited"}
+    result = confirm_referral(req_id, body.email, "receiver")
+    if result["ok"]:
+        return {
+            "ok": True,
+            "credits_awarded": result["credits_awarded"],
+            "receiver_confirmed": result["receiver_confirmed"],
+            "sender_confirmed": result["sender_confirmed"],
+        }
+    return {"ok": False, "error": result.get("error", "Cannot complete")}
+
+
+@router.put("/{req_id}/confirm")
+async def referral_confirm(req_id: int, body: UpdateStatusRequest):
+    result = confirm_referral(req_id, body.email, "sender")
+    if result["ok"]:
+        return {
+            "ok": True,
+            "credits_awarded": result["credits_awarded"],
+            "receiver_confirmed": result["receiver_confirmed"],
+            "sender_confirmed": result["sender_confirmed"],
+        }
+    return {"ok": False, "error": result.get("error", "Cannot confirm")}
 
 
 @router.put("/{req_id}/withdraw")
