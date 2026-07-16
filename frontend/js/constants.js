@@ -1,4 +1,4 @@
-const DEV_MODE = true;
+const DEV_MODE = false;
 const REFERRAL_COOLDOWN = DEV_MODE ? 10 : 172800;
 const EMAILJS_SERVICE_ID = "service_hm8m45q";
 const EMAILJS_TEMPLATE_ID = "template_6hlgxz5";

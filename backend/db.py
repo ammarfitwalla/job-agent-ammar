@@ -9,7 +9,7 @@ from typing import Optional
 _DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "job_agent.db")
 _write_lock = threading.Lock()
 _job_count_cache: dict[str, int] = {}
-DEV_MODE = True
+DEV_MODE = False
 
 
 def _get_conn():
