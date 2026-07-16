@@ -74,7 +74,7 @@ let _authEmail = "";
   });
 })();
 
-const DEV_MODE = true;
+const DEV_MODE = false;
 
 const EMAILJS_SERVICE_ID = "service_hm8m45q";
 const EMAILJS_TEMPLATE_ID = "template_6hlgxz5";

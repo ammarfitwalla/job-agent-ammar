@@ -9,7 +9,7 @@ from db import get_user, create_user, save_verification_code, verify_code, get_c
 from config import COMPANIES
 from utils.rate_limiter import check_rate_limit
 
-DEV_MODE = True  # Set to True for development mode, False for production   
+DEV_MODE = False  # Set to True for development mode, False for production   
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
