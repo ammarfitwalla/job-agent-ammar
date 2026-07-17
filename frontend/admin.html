@@ -252,19 +252,16 @@ tr td:first-child { border-radius: 0; }
       <div class="chart-box"><h3>Sessions by Status</h3><canvas id="statusChart" height="160"></canvas></div>
     </div>
 
-    <div class="chart-box" id="twitterCard" style="max-width:500px">
-      <h3>
-        <span class="flex items-center gap-2">
-          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-          X / Twitter
-        </span>
-      </h3>
-      <div id="twitterStatus" class="text-sm text-slate-500">Loading...</div>
-      <div class="mt-3 space-y-2" id="twitterSchedule"></div>
+    <div class="chart-box" id="dbCard" style="max-width:500px">
+      <h3>Database</h3>
+      <div id="dbInfo" class="text-sm text-slate-500">—</div>
       <div class="mt-3">
-        <textarea id="tweetText" class="w-full border border-slate-200 rounded-lg p-2 text-xs outline-none focus:border-slate-400" rows="3" placeholder="Write a custom tweet..."></textarea>
-        <button class="mt-2 px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium rounded-lg transition-colors" onclick="postManualTweet()">Post Tweet</button>
-        <span id="tweetResult" class="ml-2 text-xs"></span>
+        <input type="file" id="dbFileInput" accept=".db" class="text-sm">
+        <button class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors" onclick="restoreDB()">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+          Upload &amp; Restore
+        </button>
+        <span id="dbRestoreResult" class="ml-2 text-xs"></span>
       </div>
     </div>
 
@@ -299,6 +296,10 @@ tr td:first-child { border-radius: 0; }
 <div class="footer">Job Agent Admin &middot; <a href="/" target="_blank">Main App &#8599;</a></div>
 
 <script>
+const _adminEmail = "ammarfitwalla@gmail.com";
+const _profile = JSON.parse(localStorage.getItem("profile") || "null");
+if (!_profile || _profile.email !== _adminEmail) { window.location.href = "/"; }
+
 let dailyChart, statusChart, scoreChart;
 let allSessions = [];
 let _refreshInterval = null;
@@ -633,66 +634,49 @@ function switchTab(name) {
 }
 
 // ── Twitter Marketing ──
-async function loadTwitterStatus() {
-  const card = document.getElementById("twitterCard");
-  if (!card) return;
+// ── Database ──
+async function loadDbInfo() {
   try {
-    const r = await fetch("/api/admin/twitter/status", { cache: "no-cache" });
+    const r = await fetch(`/api/admin/db/info?email=${encodeURIComponent(_adminEmail)}`);
     const d = await r.json();
-    if (!d.enabled) {
-      document.getElementById("twitterStatus").innerHTML = '<span class="text-amber-600">Disabled (X_ENABLED=False)</span>';
-      document.getElementById("twitterSchedule").innerHTML = "";
-      return;
-    }
-    const status = d.has_tokens
-      ? '<span class="text-emerald-600 font-medium">Connected</span>'
-      : '<span class="text-red-500">Missing tokens</span>';
-    document.getElementById("twitterStatus").innerHTML = status;
-
-    let html = '<div class="text-xs font-medium text-slate-500 mb-1">Schedule:</div>';
-    (d.schedule || []).forEach(e => {
-      const tpl = (d.templates || {})[e.template] || e.template;
-      html += `<div class="text-xs text-slate-700 flex gap-2">
-        <span class="font-medium capitalize w-12">${e.day}</span>
-        <span class="text-slate-400 w-20">${e.window}</span>
-        <span class="truncate">${tpl.substring(0, 60)}...</span>
-      </div>`;
-    });
-    document.getElementById("twitterSchedule").innerHTML = html;
+    if (d.error) { document.getElementById("dbInfo").textContent = "Failed to load"; return; }
+    document.getElementById("dbInfo").innerHTML = `Size: <strong>${d.size_mb} MB</strong> &middot; Sessions: <strong>${d.sessions}</strong> &middot; Users: <strong>${d.users}</strong>`;
   } catch {
-    document.getElementById("twitterStatus").innerHTML = '<span class="text-red-500">Failed to load</span>';
+    document.getElementById("dbInfo").textContent = "Failed to load";
   }
 }
 
-async function postManualTweet() {
-  const text = document.getElementById("tweetText").value.trim();
-  if (!text) return;
-  const btn = document.querySelector("#twitterCard button");
+async function restoreDB() {
+  const input = document.getElementById("dbFileInput");
+  const file = input.files[0];
+  if (!file) { alert("Select a .db file first"); return; }
+  if (!confirm("Replace the current database with this backup? This cannot be undone.")) return;
+  const btn = document.querySelector("#dbCard button");
   btn.disabled = true;
-  btn.textContent = "Posting...";
-  document.getElementById("tweetResult").textContent = "";
+  btn.innerHTML = '<span class="animate-spin inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full"></span> Restoring...';
+  const result = document.getElementById("dbRestoreResult");
+  result.textContent = "";
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("email", _adminEmail);
   try {
-    const r = await fetch("/api/admin/twitter/tweet", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({text}),
-    });
+    const r = await fetch("/api/admin/db/restore", { method: "POST", body: fd });
     const d = await r.json();
-    const el = document.getElementById("tweetResult");
     if (d.ok) {
-      el.innerHTML = '<span class="text-emerald-600">Posted!</span>';
-      document.getElementById("tweetText").value = "";
+      result.innerHTML = '<span class="text-emerald-600 font-medium">Restored! Reloading...</span>';
+      setTimeout(() => location.reload(), 1500);
     } else {
-      el.innerHTML = `<span class="text-red-500">${d.error || "Failed"}</span>`;
+      result.innerHTML = `<span class="text-red-500">${d.error || "Failed"}</span>`;
     }
   } catch {
-    document.getElementById("tweetResult").innerHTML = '<span class="text-red-500">Network error</span>';
+    result.innerHTML = '<span class="text-red-500">Network error</span>';
   }
   btn.disabled = false;
-  btn.textContent = "Post Tweet";
+  btn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>\n          Upload &amp; Restore';
 }
 
 // ── Init ──
-loadStats(); loadSessions(); loadScores(); loadRegistrations(); loadVisits(); loadTwitterStatus();
+loadStats(); loadSessions(); loadScores(); loadRegistrations(); loadVisits(); loadDbInfo();
 startRefresh();
 </script>
 </body>

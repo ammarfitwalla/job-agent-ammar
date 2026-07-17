@@ -2,10 +2,12 @@ import json
 import os
 import tempfile
 from datetime import datetime, timedelta
-from fastapi import APIRouter
+from fastapi import APIRouter, UploadFile, File
 from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+ADMIN_EMAIL = "ammarfitwalla@gmail.com"
 
 
 def _classify(s):
@@ -263,26 +265,35 @@ async def admin_leads():
     return {"leads": get_leads(limit=500)}
 
 
-@router.get("/twitter/status")
-async def twitter_status():
-    from config import X_ENABLED, X_SCHEDULE, X_TEMPLATES, X_ACCESS_TOKEN, X_REFRESH_TOKEN
+@router.get("/db/info")
+async def admin_db_info(email: str = ""):
+    if email != ADMIN_EMAIL:
+        return {"error": "Unauthorized"}, 403
+    from db import _get_conn, _DB_PATH
 
-    return {
-        "enabled": X_ENABLED,
-        "has_tokens": bool(X_ACCESS_TOKEN) and bool(X_REFRESH_TOKEN),
-        "schedule": X_SCHEDULE,
-        "templates": X_TEMPLATES,
-    }
+    conn, cur = _get_conn()
+    cur.execute("SELECT COUNT(*) FROM sessions")
+    sessions = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM users")
+    users = cur.fetchone()[0]
+
+    size_bytes = os.path.getsize(_DB_PATH) if os.path.isfile(_DB_PATH) else 0
+    return {"size_bytes": size_bytes, "size_mb": round(size_bytes / 1048576, 2), "sessions": sessions, "users": users}
 
 
-@router.post("/twitter/tweet")
-async def twitter_post(req: dict):
-    text = req.get("text", "").strip()
-    if not text:
-        return {"ok": False, "error": "Tweet text is required"}
-    if len(text) > 280:
-        return {"ok": False, "error": "Tweet exceeds 280 characters"}
-    from marketing.twitter import TwitterClient
-    client = TwitterClient()
-    ok, err = client.post_tweet(text)
-    return {"ok": ok, "error": err if not ok else None}
+@router.post("/db/restore")
+async def admin_db_restore(file: UploadFile = File(...), email: str = ""):
+    if email != ADMIN_EMAIL:
+        return {"ok": False, "error": "Unauthorized"}
+    from db import _DB_PATH, init_db
+
+    contents = await file.read()
+    if contents[:16] != b"SQLite format 3\x00":
+        return {"ok": False, "error": "Not a valid SQLite database file"}
+
+    with open(_DB_PATH, "wb") as f:
+        f.write(contents)
+
+    init_db()
+
+    return {"ok": True, "message": "Database restored successfully"}
