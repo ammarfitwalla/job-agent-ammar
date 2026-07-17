@@ -143,11 +143,19 @@ function profileSelectEmploymentStatus(status) {
   document.querySelectorAll("#profileEditPills .employment-pill").forEach(p => p.classList.remove("active-pill"));
   const pill = document.querySelector(`#profileEditPills .employment-pill[data-status="${status}"]`);
   if (pill) pill.classList.add("active-pill");
-  const group = document.getElementById("editCompanyGroup");
-  if (group) {
-    group.classList.toggle("hidden", status !== "employed");
-    if (status !== "employed") {
+  const isEmployed = status === "employed";
+  const companyGroup = document.getElementById("editCompanyGroup");
+  if (companyGroup) {
+    companyGroup.classList.toggle("hidden", !isEmployed);
+    if (!isEmployed) {
       document.getElementById("editCompany").value = "";
+    }
+  }
+  const roleGroup = document.getElementById("editRoleGroup");
+  if (roleGroup) {
+    roleGroup.classList.toggle("hidden", !isEmployed);
+    if (!isEmployed) {
+      document.getElementById("editRole").value = "";
     }
   }
 }

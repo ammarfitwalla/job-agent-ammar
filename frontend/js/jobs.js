@@ -117,9 +117,8 @@ function renderJobList() {
 
       <div class="flex items-center justify-between w-full sm:w-auto gap-3 sm:pl-5 sm:border-l sm:border-slate-100 shrink-0">
         <div class="flex items-center gap-2">
-          <span class="px-2.5 py-1 rounded-lg text-xs font-semibold ${sc.bg} ${sc.text}">${status.charAt(0).toUpperCase() + status.slice(1)}</span>
           <div class="relative inline-block">
-            <select class="status-select outline-none border-0 bg-transparent text-xs font-semibold text-slate-400 cursor-pointer pr-4 appearance-none" onchange="updateStatus(${j.id}, this.value)" title="Change status">
+            <select class="status-select outline-none border-0 bg-transparent text-xs font-semibold cursor-pointer pr-4 appearance-none ${sc.text}" onchange="updateStatus(${j.id}, this.value)" title="Change status">
               <option value="saved" ${status === "saved" ? "selected" : ""}>Saved</option>
               <option value="applied" ${status === "applied" ? "selected" : ""}>Applied</option>
               <option value="interviewing" ${status === "interviewing" ? "selected" : ""}>Interviewing</option>

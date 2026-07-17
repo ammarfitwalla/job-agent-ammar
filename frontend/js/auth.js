@@ -41,7 +41,6 @@ function promptSendCode() {
   text.textContent = "Sending";
   spinner.classList.remove("hidden");
   _authEmail = email;
-  let emailFailed = false;
   fetch("/api/auth/send-code", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
@@ -52,9 +51,6 @@ function promptSendCode() {
         document.getElementById("authModal").style.display = "flex";
         document.querySelectorAll(".code-digit").forEach(inp => { inp.value = ""; });
         setTimeout(() => document.querySelector(".code-digit").focus(), 100);
-        btn.disabled = false;
-        text.textContent = "Send Code";
-        spinner.classList.add("hidden");
         return;
       }
       sendEmailJS({
@@ -65,7 +61,6 @@ function promptSendCode() {
         if (!emailRes.ok) {
           errEl.textContent = emailRes.error || "Failed to send email.";
           errEl.classList.remove("hidden");
-          emailFailed = true;
           btn.disabled = false;
           text.textContent = "Send Code";
           spinner.classList.add("hidden");
@@ -75,19 +70,15 @@ function promptSendCode() {
         document.getElementById("authModal").style.display = "flex";
         document.querySelectorAll(".code-digit").forEach(inp => { inp.value = ""; });
         setTimeout(() => document.querySelector(".code-digit").focus(), 100);
-        btn.disabled = false;
-        text.textContent = "Send Code";
-        spinner.classList.add("hidden");
       });
+      return;
     } else {
       errEl.textContent = d.error || "Failed to send code.";
       errEl.classList.remove("hidden");
     }
-    if (!emailFailed) {
-      btn.disabled = false;
-      text.textContent = "Send Code";
-      spinner.classList.add("hidden");
-    }
+    btn.disabled = false;
+    text.textContent = "Send Code";
+    spinner.classList.add("hidden");
   }).catch(() => {
     errEl.textContent = "Network error. Please try again.";
     errEl.classList.remove("hidden");
@@ -102,6 +93,12 @@ function closeAuthModal() {
   document.getElementById("authStep1").classList.remove("hidden");
   const s4 = document.getElementById("authStep4");
   if (s4) s4.classList.add("hidden");
+  const btn = document.getElementById("promptSendBtn");
+  if (btn) btn.disabled = false;
+  const text = document.getElementById("promptSendText");
+  if (text) text.textContent = "Send Code";
+  const spinner = document.getElementById("promptSendSpinner");
+  if (spinner) spinner.classList.add("hidden");
 }
 
 function showAuthModal() {

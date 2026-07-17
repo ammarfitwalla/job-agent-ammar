@@ -10,6 +10,59 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <link rel="stylesheet" href="/style.css">
+  <style>
+    body { background-color: #f8fafc; }
+    .glass-header {
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+    }
+    .premium-card {
+      background: #fff;
+      border: 1px solid #e8ecf1;
+      border-radius: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.04);
+      transition: box-shadow .2s;
+    }
+    .premium-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.06); }
+    .premium-input { border: 1px solid #e2e8f0; border-radius: 12px; transition: all .2s; }
+    .premium-input:focus-within { border-color: #a5b4fc; box-shadow: 0 0 0 3px #eef2ff; }
+    .premium-section-title { font-size: 13px; font-weight: 600; color: #1e293b; letter-spacing: -.01em; }
+    .premium-label { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
+    .premium-input-field {
+      width: 100%; border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 9px 12px; font-size: 13px; outline: none;
+      background: #fff; transition: all .2s;
+    }
+    .premium-input-field:focus { border-color: #a5b4fc; box-shadow: 0 0 0 3px #eef2ff; }
+    .premium-btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 10px 20px; border-radius: 12px; font-size: 13px; font-weight: 600;
+      transition: all .2s; cursor: pointer; border: none;
+    }
+    .premium-btn-primary { background: #1e293b; color: #fff; }
+    .premium-btn-primary:hover { background: #0f172a; box-shadow: 0 4px 12px rgba(15,23,42,.15); }
+    .premium-btn-primary:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+    .premium-btn-secondary { background: #fff; color: #475569; border: 1px solid #e2e8f0; }
+    .premium-btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
+    .premium-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 600; padding: 4px 10px;
+      border-radius: 8px; border: 1px solid #e2e8f0;
+      background: #fff; color: #475569; transition: all .15s;
+    }
+    .premium-pill.active { background: #1e293b; color: #fff; border-color: #1e293b; }
+    .premium-badge {
+      font-size: 11px; font-weight: 600; padding: 3px 10px;
+      border-radius: 8px; display: inline-flex; align-items: center; gap: 4px;
+    }
+    .splash-overlay { background: #f8fafc; }
+    aside::-webkit-scrollbar { width: 16px; }
+    aside::-webkit-scrollbar-track { background: transparent; }
+    aside::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; border: 4px solid transparent; background-clip: content-box; }
+    aside::-webkit-scrollbar-thumb:hover { background: #94a3b8; background-clip: content-box; }
+  </style>
 </head>
 <body class="text-slate-800 min-h-screen flex flex-col">
 
@@ -26,19 +79,22 @@
 
   <!-- Header -->
   <header class="glass-header sticky top-0 z-50 transition-colors duration-300" id="mainHeader">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-sm shadow-sm transition-colors duration-300" id="logoIcon">JA</div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-3 group">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-900 to-slate-800 text-white flex items-center justify-center font-bold text-sm shadow-md transition-transform group-hover:scale-105">JA</div>
         <div>
-          <h1 class="text-base font-semibold tracking-tight text-slate-900 leading-tight">AI Job Agent</h1>
-          <p class="text-xs text-slate-500 leading-tight mt-0.5">Find jobs where you actually have a shot.</p>
+          <h1 class="text-sm font-bold tracking-tight text-slate-900 leading-tight">AI Job Agent</h1>
+          <p class="text-[10px] font-semibold text-indigo-500 uppercase tracking-wider leading-tight mt-0.5">Career Hub</p>
         </div>
-      </div>
-      <div class="flex items-center gap-2">
-        <button id="howItWorksBtn" class="text-sm font-medium text-slate-400 hover:text-indigo-500 transition-colors">How it Works</button>
-        <span class="text-slate-300 text-sm">|</span>
-        <a href="/profile.html" class="relative w-9 h-9 rounded-full flex items-center justify-center text-slate-600 hover:text-indigo-500 hover:bg-indigo-50 bg-slate-100 border-2 border-slate-300 hover:border-indigo-200 transition-all" id="profileLink" title="Your Profile">
-          <svg class="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
+      </a>
+
+      <div class="flex items-center gap-4">
+        <button id="howItWorksBtn" class="hidden sm:flex text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors items-center gap-1.5">How it Works</button>
+
+        <div class="h-4 w-px bg-slate-200 hidden sm:block"></div>
+
+        <a href="/profile.html" class="relative w-10 h-10 rounded-full flex items-center justify-center text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 bg-slate-100 border border-slate-200 transition-all shadow-sm" id="profileLink" title="Your Profile">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
           <span id="referralBadge" class="hidden absolute -top-1 -right-1 w-4 h-4 bg-red-500 border-2 border-white rounded-full text-[8px] text-white font-bold flex items-center justify-center leading-none"></span>
         </a>
         <div class="hidden" id="resultBadgeWrapper"></div>
@@ -59,11 +115,11 @@
 
       <!-- Section 1: Candidate Profile -->
       <div class="premium-card p-6 space-y-6">
-        <h2 class="text-base font-semibold text-slate-800">1. Candidate Profile</h2>
+        <h2 class="premium-section-title flex items-center gap-2"><span class="w-6 h-6 rounded-lg bg-slate-900 text-white text-[11px] font-bold flex items-center justify-center">1</span> Candidate Profile</h2>
 
         <!-- Resume -->
         <div class="space-y-3">
-          <label class="text-sm font-medium text-slate-500 flex items-center justify-between">
+          <label class="premium-label flex items-center justify-between">
             <span>Resume Data <span class="text-red-400">*</span></span>
             <label for="fileInput" class="text-indigo-600 hover:text-indigo-700 cursor-pointer flex items-center gap-1">
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5m0 0l5 5m-5-5v12"/></svg>
@@ -71,10 +127,10 @@
             </label>
             <input id="fileInput" type="file" accept=".pdf,.docx,.txt" class="hidden">
           </label>
-          <div class="premium-input border border-slate-200 rounded-xl overflow-hidden bg-slate-50 transition-all">
+          <div class="premium-input overflow-hidden">
             <textarea id="resume" rows="8" class="w-full p-4 text-sm font-mono bg-transparent outline-none resize-none text-slate-600 placeholder-slate-400" placeholder="Paste resume text or upload a file..."></textarea>
             <div class="border-t border-slate-100 bg-white p-2 flex justify-end">
-              <button id="extractBtn" class="text-sm font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg transition-colors disabled:opacity-50">✨ Auto-Extract Keywords</button>
+              <button id="extractBtn" class="premium-btn premium-btn-secondary text-xs">✨ Auto-Extract</button>
             </div>
           </div>
         </div>
@@ -82,14 +138,14 @@
         <!-- Keywords -->
         <div class="space-y-3 pt-3 border-t border-slate-100">
           <div class="flex items-center justify-between">
-            <label class="text-sm font-medium text-slate-500">Keywords to Match</label>
-            <span class="text-xs bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-md font-mono" id="kwCount">0</span>
+            <label class="premium-label">Keywords to Match</label>
+            <span class="premium-badge bg-slate-100 text-slate-500" id="kwCount">0</span>
           </div>
           <div id="keywords" class="flex flex-wrap gap-2 min-h-[32px] max-h-48 overflow-y-auto no-scrollbar">
             <span class="text-sm text-slate-400 italic">No keywords yet</span>
           </div>
           <div class="relative">
-            <input id="customKeywordInput" type="text" class="w-full border border-slate-200 rounded-lg pr-10 px-4 py-2 text-sm outline-none focus:border-slate-400 transition-colors" placeholder="Add keyword..." autocomplete="off">
+            <input id="customKeywordInput" type="text" class="premium-input-field pr-10" placeholder="Add keyword..." autocomplete="off">
             <button id="addKeywordBtn" class="absolute inset-y-0 right-0 pr-2.5 flex items-center text-indigo-500 hover:text-indigo-700 transition-colors" title="Add as custom keyword" tabindex="-1">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
             </button>
@@ -100,14 +156,14 @@
         <!-- Roles -->
         <div class="space-y-3 pt-3 border-t border-slate-100">
           <div class="flex items-center justify-between">
-            <label class="text-sm font-medium text-slate-500">Target Roles <span class="text-red-400">*</span></label>
-            <span class="text-xs bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-md font-mono" id="roleCount">0</span>
+            <label class="premium-label">Target Roles <span class="text-red-400">*</span></label>
+            <span class="premium-badge bg-slate-100 text-slate-500" id="roleCount">0</span>
           </div>
           <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
               <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
-            <input id="roleSearchInput" type="text" class="w-full border border-slate-200 rounded-lg pl-8 pr-8 py-2 text-sm outline-none focus:border-slate-400 transition-colors bg-white" placeholder="Search or add a role..." autocomplete="off">
+            <input id="roleSearchInput" type="text" class="premium-input-field pl-8 pr-8" placeholder="Search or add a role..." autocomplete="off">
             <button id="clearRoleSearch" class="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors hidden" title="Clear search">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
@@ -122,16 +178,16 @@
 
       <!-- Section 2: Search Preferences -->
       <div class="premium-card p-6 space-y-6">
-        <h2 class="text-base font-semibold text-slate-800">2. Search Preferences</h2>
+        <h2 class="premium-section-title flex items-center gap-2"><span class="w-6 h-6 rounded-lg bg-slate-900 text-white text-[11px] font-bold flex items-center justify-center">2</span> Search Preferences</h2>
 
         <!-- Location -->
         <div class="space-y-3">
-          <label class="text-sm font-medium text-slate-500">Location (state or country) <span class="text-red-400">*</span></label>
+          <label class="premium-label">Location <span class="text-red-400">*</span></label>
           <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </div>
-            <input id="locationInput" type="text" autocomplete="off" class="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-400 transition-colors bg-white" placeholder="e.g. California, US or India">
+            <input id="locationInput" type="text" autocomplete="off" class="premium-input-field pl-9" placeholder="e.g. California, US or India">
             <div id="locationResults" class="hidden absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto overflow-hidden"></div>
           </div>
           <div id="selectedLocation" class="hidden mt-2 inline-flex items-center gap-1.5 text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-md"></div>
@@ -139,23 +195,23 @@
 
         <!-- Sites -->
         <div class="space-y-3 pt-3 border-t border-slate-100">
-          <label class="text-sm font-medium text-slate-500">Job Boards <span class="text-red-400">*</span></label>
+          <label class="premium-label">Job Boards <span class="text-red-400">*</span></label>
           <div id="sites" class="flex flex-wrap gap-2">
             <label class="cursor-pointer">
               <input type="checkbox" value="indeed" checked class="hidden pill-checkbox">
-              <div class="px-4 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 transition-all bg-white hover:bg-slate-50 select-none">Indeed</div>
+              <div class="premium-pill active cursor-pointer select-none text-sm px-4 py-2">Indeed</div>
             </label>
             <label class="cursor-pointer">
               <input type="checkbox" value="linkedin" class="hidden pill-checkbox">
-              <div class="px-4 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 transition-all bg-white hover:bg-slate-50 select-none">LinkedIn</div>
+              <div class="premium-pill cursor-pointer select-none text-sm px-4 py-2">LinkedIn</div>
             </label>
             <label class="cursor-not-allowed opacity-50">
               <input type="checkbox" disabled class="hidden">
-              <div class="px-4 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-400 bg-slate-50 flex items-center gap-1.5">Adzuna <span class="soon-badge">SOON</span></div>
+              <div class="premium-pill cursor-not-allowed text-sm px-4 py-2">Adzuna <span class="soon-badge">SOON</span></div>
             </label>
             <label class="cursor-not-allowed opacity-50">
               <input type="checkbox" disabled class="hidden">
-              <div class="px-4 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-400 bg-slate-50 flex items-center gap-1.5">RemoteOK <span class="soon-badge">SOON</span></div>
+              <div class="premium-pill cursor-not-allowed text-sm px-4 py-2">RemoteOK <span class="soon-badge">SOON</span></div>
             </label>
           </div>
         </div>
@@ -176,7 +232,7 @@
 
       <!-- Search Button -->
       <div class="sticky bottom-4 z-20">
-        <button id="searchBtn" class="w-full bg-slate-800 hover:bg-slate-700 text-white py-3.5 rounded-xl text-base font-semibold shadow-md shadow-slate-800/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
+        <button id="searchBtn" class="premium-btn premium-btn-primary w-full py-4 text-base shadow-lg shadow-slate-900/15">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           Start Search
         </button>
@@ -185,11 +241,11 @@
     </aside>
 
     <!-- Right: Results -->
-    <section class="flex-1 min-w-0 w-full flex flex-col gap-4">
+    <section class="flex-1 min-w-0 w-full flex flex-col gap-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto pb-6">
 
-      <div id="status" class="hidden px-5 py-3 rounded-xl text-sm font-medium border flex items-center gap-2 transition-all"></div>
+      <div id="status" class="hidden px-5 py-3 rounded-xl text-sm font-medium border flex items-center gap-2 transition-all premium-card border-0"></div>
 
-      <div id="filterBar" class="hidden flex flex-wrap items-center gap-3 text-sm mb-3"></div>
+      <div id="filterBar" class="hidden flex flex-wrap items-center gap-2 text-sm mb-3"></div>
 
       <!-- Step Progress -->
       <div id="stepProgress" class="hidden premium-card p-6 min-h-[200px]">
@@ -197,7 +253,7 @@
       </div>
       <!-- Results -->
       <div id="results" class="space-y-4">
-        <div class="premium-card min-h-[500px] flex flex-col items-center justify-center text-center p-8 border-dashed">
+        <div class="premium-card min-h-[400px] flex flex-col items-center justify-center text-center p-8">
           <div class="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center mb-5 border border-slate-100">
             <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
           </div>
@@ -226,8 +282,8 @@
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
           </button>
         </div>
-        <input id="authEmail" type="email" placeholder="Your email address" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors mt-4">
-        <button id="authSendBtn" onclick="authSendCode()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors mt-2 flex items-center justify-center gap-1.5">
+        <input id="authEmail" type="email" placeholder="Your email address" class="premium-input-field mt-4">
+        <button id="authSendBtn" onclick="authSendCode()" class="premium-btn premium-btn-primary w-full mt-2">
           Send Code
         </button>
         <p id="authSendError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center font-medium mt-2"></p>
@@ -243,15 +299,15 @@
           </button>
         </div>
         <div class="flex gap-2 justify-center mt-4" id="codeInputs">
-          <input class="code-digit w-10 h-12 text-center text-lg font-bold border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" maxlength="1" data-idx="0" autofocus>
-          <input class="code-digit w-10 h-12 text-center text-lg font-bold border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" maxlength="1" data-idx="1">
-          <input class="code-digit w-10 h-12 text-center text-lg font-bold border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" maxlength="1" data-idx="2">
-          <input class="code-digit w-10 h-12 text-center text-lg font-bold border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" maxlength="1" data-idx="3">
-          <input class="code-digit w-10 h-12 text-center text-lg font-bold border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" maxlength="1" data-idx="4">
-          <input class="code-digit w-10 h-12 text-center text-lg font-bold border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" maxlength="1" data-idx="5">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold premium-input-field" maxlength="1" data-idx="0" autofocus>
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold premium-input-field" maxlength="1" data-idx="1">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold premium-input-field" maxlength="1" data-idx="2">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold premium-input-field" maxlength="1" data-idx="3">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold premium-input-field" maxlength="1" data-idx="4">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold premium-input-field" maxlength="1" data-idx="5">
         </div>
         <p id="authCodeError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center font-medium mt-2"></p>
-        <button id="authVerifyBtn" onclick="authVerifyCode()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors mt-2 flex items-center justify-center gap-1.5">
+        <button id="authVerifyBtn" onclick="authVerifyCode()" class="premium-btn premium-btn-primary w-full mt-2">
           Verify
         </button>
         <button onclick="authResendCode()" class="w-full text-sm text-slate-500 hover:text-slate-700 py-1.5 transition-colors mt-1">
@@ -289,16 +345,16 @@
           <button type="button" onclick="selectEmploymentStatus('career_break')" class="employment-pill" data-status="career_break">Career Break</button>
         </div>
         <div class="space-y-3 mt-4">
-          <input id="authName" type="text" placeholder="Your name" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors">
+          <input id="authName" type="text" placeholder="Your name" class="premium-input-field">
           <div id="authCompanyGroup" class="relative">
-            <input id="authCompany" type="text" placeholder="Company (type to search)" autocomplete="off" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors" oninput="filterCompanyDropdown()" onfocus="filterCompanyDropdown()">
+            <input id="authCompany" type="text" placeholder="Company (type to search)" autocomplete="off" class="premium-input-field" oninput="filterCompanyDropdown()" onfocus="filterCompanyDropdown()">
             <div id="companyDropdown" class="hidden absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
           </div>
-          <input id="authPosition" type="text" placeholder="Your position (e.g. Senior Frontend Engineer)" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors">
-          <input id="authLinkedin" type="url" placeholder="LinkedIn URL (optional)" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors">
+          <input id="authPosition" type="text" placeholder="Your position (e.g. Senior Frontend Engineer)" class="premium-input-field">
+          <input id="authLinkedin" type="url" placeholder="LinkedIn URL (optional)" class="premium-input-field">
         </div>
         <p id="authRegisterError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center font-medium mt-2"></p>
-        <button id="authRegisterBtn" onclick="authRegister()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors mt-3 flex items-center justify-center gap-1.5">
+        <button id="authRegisterBtn" onclick="authRegister()" class="premium-btn premium-btn-primary w-full mt-3">
           Complete Profile
         </button>
 

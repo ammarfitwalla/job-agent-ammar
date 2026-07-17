@@ -941,7 +941,7 @@ if (_hasCachedSearch) {
   setTimeout(() => {
     const el = document.getElementById("splashOverlay");
     if (el) el.classList.add("splash-hidden");
-  }, 3000);
+  }, 2000);
 }
 
 async function checkRawJobs() {
@@ -1170,7 +1170,7 @@ function clearSearchState() {
   shownSlowWarning = false;
   activeFilters = { site: '', experience_level: '' };
   document.getElementById("results").innerHTML = `
-    <div class="premium-card min-h-[500px] flex flex-col items-center justify-center text-center p-8 border-dashed">
+    <div class="premium-card min-h-[400px] flex flex-col items-center justify-center text-center p-8">
       <div class="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center mb-5 border border-slate-100">
         <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
       </div>
@@ -1860,30 +1860,28 @@ function renderJobs(jobs, companyUsers) {
         : "";
 
     return `
-    <a href="${j.url}" target="_blank" class="block group relative bg-white rounded-2xl p-6 border border-slate-200 hover:border-slate-300 hover:shadow-lg transition-all duration-300 outline-none focus:ring-2 focus:ring-indigo-500">
+    <a href="${j.url}" target="_blank" class="block group relative bg-white rounded-2xl p-5 sm:p-6 border border-[#e8ecf1] hover:border-slate-300 hover:shadow-lg transition-all duration-300 outline-none focus:ring-2 focus:ring-indigo-500">
 
-      <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-5">
+      <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div class="flex-1 min-w-0">
-          <div class="flex flex-wrap items-center gap-2.5 mb-2">
-            <h3 class="text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate pr-2">${j.title}</h3>
+          <div class="flex flex-wrap items-center gap-2 mb-2">
+            <h3 class="text-sm sm:text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate pr-1">${j.title}</h3>
             ${expBadge}
           </div>
           <p class="text-sm text-slate-600 flex items-center gap-2 truncate">
             <span class="font-medium">${j.company}</span>
-            <span class="w-1 h-1 rounded-full bg-slate-300"></span>
+            <span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span>
             <span>${j.location}</span>
-            ${j.salary ? `<span class="w-1 h-1 rounded-full bg-slate-300"></span><span class="font-medium text-emerald-700 bg-emerald-50 px-2 rounded">${j.salary}</span>` : ""}
+            ${j.salary ? `<span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span><span class="premium-badge bg-emerald-50 text-emerald-700 border-emerald-100 font-medium">${j.salary}</span>` : ""}
           </p>
         </div>
 
-        <div class="flex flex-col items-end shrink-0">
+        <div class="flex flex-row sm:flex-col items-center sm:items-end gap-3 sm:gap-1 shrink-0">
           <div class="flex items-center gap-2">
-            <div class="flex items-center gap-2">
-              <div class="text-xs uppercase font-bold tracking-wider text-slate-400">Match</div>
-              <div class="px-3 py-1 rounded-lg border font-mono text-sm font-bold ${scoreClass}">${sc}</div>
-            </div>
+            <span class="text-[11px] uppercase font-bold tracking-wider text-slate-400">Match</span>
+            <span class="px-3 py-1 rounded-lg border font-mono text-sm font-bold ${scoreClass}">${sc}</span>
           </div>
-          <div class="text-xs text-slate-400 mt-1.5 flex items-center gap-2">
+          <div class="text-[11px] text-slate-400 flex items-center gap-2">
             <span title="AI Relevancy">AI <span class="font-medium text-slate-600">${j.ai_score || 0}</span></span>
             <span class="text-slate-300">|</span>
             <span title="Keyword Hits">KW <span class="font-medium text-slate-600">${j.keyword_score || 0}</span></span>
@@ -1892,19 +1890,19 @@ function renderJobs(jobs, companyUsers) {
       </div>
 
       ${j.reason ? `
-      <div class="mt-5 bg-slate-50/50 rounded-xl p-4 border border-slate-100">
-        <p class="text-sm text-slate-600 leading-relaxed"><strong class="text-slate-800">AI Note:</strong> ${j.reason}</p>
+      <div class="mt-4 bg-slate-50/70 rounded-xl p-4 border border-slate-100">
+        <p class="text-sm text-slate-600 leading-relaxed"><strong class="text-slate-800">✨ AI Note:</strong> ${j.reason}</p>
       </div>` : ""}
 
-      <div class="flex items-center justify-between mt-5 pt-5 border-t border-slate-100">
-        <div class="flex items-center gap-3 flex-1 pr-4 min-w-0">
-          <button class="bookmark-btn shrink-0 text-sm font-medium transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${isSaved ? 'bg-indigo-500 text-white border-indigo-500 hover:bg-indigo-600' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 active:bg-indigo-200'}" data-url="${j.url || ''}" onclick="toggleSaveJob(event)" title="Save job">
+      <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+        <div class="flex items-center gap-2.5 flex-1 pr-3 min-w-0">
+          <button class="bookmark-btn shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${isSaved ? 'bg-indigo-500 text-white border-indigo-500 hover:bg-indigo-600' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 active:bg-indigo-200'}" data-url="${j.url || ''}" onclick="toggleSaveJob(event)" title="Save job">
             ${isSaved
               ? '<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> Saved'
               : '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg> Save'
             }
           </button>
-          <button class="shrink-0 text-sm font-medium transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100 active:bg-violet-200" onclick="event.preventDefault(); event.stopPropagation(); _referralJobTitle='${(j.title||'').replace(/'/g, "\\'")}'; _referralMatchScore=${j.total_score||0}; _referralJobUrl='${(j.url||'').replace(/'/g, "\\'")}'; showReferralUsers('${j.company.replace(/'/g, "\\'")}')" title="See referrals at this company">
+          <button class="shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100 active:bg-violet-200" onclick="event.preventDefault(); event.stopPropagation(); _referralJobTitle='${(j.title||'').replace(/'/g, "\\'")}'; _referralMatchScore=${j.total_score||0}; _referralJobUrl='${(j.url||'').replace(/'/g, "\\'")}'; showReferralUsers('${j.company.replace(/'/g, "\\'")}')" title="See referrals at this company">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
             Referrals
           </button>
@@ -1925,15 +1923,15 @@ function renderJobs(jobs, companyUsers) {
     const lockedCount = jobs.length - limit;
     const profile = getProfile();
     const unlockHtml = profile
-      ? `<button class="mt-4 bg-slate-900 hover:bg-slate-800 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-slate-900/10 inline-flex items-center gap-2" onclick="handleVote(this)">Unlock All Results <span class="bg-white/20 px-1.5 rounded text-xs">${voteCount}/${voteThreshold}</span></button>`
-      : `<button class="mt-4 bg-slate-900 hover:bg-slate-800 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-slate-900/10 inline-flex items-center gap-2" onclick="showAuthModal()">Sign in</button>`;
+      ? `<button class="premium-btn premium-btn-primary mt-3" onclick="handleVote(this)">Unlock All Results <span class="bg-white/20 px-1.5 rounded text-xs">${voteCount}/${voteThreshold}</span></button>`
+      : `<button class="premium-btn premium-btn-primary mt-3" onclick="showAuthModal()">Sign in</button>`;
 
     c.innerHTML = jobs.slice(0, limit).map(j => cardHtml(j)).join("") + `
       <div class="relative rounded-2xl overflow-hidden mt-4">
         <div class="blur-job space-y-4 px-1">${jobs.slice(limit, limit+2).map(j => cardHtml(j)).join("")}</div>
-        <div class="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-[#FAFAFA] via-white/80 to-transparent">
-          <div class="bg-white border border-slate-200 rounded-2xl p-6 text-center shadow-lg mx-4 max-w-sm w-full transform -translate-y-4">
-            <div class="w-12 h-12 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+        <div class="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-[#f8fafc] via-white/80 to-transparent">
+          <div class="bg-white border border-[#e8ecf1] rounded-2xl p-6 text-center shadow-lg mx-4 max-w-sm w-full transform -translate-y-4">
+            <div class="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center mx-auto mb-3">
               <svg class="w-5 h-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
             </div>
             <h4 class="font-semibold text-slate-900 text-sm">${lockedCount} more high-match roles hidden</h4>

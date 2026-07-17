@@ -2,7 +2,7 @@ import json
 import os
 import tempfile
 from datetime import datetime, timedelta
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -282,10 +282,16 @@ async def admin_db_info(email: str = ""):
 
 
 @router.post("/db/restore")
-async def admin_db_restore(file: UploadFile = File(...), email: str = ""):
+async def admin_db_restore(file: UploadFile = File(...), email: str = Form("")):
     if email != ADMIN_EMAIL:
         return {"ok": False, "error": "Unauthorized"}
     from db import _DB_PATH, init_db
+
+    # Remove stale WAL/SHM files so SQLite doesn't merge old pages
+    for ext in ("-wal", "-shm"):
+        p = _DB_PATH + ext
+        if os.path.isfile(p):
+            os.remove(p)
 
     contents = await file.read()
     if contents[:16] != b"SQLite format 3\x00":
@@ -296,4 +302,10 @@ async def admin_db_restore(file: UploadFile = File(...), email: str = ""):
 
     init_db()
 
-    return {"ok": True, "message": "Database restored successfully"}
+    # Force a clean WAL checkpoint
+    from db import _get_conn
+    conn, cur = _get_conn()
+    cur.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    conn.close()
+
+    return {"ok": True, "message": "Database restored successfully", "size_bytes": len(contents)}

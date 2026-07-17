@@ -249,7 +249,7 @@ tailwind.config = {
                 <div id="editCompanyDropdown" class="hidden absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
               </div>
             </div>
-            <div>
+            <div id="editRoleGroup">
               <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Position</label>
               <input type="text" id="editRole" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:bg-white transition-colors">
             </div>
@@ -307,16 +307,6 @@ tailwind.config = {
 
       <!-- Referrals View -->
       <div id="viewReferrals" class="hidden animate-fade-in space-y-4">
-
-        <!-- CTA Banner -->
-        <div class="bg-slate-900 rounded-2xl p-6 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 relative overflow-hidden">
-          <div class="absolute right-0 top-0 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 transform translate-x-1/2 -translate-y-1/2"></div>
-          <div class="relative z-10 text-center sm:text-left">
-            <h3 class="text-lg font-bold mb-1">Leverage the Community</h3>
-            <p class="text-slate-300 text-sm max-w-md">Request referrals from verified employees at your target companies. Use your credits wisely.</p>
-          </div>
-          <button class="relative z-10 shrink-0 bg-white text-slate-900 hover:bg-indigo-50 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors shadow-sm" onclick="openReferralFromCTA()">Find Connections</button>
-        </div>
 
         <!-- Referral Filters -->
         <div class="flex gap-2 overflow-x-auto hide-scrollbar pb-1" id="referralFilters">
