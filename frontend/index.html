@@ -354,6 +354,10 @@
           </div>
           <input id="authPosition" type="text" placeholder="Your position (e.g. Senior Frontend Engineer)" class="premium-input-field">
           <input id="authLinkedin" type="url" placeholder="LinkedIn URL (optional)" class="premium-input-field">
+          <div class="mt-1">
+            <label class="block text-xs text-slate-500 mb-1">Resume (optional — PDF, DOCX, TXT)</label>
+            <input id="authResume" type="file" accept=".pdf,.docx,.txt" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 file:cursor-pointer">
+          </div>
         </div>
         <p id="authRegisterError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center font-medium mt-2"></p>
         <button id="authRegisterBtn" onclick="authRegister()" class="premium-btn premium-btn-primary w-full mt-3">

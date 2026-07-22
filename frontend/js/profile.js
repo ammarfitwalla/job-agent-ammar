@@ -89,6 +89,18 @@ function renderProfile(data) {
     linkedinEl.parentElement.classList.add("hidden");
   }
 
+  const resumeSection = document.getElementById("profileResumeSection");
+  const resumeName = document.getElementById("profileResumeName");
+  const resumeDownload = document.getElementById("profileResumeDownload");
+  const resumeFilename = data.resume_filename || "";
+  if (resumeFilename && resumeSection) {
+    resumeName.textContent = resumeFilename;
+    resumeDownload.href = `/api/profile/resume?email=${encodeURIComponent(data.email)}`;
+    resumeSection.classList.remove("hidden");
+  } else if (resumeSection) {
+    resumeSection.classList.add("hidden");
+  }
+
   window.renderStatusTabs(data.status_counts || {});
 }
 
@@ -242,6 +254,25 @@ async function saveProfile() {
       } else {
         document.getElementById("profileLinkedin").classList.add("hidden");
         document.getElementById("profileLinkedin").parentElement.classList.add("hidden");
+      }
+      const resumeFile = document.getElementById("editResumeFile")?.files?.[0];
+      if (resumeFile) {
+        try {
+          const fd = new FormData();
+          fd.append("file", resumeFile);
+          const rr = await fetch(`/api/profile/resume?email=${encodeURIComponent(profile.email)}`, { method: "POST", body: fd });
+          const rd = await rr.json();
+          if (rd.ok && rd.filename) {
+            const resumeSection = document.getElementById("profileResumeSection");
+            const resumeName = document.getElementById("profileResumeName");
+            const resumeDownload = document.getElementById("profileResumeDownload");
+            if (resumeName) resumeName.textContent = rd.filename;
+            if (resumeDownload) resumeDownload.href = `/api/profile/resume?email=${encodeURIComponent(profile.email)}`;
+            if (resumeSection) resumeSection.classList.remove("hidden");
+            const statusEl = document.getElementById("profileResumeEditStatus");
+            if (statusEl) statusEl.textContent = "Uploaded: " + rd.filename;
+          }
+        } catch {}
       }
       saveNameLocally(profile.email, name);
     } else {

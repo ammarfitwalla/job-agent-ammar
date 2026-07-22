@@ -1,5 +1,7 @@
 import random
 import string
+import os
+import shutil
 from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
@@ -10,6 +12,23 @@ from config import COMPANIES
 from utils.rate_limiter import check_rate_limit
 
 DEV_MODE = False  # Set to True for development mode, False for production
+
+_RESUMES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
+
+
+def _copy_search_resume(search_id: str, email: str):
+    local_part = email.split("@")[0]
+    for ext in (".pdf", ".docx", ".txt"):
+        src = os.path.join(_RESUMES_DIR, f"{search_id}{ext}")
+        if os.path.isfile(src):
+            dst = os.path.join(_RESUMES_DIR, f"{local_part}{ext}")
+            try:
+                shutil.copy2(src, dst)
+                from db import update_user_profile
+                update_user_profile(email, resume_filename=f"{local_part}{ext}")
+            except Exception:
+                pass
+            return
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -29,6 +48,7 @@ class RegisterRequest(BaseModel):
     company: str = ""
     position: str = ""
     linkedin_url: str = ""
+    search_id: str = ""
 
 
 class AddCompanyRequest(BaseModel):
@@ -75,6 +95,10 @@ async def auth_register(req: RegisterRequest):
     else:
         user = create_user(req.email, req.name, req.company, req.position, req.linkedin_url)
     user = get_user(req.email)
+
+    if req.search_id:
+        _copy_search_resume(req.search_id, req.email)
+
     return {"ok": True, "user": user}
 
 

@@ -214,9 +214,14 @@ async function authRegister() {
   btn.disabled = true;
   btn.textContent = "Saving...";
   try {
+    let searchId = "";
+    try {
+      const raw = localStorage.getItem(SEARCH_CACHE_KEY);
+      if (raw) { const s = JSON.parse(raw); if (s?.searchId) searchId = s.searchId; }
+    } catch {}
     const r = await fetch("/api/auth/register", {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ email: _authEmail, name, company, position, linkedin_url: linkedin }),
+      body: JSON.stringify({ email: _authEmail, name, company, position, linkedin_url: linkedin, search_id: searchId }),
     });
     const d = await r.json();
     if (!d.ok) {
@@ -225,6 +230,14 @@ async function authRegister() {
       btn.disabled = false;
       btn.textContent = "Complete Profile";
       return;
+    }
+    const resumeFile = document.getElementById("authResume")?.files?.[0];
+    if (resumeFile) {
+      try {
+        const fd = new FormData();
+        fd.append("file", resumeFile);
+        await fetch(`/api/profile/resume?email=${encodeURIComponent(_authEmail)}`, { method: "POST", body: fd });
+      } catch {}
     }
     window.setProfile(d.user);
     document.getElementById("authStep4").classList.add("hidden");
