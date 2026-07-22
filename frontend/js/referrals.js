@@ -1,5 +1,5 @@
 import { getProfile, showToast, htmlEscape, formatDate } from "./utils.js";
-import { _MONTHLY_LIMIT } from "./constants.js";
+import { _MONTHLY_LIMIT, REFERRAL_COOLDOWN } from "./constants.js";
 
 // Referral Modal state
 let _referralCompany = "";
@@ -10,6 +10,51 @@ let _companyUserCache = {};
 
 // Referral Dashboard state
 let _referralTab = "incoming";
+
+async function loadCompanyUserCounts(companies) {
+  const unique = [...new Set(companies.filter(Boolean))];
+  const needed = unique.filter(c => !(c in _companyUserCache));
+  if (needed.length === 0) return;
+  const results = await Promise.allSettled(
+    needed.map(c =>
+      fetch(`/api/users/at-company?company=${encodeURIComponent(c)}`).then(r => r.json())
+    )
+  );
+  needed.forEach((c, i) => {
+    const r = results[i];
+    _companyUserCache[c] = r.status === "fulfilled" && r.value ? r.value : { users: [], count: 0 };
+  });
+}
+
+async function refreshCompanyUser(company) {
+  try {
+    const r = await fetch(`/api/users/at-company?company=${encodeURIComponent(company)}`);
+    const d = await r.json();
+    _companyUserCache[company] = d || { users: [], count: 0 };
+  } catch (e) {
+    _companyUserCache[company] = { users: [], count: 0 };
+  }
+}
+
+async function checkReferralNotifications() {
+  const profile = getProfile();
+  if (!profile) return;
+  try {
+    const r = await fetch(`/api/referrals/incoming?email=${encodeURIComponent(profile.email)}`);
+    const d = await r.json();
+    const pending = (d.requests || []).filter(req => req.status === "pending").length;
+    const badge = document.getElementById("referralBadge");
+    if (badge) {
+      if (pending > 0) {
+        badge.textContent = pending > 9 ? "9+" : pending;
+        badge.classList.remove("hidden");
+      } else {
+        badge.classList.add("hidden");
+      }
+    }
+  } catch {}
+  setTimeout(checkReferralNotifications, 30000);
+}
 
 // ── Referral Modal ──
 
@@ -108,7 +153,7 @@ async function showReferralUsers(company) {
   }
   list.innerHTML = users.map(u => {
     const existing = outgoingRequests.find(req =>
-      req.to_email === u.email && req.job_url === _referralJobUrl
+      req.to_email === u.email && req.job_url === (window._referralJobUrl || "") && req.company === _referralCompany
     );
     let btnHtml = "";
     if (!profile) {
@@ -153,10 +198,10 @@ function askReferral(btn, toEmail, toName) {
     body: JSON.stringify({
       from_email: profile.email,
       to_email: toEmail,
-      job_url: _referralJobUrl || "",
-      job_title: _referralJobTitle || "",
+      job_url: window._referralJobUrl || "",
+      job_title: window._referralJobTitle || "",
       company: _referralCompany,
-      match_score: _referralMatchScore || 0,
+      match_score: window._referralMatchScore || 0,
     }),
   }).then(r => r.json()).then(d => {
     if (d.ok) {
@@ -171,7 +216,8 @@ function askReferral(btn, toEmail, toName) {
       btn.disabled = false;
       btn.textContent = "Ask for Referral";
     }
-  }).catch(() => {
+  }).catch((err) => {
+    console.error("askReferral error:", err);
     showToast("Network error");
     btn.disabled = false;
     btn.textContent = "Ask for Referral";
@@ -185,24 +231,24 @@ function withdrawReferralRequest(id, btn, toEmail, toName) {
   fetch(`/api/referrals/${id}/withdraw`, {
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: getProfile().email }),
-  }).then(r => r.json()).then(d => {
+  }).then(r => {
+    console.log("withdraw response status:", r.status);
+    return r.json();
+  }).then(d => {
+    console.log("withdraw response data:", d);
     if (d.ok) {
       showToast("Referral withdrawn");
       refreshReferralRemaining();
-      if (toEmail && toName) {
-        btn.textContent = "Ask for Referral";
-        btn.onclick = function () { askReferral(btn, toEmail, toName); };
-        btn.disabled = false;
-        btn.className = "text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors";
-      } else {
-        loadReferrals();
-      }
+      _companyUserCache[_referralCompany] = null;
+      showReferralUsers(_referralCompany);
+      loadReferrals();
     } else {
       showToast(d.error || "Failed to withdraw");
       btn.disabled = false;
       btn.textContent = "Withdraw";
     }
-  }).catch(() => {
+  }).catch((err) => {
+    console.error("withdrawReferralRequest error:", err);
     showToast("Network error");
     btn.disabled = false;
     btn.textContent = "Withdraw";
@@ -228,35 +274,31 @@ async function loadReferrals() {
   if (!profile) return;
   const el = document.getElementById("referralListContainer");
   try {
-    let reqs = [];
+    const [inc, out] = await Promise.all([
+      fetch(`/api/referrals/incoming?email=${encodeURIComponent(profile.email)}`, { cache: "no-cache" }).then(r => r.json()),
+      fetch(`/api/referrals/outgoing?email=${encodeURIComponent(profile.email)}`, { cache: "no-cache" }).then(r => r.json()),
+    ]);
+    const incReqs = (inc.requests || []).map(r => ({ ...r, _direction: "from" }));
+    const outReqs = (out.requests || []).map(r => ({ ...r, _direction: "to" }));
+    const allReqs = [...incReqs, ...outReqs];
 
-    if (_referralTab === "incoming" || _referralTab === "outgoing") {
-      const r = await fetch(`/api/referrals/${_referralTab}?email=${encodeURIComponent(profile.email)}`);
-      const d = await r.json();
-      reqs = (d.requests || []).filter(r => r.status === "pending");
+    const setCount = (id, n) => { const e = document.getElementById(id); if (e) e.textContent = n; };
+    setCount("incomingCount", allReqs.filter(r => r._direction === "from" && r.status === "pending").length);
+    setCount("outgoingCount", allReqs.filter(r => r._direction === "to" && r.status === "pending").length);
+    setCount("acceptedCount", allReqs.filter(r => r.status === "accepted").length);
+    setCount("declinedCount", allReqs.filter(r => r.status === "declined").length);
+
+    let reqs;
+    if (_referralTab === "incoming") {
+      reqs = allReqs.filter(r => r._direction === "from" && r.status === "pending");
+    } else if (_referralTab === "outgoing") {
+      reqs = allReqs.filter(r => r._direction === "to" && (r.status === "pending" || r.status === "cancelled"));
+    } else if (_referralTab === "accepted") {
+      reqs = allReqs.filter(r => r.status === "accepted");
     } else {
-      const [inc, out] = await Promise.all([
-        fetch(`/api/referrals/incoming?email=${encodeURIComponent(profile.email)}`).then(r => r.json()),
-        fetch(`/api/referrals/outgoing?email=${encodeURIComponent(profile.email)}`).then(r => r.json()),
-      ]);
-      const incReqs = (inc.requests || []).map(r => ({ ...r, _direction: "from" }));
-      const outReqs = (out.requests || []).map(r => ({ ...r, _direction: "to" }));
-      if (_referralTab === "accepted") {
-        reqs = [...incReqs, ...outReqs].filter(r => r.status === "accepted");
-      } else {
-        reqs = [...incReqs, ...outReqs].filter(r => r.status === "declined" || r.status === "cancelled");
-      }
-      reqs.sort((a, b) => (b.updated_at || b.created_at || "").localeCompare(a.updated_at || a.created_at || ""));
+      reqs = allReqs.filter(r => r.status === "declined");
     }
-
-    const countMap = {
-      incoming: "incomingCount",
-      outgoing: "outgoingCount",
-      accepted: "acceptedCount",
-      declined: "declinedCount",
-    };
-    const countEl = document.getElementById(countMap[_referralTab]);
-    if (countEl) countEl.textContent = reqs.length;
+    reqs.sort((a, b) => (b.updated_at || b.created_at || "").localeCompare(a.updated_at || a.created_at || ""));
 
     const statEl = document.getElementById("statReferrals");
     if (statEl) statEl.textContent = reqs.length;
@@ -309,6 +351,13 @@ async function loadReferrals() {
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
           Withdraw
         </button>`;
+      } else if (_referralTab === "outgoing" && r.status === "cancelled") {
+        const toEmail = r.to_email.replace(/'/g, "\\'");
+        const toName = r.to_name.replace(/'/g, "\\'");
+        actions = `<button class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors" onclick="askReferral(this, '${toEmail}', '${toName}')">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+          Ask for Referral
+        </button>`;
       }
       if (_referralTab === "accepted" && isIncoming) {
         if (r.credit_awarded) {
@@ -358,18 +407,28 @@ async function loadReferrals() {
                 <span class="font-semibold text-slate-900 text-sm">${htmlEscape(name)}</span>
                 <span class="text-xs font-semibold px-2 py-0.5 rounded-lg ${sc}">${r.status}</span>
               </div>
-              <p class="text-xs text-slate-500 mt-0.5">${htmlEscape(r.job_title || "Job at " + r.company)}</p>
-              ${r.match_score ? `<p class="text-xs text-indigo-600 font-medium mt-0.5">Match score: ${r.match_score}/100</p>` : ""}
+              <div class="mt-1.5 space-y-1">
+                <p class="text-sm font-semibold text-slate-900">${htmlEscape(r.job_title || "Job at " + r.company)}</p>
+                ${r.job_url ? `<a href="${htmlEscape(r.job_url)}" target="_blank" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>View Job Posting</a>` : ""}
+              </div>
+              ${r.match_score ? `<p class="text-xs text-indigo-600 font-medium mt-1">Match score: ${r.match_score}/100</p>` : ""}
               ${r.message ? `<p class="text-xs text-slate-500 mt-1 italic">${htmlEscape(r.message)}</p>` : ""}
               <div class="flex items-center gap-1 mt-1">${createdLabel}${updatedLabel}</div>
               ${r.status === "accepted" && isIncoming ? `
               <div class="mt-2 p-3 bg-indigo-50 border border-indigo-100 rounded-xl space-y-1.5">
                 <p class="text-xs font-semibold text-indigo-700">Contact revealed</p>
                 <p class="text-xs text-slate-600">${htmlEscape(r.from_email)}</p>
-                <div class="flex gap-3">
+                ${r.from_company || r.from_position ? `<p class="text-xs text-slate-500">${[r.from_position, r.from_company].filter(Boolean).join(" at ")}</p>` : ""}
+                <div class="flex flex-wrap gap-3">
                   ${r.from_linkedin_url ? `<a href="${htmlEscape(r.from_linkedin_url)}" target="_blank" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>LinkedIn</a>` : ""}
                   ${r.from_resume_filename ? `<a href="/api/profile/resume?email=${encodeURIComponent(r.from_email)}" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Resume</a>` : ""}
                 </div>
+              </div>` : ""}
+              ${r.status === "accepted" && !isIncoming ? `
+              <div class="mt-2 p-3 bg-indigo-50 border border-indigo-100 rounded-xl space-y-1.5">
+                <p class="text-xs font-semibold text-indigo-700">Receiver info</p>
+                <p class="text-xs text-slate-600">${htmlEscape(r.to_email)}</p>
+                ${r.to_linkedin_url ? `<a href="${htmlEscape(r.to_linkedin_url)}" target="_blank" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>LinkedIn</a>` : ""}
               </div>` : ""}
             </div>
           </div>
@@ -504,10 +563,12 @@ async function withdrawReferral(id) {
     if (d.ok) {
       showToast("Referral withdrawn");
       loadReferrals();
+      refreshReferralRemaining();
     } else {
       showToast(d.error || "Failed to withdraw");
     }
   } catch (e) {
+    console.error("withdrawReferral error:", e);
     showToast("Network error");
   }
 }
@@ -524,5 +585,8 @@ window.declineReferral = declineReferral;
 window.completeReferral = completeReferral;
 window.senderConfirmReferral = senderConfirmReferral;
 window.withdrawReferral = withdrawReferral;
+window.loadCompanyUserCounts = loadCompanyUserCounts;
+window.refreshCompanyUser = refreshCompanyUser;
+window.checkReferralNotifications = checkReferralNotifications;
 
-export { loadReferrals, refreshReferralRemaining };
+export { loadReferrals, refreshReferralRemaining, loadCompanyUserCounts, refreshCompanyUser, checkReferralNotifications };

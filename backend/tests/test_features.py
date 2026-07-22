@@ -5,6 +5,7 @@ import threading
 import json
 import sys
 import os
+import contextlib
 from unittest.mock import patch, MagicMock
 from copy import deepcopy
 
@@ -92,7 +93,10 @@ class TestGetCompanyUserCounts(unittest.TestCase):
         self.conn.execute("INSERT INTO users (email, name, company, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
                           ("d@x.com", "D", "", "2024-01-01", "2024-01-01"))
 
-        self._get_conn_patcher = patch("db._get_conn", return_value=(self.conn, self.conn.cursor()))
+        @contextlib.contextmanager
+        def _fake_conn():
+            yield self.conn, self.conn.cursor()
+        self._get_conn_patcher = patch("db._get_conn", _fake_conn)
         self._get_conn_patcher.start()
 
     def tearDown(self):
@@ -149,7 +153,10 @@ class TestGetMonthlySentCount(unittest.TestCase):
             VALUES (?, ?, ?, ?, ?, ?)
         """, ("other@x.com", "d@x.com", "url4", "pending", self.today, self.today))
 
-        self._get_conn_patcher = patch("db._get_conn", return_value=(self.conn, self.conn.cursor()))
+        @contextlib.contextmanager
+        def _fake_conn():
+            yield self.conn, self.conn.cursor()
+        self._get_conn_patcher = patch("db._get_conn", _fake_conn)
         self._get_conn_patcher.start()
 
     def tearDown(self):
@@ -184,7 +191,10 @@ class TestGetPendingReferral(unittest.TestCase):
             VALUES (?, ?, ?, ?, ?, ?)
         """, ("me@x.com", "a@x.com", "url1", "accepted", "2024-01-02", "2024-01-02"))
 
-        self._get_conn_patcher = patch("db._get_conn", return_value=(self.conn, self.conn.cursor()))
+        @contextlib.contextmanager
+        def _fake_conn():
+            yield self.conn, self.conn.cursor()
+        self._get_conn_patcher = patch("db._get_conn", _fake_conn)
         self._get_conn_patcher.start()
 
     def tearDown(self):

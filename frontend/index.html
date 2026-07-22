@@ -44,6 +44,8 @@
     .premium-btn-primary { background: #1e293b; color: #fff; }
     .premium-btn-primary:hover { background: #0f172a; box-shadow: 0 4px 12px rgba(15,23,42,.15); }
     .premium-btn-primary:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+    body.internship-mode .premium-btn-primary { background: #0d9488; }
+    body.internship-mode .premium-btn-primary:hover { background: #0f766e; box-shadow: 0 4px 12px rgba(13,148,136,.15); }
     .premium-btn-secondary { background: #fff; color: #475569; border: 1px solid #e2e8f0; }
     .premium-btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
     .premium-pill {
@@ -199,7 +201,7 @@
           <div id="sites" class="flex flex-wrap gap-2">
             <label class="cursor-pointer">
               <input type="checkbox" value="indeed" checked class="hidden pill-checkbox">
-              <div class="premium-pill active cursor-pointer select-none text-sm px-4 py-2">Indeed</div>
+              <div class="premium-pill cursor-pointer select-none text-sm px-4 py-2">Indeed</div>
             </label>
             <label class="cursor-pointer">
               <input type="checkbox" value="linkedin" class="hidden pill-checkbox">
@@ -432,6 +434,10 @@
     </div>
   </div>
 
-  <script src="/app.js"></script>
+  <script type="module" src="/js/constants.js"></script>
+  <script type="module" src="/js/utils.js"></script>
+  <script type="module" src="/js/auth.js"></script>
+  <script type="module" src="/js/referrals.js"></script>
+  <script src="/js/search.js"></script>
 </body>
 </html>

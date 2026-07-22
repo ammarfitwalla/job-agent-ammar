@@ -253,14 +253,16 @@ async function authRegister() {
 }
 
 // Attach to window for onclick handlers
+// Only set if not already defined (search.js may have set stepper versions)
+window.sendEmailJS = sendEmailJS;
 window.promptSendCode = promptSendCode;
-window.closeAuthModal = closeAuthModal;
-window.showAuthModal = showAuthModal;
+if (!window.closeAuthModal) window.closeAuthModal = closeAuthModal;
+if (!window.showAuthModal) window.showAuthModal = showAuthModal;
 window.verifyCode = verifyCode;
-window.selectEmploymentStatus = selectEmploymentStatus;
-window.filterCompanyDropdown = filterCompanyDropdown;
-window.addCustomCompany = addCustomCompany;
-window.selectCompany = selectCompany;
-window.authRegister = authRegister;
+if (!window.selectEmploymentStatus) window.selectEmploymentStatus = selectEmploymentStatus;
+if (!window.filterCompanyDropdown) window.filterCompanyDropdown = filterCompanyDropdown;
+if (!window.addCustomCompany) window.addCustomCompany = addCustomCompany;
+if (!window.selectCompany) window.selectCompany = selectCompany;
+if (!window.authRegister) window.authRegister = authRegister;
 
 export { initEmailJS, sendEmailJS, loadAuthCompanyList };

@@ -3,6 +3,7 @@ import time
 import sqlite3
 import sys
 import os
+import contextlib
 from unittest.mock import patch
 from copy import deepcopy
 
@@ -55,6 +56,9 @@ def _init_test_db():
             message TEXT DEFAULT '',
             status TEXT DEFAULT 'pending',
             credit_awarded INTEGER DEFAULT 0,
+            accepted_at TEXT DEFAULT '',
+            receiver_confirmed INTEGER DEFAULT 0,
+            sender_confirmed INTEGER DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
@@ -102,8 +106,13 @@ def _fresh_conn():
 
 
 def _make_conn_patch():
+    @contextlib.contextmanager
     def fake_get_conn():
-        return _fresh_conn()
+        conn, cur = _fresh_conn()
+        try:
+            yield conn, cur
+        finally:
+            pass
     return fake_get_conn
 
 
@@ -299,6 +308,8 @@ class TestIntegrationReferralFlow(unittest.TestCase):
 
         self._dev_mode_patcher = patch("api.routes.auth.DEV_MODE", True)
         self._dev_mode_patcher.start()
+        self._db_dev_mode_patcher = patch("db.DEV_MODE", True)
+        self._db_dev_mode_patcher.start()
 
         from utils.rate_limiter import _limits
         _limits.clear()
@@ -327,6 +338,7 @@ class TestIntegrationReferralFlow(unittest.TestCase):
     def tearDown(self):
         self._conn_patcher.stop()
         self._dev_mode_patcher.stop()
+        self._db_dev_mode_patcher.stop()
 
     def _create_referral(self, from_email=None, to_email=None, job_url=None):
         return self.client.post("/api/referrals/request", json={
@@ -396,7 +408,7 @@ class TestIntegrationReferralFlow(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertTrue(data["ok"])
-        self.assertIn("credits_earned", data)
+        self.assertIn("credits_awarded", data)
 
     def test_08_withdraw_referral(self):
         self._create_referral()
@@ -420,16 +432,16 @@ class TestIntegrationReferralFlow(unittest.TestCase):
         r = self.client.get(f"/api/referrals/remaining?email={self.from_email}")
         self.assertEqual(r.status_code, 200)
         data = r.json()
-        self.assertEqual(data["remaining"], 3)
-        self.assertEqual(data["limit"], 3)
+        self.assertEqual(data["remaining"], 5)
+        self.assertEqual(data["limit"], 5)
 
         self._create_referral()
         r = self.client.get(f"/api/referrals/remaining?email={self.from_email}")
         data = r.json()
-        self.assertEqual(data["remaining"], 2)
+        self.assertEqual(data["remaining"], 4)
 
     def test_11_monthly_limit(self):
-        for i in range(3):
+        for i in range(5):
             ref_email = f"ref{i}@example.com"
             self.client.post("/api/auth/verify-code", json={"email": ref_email, "code": "123456"})
             self.client.post("/api/auth/register", json={"email": ref_email, "name": f"Ref{i}"})

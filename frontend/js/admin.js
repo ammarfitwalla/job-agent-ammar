@@ -315,19 +315,99 @@ async function loadVisits() {
   } catch {}
 }
 
+const _STATUS_LABELS = { Student: "student", Graduate: "graduate", "Laid Off": "laid_off", "Career Break": "career_break" };
+
+function deriveStatus(company) {
+  if (!company) return "\u2014";
+  const s = _STATUS_LABELS[company];
+  return s ? s.replace("_", " ") : "Employed";
+}
+
 async function loadRegistrations() {
   try {
     const r = await fetch("/api/admin/registrations", { cache: "no-cache" });
     const d = await r.json();
     const regs = d.registrations || [];
-    document.getElementById("registrationBody").innerHTML = regs.length
-      ? regs.map(u => `<tr>
-        <td style="white-space:nowrap">${u.created_at ? formatDate(u.created_at) : "\u2014"}</td>
-        <td>${u.name || "\u2014"}</td>
-        <td>${u.email}</td>
-        <td style="white-space:nowrap">${u.updated_at ? formatDate(u.updated_at) : "\u2014"}</td>
-      </tr>`).join("")
-      : '<tr><td colspan="4"><div class="empty">No registrations yet</div></td></tr>';
+
+    async function fetchSavedJobs(email) {
+      try {
+        const r = await fetch(`/api/saved-jobs?email=${encodeURIComponent(email)}`);
+        const d = await r.json();
+        return d.jobs || [];
+      } catch { return []; }
+    }
+
+    if (!regs.length) {
+      document.getElementById("registrationBody").innerHTML = '<tr><td colspan="9"><div class="empty">No registrations yet</div></td></tr>';
+      return;
+    }
+
+    const expanded = new Set();
+
+    function renderRow(u, i) {
+      const status = deriveStatus(u.company);
+      const jobsLabel = u.company ? "View" : "\u2014";
+      return `
+        <tr class="reg-row" data-idx="${i}">
+          <td style="text-align:center">${u.company ? `<button class="pill-btn jobs-toggle" data-email="${u.email}" data-idx="${i}">${jobsLabel}</button>` : ""}</td>
+          <td style="white-space:nowrap">${u.created_at ? formatDate(u.created_at) : "\u2014"}</td>
+          <td>${u.name || "\u2014"}</td>
+          <td>${u.email}</td>
+          <td>${status}</td>
+          <td>${u.company || "\u2014"}</td>
+          <td>${u.position || "\u2014"}</td>
+          <td class="jobs-count" data-email="${u.email}">...</td>
+          <td style="white-space:nowrap">${u.updated_at ? formatDate(u.updated_at) : "\u2014"}</td>
+        </tr>
+        <tr class="jobs-detail-row" id="jobs-detail-${i}" style="display:none">
+          <td colspan="9" style="padding:0"><div class="jobs-detail-cell"><div class="jobs-loading">Loading...</div></div></td>
+        </tr>`;
+    }
+
+    const html = regs.map((u, i) => renderRow(u, i)).join("");
+    document.getElementById("registrationBody").innerHTML = html;
+
+    // Fetch saved jobs count per user
+    regs.forEach(async (u) => {
+      if (!u.company) return;
+      const jobs = await fetchSavedJobs(u.email);
+      const cell = document.querySelector(`.jobs-count[data-email="${u.email}"]`);
+      if (cell) cell.textContent = jobs.length || "0";
+    });
+
+    // Toggle saved jobs detail on button click
+    document.getElementById("registrationBody").addEventListener("click", async (e) => {
+      const btn = e.target.closest(".jobs-toggle");
+      if (!btn) return;
+      const idx = btn.dataset.idx;
+      const email = btn.dataset.email;
+      const detailRow = document.getElementById(`jobs-detail-${idx}`);
+      if (!detailRow) return;
+
+      if (detailRow.style.display === "table-row") {
+        detailRow.style.display = "none";
+        btn.textContent = "View";
+        return;
+      }
+
+      detailRow.style.display = "table-row";
+      btn.textContent = "Hide";
+      const cell = detailRow.querySelector(".jobs-detail-cell");
+
+      const jobs = await fetchSavedJobs(email);
+      if (!jobs.length) {
+        cell.innerHTML = '<div class="empty" style="padding:12px">No saved jobs</div>';
+        return;
+      }
+      cell.innerHTML = `<table class="inner-table"><thead><tr><th>Title</th><th>Company</th><th>Status</th><th>Saved</th></tr></thead><tbody>
+        ${jobs.map(j => `<tr>
+          <td>${j.title ? `<a href="${j.url || "#"}" target="_blank">${j.title}</a>` : "\u2014"}</td>
+          <td>${j.company || "\u2014"}</td>
+          <td>${j.application_status || "saved"}</td>
+          <td style="white-space:nowrap">${j.saved_at ? formatDate(j.saved_at) : "\u2014"}</td>
+        </tr>`).join("")}
+      </tbody></table>`;
+    });
   } catch {}
 }
 
@@ -355,7 +435,7 @@ async function restoreDB() {
   if (!file) { alert("Select a .db file first"); return; }
   const size = file.size > 1048576 ? (file.size / 1048576).toFixed(1) + " MB" : Math.round(file.size / 1024) + " KB";
   if (!confirm(`Restore "${file.name}" (${size})?\nThis replaces the current database and cannot be undone.`)) return;
-  const btn = document.querySelector("#dbCard .btn-primary");
+  const btn = document.querySelector(".db-card .btn-primary");
   const origHTML = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="btn-spinner"></span> Restoring...';
@@ -384,6 +464,94 @@ async function restoreDB() {
   btn.innerHTML = origHTML;
 }
 
+async function mergeDB() {
+  const input = document.getElementById("dbFileInput");
+  const file = input.files[0];
+  if (!file) { alert("Select a .db file first"); return; }
+  const size = file.size > 1048576 ? (file.size / 1048576).toFixed(1) + " MB" : Math.round(file.size / 1024) + " KB";
+  if (!confirm(`Merge "${file.name}" (${size})?\nNew records will be added, existing ones preserved.`)) return;
+  const btn = document.getElementById("mergeBtn");
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-spinner"></span> Merging...';
+  const result = document.getElementById("dbMergeResult");
+  result.textContent = ""; result.className = "db-result";
+  const fd = new FormData();
+  fd.append("file", file); fd.append("email", _adminEmail);
+  try {
+    const r = await fetch("/api/admin/db/merge", { method: "POST", body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      const entries = Object.entries(d.inserted || {});
+      const summary = entries.length ? entries.map(([t, n]) => `${t}: ${n}`).join(" \u00b7 ") : "No new records";
+      result.className = "db-result success";
+      result.textContent = `Merged! ${summary}`;
+      loadDbInfo(); loadStats(); loadSessions(); loadRegistrations();
+    } else {
+      result.className = "db-result error";
+      result.textContent = d.error || "Failed";
+    }
+  } catch {
+    result.className = "db-result error";
+    result.textContent = "Network error";
+  }
+  btn.disabled = false; btn.innerHTML = orig;
+}
+
+// ── Resume Upload ──
+window.handleResumeFiles = function handleResumeFiles(files) {
+  const count = document.getElementById("resumeFileCount");
+  const list = document.getElementById("resumeFileList");
+  if (!files.length) {
+    count.textContent = "No files selected";
+    list.innerHTML = "";
+    return;
+  }
+  count.textContent = `${files.length} file${files.length > 1 ? "s" : ""} selected`;
+  list.innerHTML = Array.from(files).map(f =>
+    `<div style="padding:3px 0">${f.name} (${(f.size / 1024).toFixed(1)} KB)</div>`
+  ).join("");
+};
+
+window.uploadResumes = async function uploadResumes() {
+  const input = document.getElementById("resumeFileInput");
+  const files = input.files;
+  if (!files.length) { alert("Select resume files first"); return; }
+  const btn = document.getElementById("resumeUploadBtn");
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-spinner"></span> Uploading...';
+  const result = document.getElementById("resumeUploadResult");
+  result.textContent = ""; result.className = "db-result";
+  const fd = new FormData();
+  for (const f of files) fd.append("files", f);
+  fd.append("email", _adminEmail);
+  try {
+    const r = await fetch("/api/admin/resume/upload", { method: "POST", body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      const ok = d.files.filter(f => f.ok).length;
+      const fail = d.files.filter(f => !f.ok).length;
+      result.className = "db-result success";
+      result.textContent = `${ok} uploaded` + (fail ? `, ${fail} failed` : "");
+      if (fail) {
+        const list = document.getElementById("resumeFileList");
+        list.innerHTML = d.files.map(f =>
+          `<div style="padding:3px 0;color:${f.ok ? "#059669" : "#dc2626"}">${f.filename} — ${f.ok ? "OK" : f.error}</div>`
+        ).join("");
+      }
+    } else {
+      result.className = "db-result error";
+      result.textContent = d.error || "Failed";
+    }
+  } catch (e) {
+    result.className = "db-result error";
+    result.textContent = "Network error";
+  }
+  btn.disabled = false;
+  btn.innerHTML = orig;
+};
+
 // ── Window globals for onclick ──
 window.formatDate = formatDate;
 window.formatDuration = formatDuration;
@@ -400,6 +568,7 @@ window.loadRegistrations = loadRegistrations;
 window.switchTab = switchTab;
 window.loadDbInfo = loadDbInfo;
 window.restoreDB = restoreDB;
+window.mergeDB = mergeDB;
 
 // ── Init ──
 loadStats(); loadSessions(); loadScores(); loadRegistrations(); loadVisits(); loadDbInfo();

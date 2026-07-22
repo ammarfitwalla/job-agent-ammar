@@ -5,11 +5,10 @@ import os
 # Ensure project root is on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse, FileResponse, RedirectResponse
+from fastapi.responses import PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.routing import Mount
 from api.routes import jobs, scrape, email, resume, roles, states, events, leads, admin, auth, profile, saved_jobs, visits, users, referrals, stats
 import json
 from db import init_db
@@ -126,8 +125,10 @@ async def admin_redirect():
 
 @app.get("/db")
 async def download_db():
-    from db import _DB_PATH
+    from db import _DB_PATH, _get_conn
     if os.path.isfile(_DB_PATH):
+        with _get_conn() as (conn, cur):
+            cur.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         return FileResponse(_DB_PATH, filename="job_agent.db", media_type="application/octet-stream")
     return PlainTextResponse("Database not found", status_code=404)
 if os.path.isdir(_frontend_dir):

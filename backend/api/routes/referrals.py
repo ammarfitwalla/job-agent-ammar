@@ -11,7 +11,7 @@ from db import (
 )
 from utils.rate_limiter import check_rate_limit
 
-_MONTHLY_LIMIT = 3
+_MONTHLY_LIMIT = 5
 
 router = APIRouter(prefix="/api/referrals", tags=["referrals"])
 
@@ -37,7 +37,7 @@ async def referral_create(req: ReferralRequest):
     to_user = get_user(req.to_email)
     if not to_user:
         return {"ok": False, "error": "User not found"}
-    existing = get_pending_referral(req.from_email, req.to_email, req.job_url)
+    existing = get_pending_referral(req.from_email, req.to_email, req.job_url, req.company)
     if existing:
         return {"ok": False, "error": "You already have a pending request to this person for this job"}
     sent_count = get_monthly_sent_count(req.from_email)
@@ -59,6 +59,8 @@ async def referral_incoming(email: str = ""):
     for r in reqs:
         from_user = get_user(r["from_email"])
         r["from_name"] = from_user["name"] if from_user else "Unknown"
+        r["from_company"] = from_user.get("company", "") if from_user else ""
+        r["from_position"] = from_user.get("position", "") if from_user else ""
         r["from_linkedin_url"] = from_user.get("linkedin_url", "") if from_user else ""
         r["from_resume_filename"] = from_user.get("resume_filename", "") if from_user else ""
     return {"requests": reqs}
@@ -72,6 +74,7 @@ async def referral_outgoing(email: str = ""):
     for r in reqs:
         to_user = get_user(r["to_email"])
         r["to_name"] = to_user["name"] if to_user else "Unknown"
+        r["to_linkedin_url"] = to_user.get("linkedin_url", "") if to_user else ""
     return {"requests": reqs}
 
 

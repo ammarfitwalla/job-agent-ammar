@@ -208,6 +208,8 @@ tr td:first-child { border-radius: 0; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn-primary { background: #4f46e5; color: #fff; }
 .btn-primary:hover:not(:disabled) { background: #4338ca; }
+.btn-secondary { background: #fff; color: #334155; border: 1px solid #cbd5e1; }
+.btn-secondary:hover:not(:disabled) { background: #f1f5f9; }
 .btn-spinner {
   display: inline-block; width: 14px; height: 14px;
   border: 2px solid rgba(255,255,255,.3);
@@ -239,6 +241,23 @@ tr td:first-child { border-radius: 0; }
 .footer { text-align: center; padding: 32px 24px 16px; font-size: 11px; color: #94a3b8; }
 .footer a { color: #64748b; text-decoration: none; }
 .footer a:hover { color: #3b82f6; }
+
+/* ── Registrations (saved jobs) ── */
+.pill-btn {
+  display: inline-block; padding: 2px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
+  font-size: 11px; font-weight: 500; color: #3b82f6; background: #fff; cursor: pointer;
+  transition: all .15s; line-height: 1.6;
+}
+.pill-btn:hover { background: #eff6ff; border-color: #3b82f6; }
+.jobs-detail-cell { padding: 4px 16px 16px; background: #f8fafc; }
+.jobs-detail-cell .inner-table { font-size: 12px; margin: 0; }
+.jobs-detail-cell .inner-table th { font-size: 10px; padding: 6px 10px; background: #f1f5f9; }
+.jobs-detail-cell .inner-table td { padding: 6px 10px; font-size: 12px; }
+.jobs-detail-cell .inner-table a { color: #3b82f6; text-decoration: none; font-weight: 500; }
+.jobs-detail-cell .inner-table a:hover { text-decoration: underline; }
+.jobs-loading { color: #94a3b8; font-size: 12px; padding: 12px; text-align: center; }
+.reg-row td { vertical-align: middle; }
+.jobs-count { font-size: 12px; color: #64748b; text-align: center; }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -304,12 +323,35 @@ tr td:first-child { border-radius: 0; }
             <span id="fileLabelText">Choose .db file</span>
           </span>
         </div>
-        <button class="btn btn-primary" onclick="restoreDB()">
-          <svg class="btn-icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
-          Upload &amp; Restore
-        </button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="restoreDB()">
+            <svg class="btn-icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
+            Upload &amp; Restore
+          </button>
+          <button class="btn btn-secondary" id="mergeBtn" onclick="mergeDB()">
+            <svg class="btn-icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 0 0 4.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 0 1-15.357-2m15.357 2H15"/></svg>
+            Merge
+          </button>
+        </div>
         <span class="db-result" id="dbRestoreResult"></span>
+        <span class="db-result" id="dbMergeResult"></span>
       </div>
+    </div>
+
+    <div class="chart-box db-card" style="margin-top:20px">
+      <h3>Resume Upload</h3>
+      <div class="db-info" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Restore resume files from backup. Original filenames preserved.</div>
+      <div class="db-actions">
+        <input type="file" id="resumeFileInput" multiple accept=".pdf,.docx,.txt" style="display:none" onchange="handleResumeFiles(this.files)">
+        <button class="btn btn-secondary" onclick="document.getElementById('resumeFileInput').click()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/></svg>
+          Choose Files
+        </button>
+        <span id="resumeFileCount" style="font-size:13px;color:#64748b">No files selected</span>
+        <button class="btn btn-primary" id="resumeUploadBtn" onclick="uploadResumes()">Upload</button>
+        <span class="db-result" id="resumeUploadResult"></span>
+      </div>
+      <div id="resumeFileList" style="margin-top:8px;font-size:12px;color:#64748b"></div>
     </div>
 
     <div class="tabs">
@@ -329,7 +371,7 @@ tr td:first-child { border-radius: 0; }
     </div>
 
     <div id="tab-registrations" class="tab-content">
-      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Name</th><th>Email</th><th>Last Updated</th></tr></thead><tbody id="registrationBody"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th></th><th>Date</th><th>Name</th><th>Email</th><th>Status</th><th>Company</th><th>Position</th><th>Jobs</th><th>Last Updated</th></tr></thead><tbody id="registrationBody"></tbody></table></div>
     </div>
 
     <div id="tab-visits" class="tab-content">

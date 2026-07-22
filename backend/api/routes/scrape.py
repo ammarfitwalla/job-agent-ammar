@@ -17,10 +17,9 @@ def cancel_stale_sessions():
     from db import _get_conn
     cutoff = (datetime.utcnow() - timedelta(minutes=_STALE_TIMEOUT_MINUTES)).isoformat()
     try:
-        conn, cur = _get_conn()
-        cur.execute("SELECT id FROM sessions WHERE status = 'running' AND updated_at < ?", (cutoff,))
-        stale = [row[0] for row in cur.fetchall()]
-        conn.close()
+        with _get_conn() as (conn, cur):
+            cur.execute("SELECT id FROM sessions WHERE status = 'running' AND updated_at < ?", (cutoff,))
+            stale = [row[0] for row in cur.fetchall()]
         for sid in stale:
             log(f"[GC] Cancelling stale session {sid}", sid)
             try:
