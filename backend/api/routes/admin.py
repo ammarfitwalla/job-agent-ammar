@@ -75,7 +75,9 @@ async def admin_stats():
         total_relevant = cur.fetchone()[0]
 
         cur.execute(
-            "SELECT AVG(elapsed_seconds) FROM sessions WHERE status = 'done' AND cancel = 0 AND elapsed_seconds > 0"
+            """SELECT AVG(CASE WHEN elapsed_seconds > 0 THEN elapsed_seconds
+                ELSE (julianday('now') - julianday(created_at)) * 86400 END)
+            FROM sessions WHERE status = 'done' AND cancel = 0"""
         )
         avg_duration = round(cur.fetchone()[0] or 0, 1)
 
