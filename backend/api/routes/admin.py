@@ -200,8 +200,11 @@ async def admin_session_detail(sid: str):
 
     s["classification"] = _classify(s)
 
-    resume_path = os.path.join(tempfile.gettempdir(), "job_agent_resumes", f"{sid}.txt")
-    has_resume = os.path.isfile(resume_path)
+    resumes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
+    has_resume = any(
+        os.path.isfile(os.path.join(resumes_dir, f"{sid}{ext}"))
+        for ext in (".pdf", ".docx", ".txt")
+    ) or os.path.isfile(os.path.join(tempfile.gettempdir(), "job_agent_resumes", f"{sid}.txt"))
 
     return {
         "session": s,
