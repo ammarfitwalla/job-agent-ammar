@@ -178,19 +178,18 @@ function enableProfileEdit() {
   document.getElementById("profileDisplayMode").classList.add("hidden");
   document.getElementById("profileEditMode").classList.remove("hidden");
   document.getElementById("editName").value = document.getElementById("profileName").textContent || "";
-  const currentHeadline = document.getElementById("profileHeadline").textContent || "";
-  const currentCompany = currentHeadline.includes("at ") ? currentHeadline.split("at ").pop().trim() : "";
-  const matchedStatus = _PROFILE_LABEL_TO_STATUS[currentCompany];
+  const company = profile.company || "";
+  const matchedStatus = _PROFILE_LABEL_TO_STATUS[company];
   if (matchedStatus) {
     profileSelectEmploymentStatus(matchedStatus);
     document.getElementById("editCompany").value = "";
   } else {
     profileSelectEmploymentStatus("employed");
-    document.getElementById("editCompany").value = currentCompany;
+    document.getElementById("editCompany").value = company;
   }
   loadProfileCompanyList();
   filterProfileCompanyDropdown();
-  document.getElementById("editRole").value = document.getElementById("profileHeadline").textContent.split(" at ")[0] || "";
+  document.getElementById("editRole").value = profile.position || "";
   const linkedinEl = document.getElementById("profileLinkedin");
   document.getElementById("editLinkedin").value = linkedinEl.classList.contains("hidden") ? "" : linkedinEl.href;
   document.getElementById("editName").focus();
