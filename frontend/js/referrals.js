@@ -190,7 +190,29 @@ function askReferral(btn, toEmail, toName) {
     showToast("You can't refer yourself");
     return;
   }
-  if (!confirm(`Send referral request to ${toName}?`)) return;
+  const card = btn.closest(".flex.items-center.justify-between");
+  if (!card) return;
+  const existing = card.querySelector(".referral-msg-box");
+  if (existing) { existing.remove(); return; }
+  const msgBox = document.createElement("div");
+  msgBox.className = "referral-msg-box w-full mt-2 pt-2 border-t border-slate-100";
+  msgBox.innerHTML = `
+    <textarea class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:bg-white focus:border-indigo-300 resize-none transition-colors" rows="2" placeholder="Add a message (optional)..." maxlength="500"></textarea>
+    <div class="flex gap-2 mt-2">
+      <button class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 rounded-lg text-xs font-semibold transition-colors referral-send-btn">Send Request</button>
+      <button class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-medium transition-colors referral-cancel-btn">Cancel</button>
+    </div>`;
+  card.parentElement.appendChild(msgBox);
+  msgBox.querySelector(".referral-send-btn").onclick = function () {
+    const message = msgBox.querySelector("textarea").value.trim();
+    sendReferralRequest(btn, toEmail, toName, message, msgBox);
+  };
+  msgBox.querySelector(".referral-cancel-btn").onclick = function () { msgBox.remove(); };
+  msgBox.querySelector("textarea").focus();
+}
+
+function sendReferralRequest(btn, toEmail, toName, message, msgBox) {
+  const profile = getProfile();
   btn.disabled = true;
   btn.textContent = "Sending...";
   fetch("/api/referrals/request", {
@@ -202,6 +224,7 @@ function askReferral(btn, toEmail, toName) {
       job_title: window._referralJobTitle || "",
       company: _referralCompany,
       match_score: window._referralMatchScore || 0,
+      message: message,
     }),
   }).then(r => r.json()).then(d => {
     if (d.ok) {
@@ -210,6 +233,7 @@ function askReferral(btn, toEmail, toName) {
       btn.onclick = function () { withdrawReferralRequest(d.id, btn, toEmail, toName); };
       btn.disabled = false;
       btn.className = "text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors";
+      if (msgBox) msgBox.remove();
       refreshReferralRemaining();
     } else {
       showToast(d.error || "Failed to send request");

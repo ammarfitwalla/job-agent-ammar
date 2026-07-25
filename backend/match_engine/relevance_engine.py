@@ -64,7 +64,7 @@ def keyword_score(
         combined += " " + " ".join(job_tags).lower()
 
     kw_list = keywords if keywords else KEYWORDS_INCLUDE
-    return sum(10 for kw in kw_list if kw.lower() in combined)
+    return sum(10 for kw in kw_list if re.search(r'\b' + re.escape(kw.lower()) + r'\b', combined))
 
 
 def _apply_scoring(

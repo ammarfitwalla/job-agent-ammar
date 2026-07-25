@@ -274,7 +274,7 @@ async def admin_leads():
 @router.get("/db/info")
 async def admin_db_info(email: str = ""):
     if email != ADMIN_EMAIL:
-        return {"error": "Unauthorized"}, 403
+        return JSONResponse(status_code=403, content={"error": "Unauthorized"})
     from db import _get_conn, _DB_PATH
 
     with _get_conn() as (conn, cur):

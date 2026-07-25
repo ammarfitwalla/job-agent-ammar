@@ -4,16 +4,9 @@ from utils.emailer import send_remoteok_batch_email
 from scrapers import (
     remoteok_scraper,
     weworkremotely_scraper,
-    naukri_scraper,
-    gulftalent_scraper,
-    eurojobs_scraper
 )
 from match_engine.relevance_engine import filter_jobs
-from cover_letters.generator import generate_cover_letter
-from auto_apply.remoteok_apply import apply_remoteok
-from sheets.sheets_writer import log_job
 from emails.daily_report import send_daily_report
-from config import RESUME_PATH, AUTO_APPLY
 from utils.logger import log
 
 def main():
@@ -21,28 +14,22 @@ def main():
     all_jobs = []
 
     # --------------------
-    # 1️⃣ SCRAPE JOBS
+    # 1. SCRAPE JOBS
     # --------------------
     log("[MAIN] Starting scraping jobs...")
     for scraper, name in [
         (remoteok_scraper.scrape_remoteok, "remoteok_scraper"),
         (weworkremotely_scraper.scrape_wwr, "weworkremotely_scraper"),
-        # (naukri_scraper.scrape_naukri, "naukri_scraper"),
-        # (gulftalent_scraper.scrape_gulftalent, "gulftalent_scraper"),
-        # (eurojobs_scraper.scrape_eurojobs, "eurojobs_scraper")
     ]:
         try:
             jobs = scraper()
             all_jobs.extend(jobs)
         except Exception as e:
             log(f"[ERROR] {name} failed: {e}")
-    for job in all_jobs:
-        print(job['title'])
     log(f"[MAIN] Total scraped jobs: {len(all_jobs)}")
-    print(f"Total scraped jobs: {len(all_jobs)}")
-    # sys.exit(0)
+
     # --------------------
-    # 2️⃣ FILTER RELEVANT JOBS
+    # 2. FILTER RELEVANT JOBS
     # --------------------
     try:
         relevant_jobs = filter_jobs(all_jobs)
@@ -51,53 +38,23 @@ def main():
         log(f"[ERROR] Filtering jobs failed: {e}")
         relevant_jobs = []
 
-    # sys.exit(0)
     # --------------------
-    # 3️⃣ GENERATE COVER LETTERS & APPLY
+    # 3. EMAIL RESULTS
     # --------------------
-    applied_jobs = []
-    remoteok_weworkremotely_jobs = []
-
-    for job in relevant_jobs:
-        # try:
-        #     cl = generate_cover_letter(job)
-        #     print("Cover letter generated for job: ", job.get('url', ''))
-        #     print(cl)
-        #     job["cover_letter"] = cl
-        # except Exception as e:
-        #     log(f"[ERROR] Cover letter generation failed for job {job.get('url', '')}: {e}")
-        #     continue
-
-        # try:
-        #     log_job(job)
-        # except Exception as e:
-        #     log(f"[ERROR] Logging job to Google Sheets failed for job {job.get('url', '')}: {e}")
-
-        # Auto-apply (currently demo with RemoteOK)
-        # Extend for other sites by adding site-specific apply modules
-        if "remoteok.com" in job["url"].lower() or "weworkremotely.com" in job["url"].lower():
-            try:
-                # print("Applying for job: ", job.get('url', ''))
-                # apply_remoteok(job, RESUME_PATH, cl)
-                remoteok_weworkremotely_jobs.append(job)
-            except Exception as e:
-                log(f"[ERROR] Auto-apply failed for job {job.get('url', '')}: {e}")
-        
-        # else:
-        #     print("Auto apply is disabled")
-        # if AUTO_APPLY:
-        #     # Extend to other sites similarly
-        #     pass
-    # sys.exit(0)
+    remoteok_weworkremotely_jobs = [
+        job for job in relevant_jobs
+        if "remoteok.com" in job["url"].lower() or "weworkremotely.com" in job["url"].lower()
+    ]
 
     if remoteok_weworkremotely_jobs:
         send_remoteok_batch_email(remoteok_weworkremotely_jobs)
         log(f"[EMAIL SENT] Total RemoteOK jobs sent: {len(remoteok_weworkremotely_jobs)}")
+
     # --------------------
-    # 4️⃣ SEND DAILY REPORT
+    # 4. SEND DAILY REPORT
     # --------------------
     try:
-        send_daily_report(applied_jobs)
+        send_daily_report([])
         log("[MAIN] Workflow completed.")
     except Exception as e:
         log(f"[ERROR] Sending daily report failed: {e}")

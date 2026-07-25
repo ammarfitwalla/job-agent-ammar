@@ -40,8 +40,3 @@ def send_remoteok_batch_email(jobs):
 """
     _send(os.environ.get("EMAIL_TO", ""), subject, body)
     print(f"Email sent: {len(jobs)} jobs")
-
-
-def send_verification_code(email: str, code: str):
-    html = f"Your verification code is:<br><br><strong>{code}</strong><br><br>This code expires in 10 minutes.<br><br>If you didn't request this, you can safely ignore this email."
-    _send(email, "Your Job Agent verification code", html)

@@ -27,7 +27,7 @@ const _PROFILE_LABEL_TO_STATUS = {
   "Career Break": "career_break",
 };
 
-const _MONTHLY_LIMIT = 3;
+const _MONTHLY_LIMIT = 5;
 
 window.DEV_MODE = DEV_MODE;
 window.REFERRAL_COOLDOWN = REFERRAL_COOLDOWN;
