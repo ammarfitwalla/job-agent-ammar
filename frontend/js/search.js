@@ -586,11 +586,8 @@ function getFilteredJobs() {
 
 function siteFromUrl(url) {
   if (!url) return '';
-  if (url.includes('adzuna')) return 'Adzuna';
   if (url.includes('linkedin')) return 'LinkedIn';
   if (url.includes('indeed')) return 'Indeed';
-  if (url.includes('remoteok')) return 'RemoteOK';
-  if (url.includes('weworkremotely')) return 'WWR';
   return new URL(url).hostname.replace('www.', '').split('.')[0];
 }
 
@@ -608,7 +605,7 @@ const _hasCachedSearch = (() => {
     const raw = localStorage.getItem(SEARCH_CACHE_KEY);
     if (!raw) return false;
     const saved = JSON.parse(raw);
-    return saved && saved.searchId && Date.now() - saved.timestamp < SEARCH_CACHE_TTL;
+    return saved && saved.searchIds && saved.searchIds.length > 0 && Date.now() - saved.timestamp < SEARCH_CACHE_TTL;
   } catch { return false; }
 })();
 if (_hasCachedSearch) {
@@ -657,7 +654,7 @@ function setStatus(msg, type = "blue") {
 }
 
 function renderTimeline(logs, status) {
-  const siteIcons = { linkedin: "in", indeed: "indeed", adzuna: "ADZ", remoteok: "ROK", weworkremotely: "WWR", naukri: "NAU", gulftalent: "GT", eurojobs: "EUR" };
+  const siteIcons = { linkedin: "in", indeed: "indeed" };
 
   let html = "";
   const shown = new Set();
@@ -880,7 +877,7 @@ function statusBanner(msg, color = 'blue') {
   return `<div class="flex items-center px-4 py-2.5 mb-4 rounded-xl border text-sm font-medium ${colors[color] || colors.blue}">${msg}</div>`;
 }
 
-const SITE_ICONS = { linkedin: "in", indeed: "indeed", adzuna: "ADZ", remoteok: "ROK", weworkremotely: "WWR", naukri: "NAU", gulftalent: "GT", eurojobs: "EUR" };
+const SITE_ICONS = { linkedin: "in", indeed: "indeed" };
 
 function isRoleSimilar(roleA, roleB) {
   const a = roleA.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
@@ -1309,7 +1306,6 @@ function selectLocation(loc) {
   });
 }
 
-function getAdzunaCountry() { return selectedLocation ? selectedLocation.country_code : "us"; }
 function getIndeedCountry() {
   if (!selectedLocation) return "USA";
   const cc = selectedLocation.country_code;
@@ -1412,7 +1408,6 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
         sites, roles: rolesToScrape, search_id: _searchId,
         location: getLocation() || document.getElementById("locationInput").value,
         internship_mode: internshipMode,
-        adzuna_country: getAdzunaCountry(),
         indeed_country: getIndeedCountry(),
         user_email: (window.getProfile() || {}).email || "",
         scrape_limit: 200,

@@ -29,10 +29,9 @@ class HealthResponse(BaseModel):
 
 class ScrapeRequest(BaseModel):
     search_id: str = ""
-    sites: list[str] = ["remoteok", "weworkremotely"]
+    sites: list[str] = ["indeed", "linkedin"]
     keywords: list[str] = []
     roles: list[str] = []
-    adzuna_country: str = "us"
     location: str = ""
     indeed_country: str = "USA"
     internship_mode: bool = False

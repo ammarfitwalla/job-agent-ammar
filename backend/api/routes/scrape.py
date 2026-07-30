@@ -65,14 +65,8 @@ def _harvest_companies(jobs: list):
 
 
 SITE_MAP = {
-    "remoteok": ("remoteok_scraper", "scrape_remoteok"),
-    "adzuna": ("adzuna_scraper", "scrape_adzuna"),
     "indeed": ("indeed_scraper", "scrape_indeed"),
     "linkedin": ("linkedin_scraper", "scrape_linkedin"),
-    "weworkremotely": ("weworkremotely_scraper", "scrape_wwr"),
-    "naukri": ("naukri_scraper", "scrape_naukri"),
-    "gulftalent": ("gulftalent_scraper", "scrape_gulftalent"),
-    "eurojobs": ("eurojobs_scraper", "scrape_eurojobs"),
 }
 
 
@@ -81,7 +75,7 @@ def _is_cancelled(sid: str) -> bool:
     return bool(s and s.get("cancel"))
 
 
-def run_scrape(sid, sites, roles, location, adzuna_country, indeed_country,
+def run_scrape(sid, sites, roles, location, indeed_country,
                keywords=None, internship_mode=False, user_email="", scrape_limit=200):
     import importlib
     from match_engine.relevance_engine import keyword_score as _kw_score, role_match_count as _role_match
@@ -117,9 +111,6 @@ def run_scrape(sid, sites, roles, location, adzuna_country, indeed_country,
                 mod = importlib.import_module(f"scrapers.{module_name}")
                 scraper_fn = getattr(mod, func_name)
                 kwargs = {"roles": [role]}
-                if site_key == "adzuna":
-                    kwargs["country"] = adzuna_country
-                    kwargs["internship_mode"] = internship_mode
                 if site_key in ("indeed", "linkedin"):
                     kwargs["location"] = location or "United States"
                     kwargs["results_wanted"] = scrape_limit
@@ -217,7 +208,7 @@ async def trigger_scrape(req: ScrapeRequest):
     log(f"[SCRAPE] Search triggered — sites={req.sites}, "
           f"mode={'internship' if req.internship_mode else 'normal'}", sid)
     t = threading.Thread(target=run_scrape, args=(
-        sid, req.sites, req.roles, req.location, req.adzuna_country, req.indeed_country,
+        sid, req.sites, req.roles, req.location, req.indeed_country,
     ), kwargs={
         "keywords": req.keywords,
         "internship_mode": req.internship_mode,
