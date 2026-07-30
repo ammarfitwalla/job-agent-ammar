@@ -69,6 +69,7 @@ def init_db():
                 date_posted TEXT DEFAULT '',
                 company_url TEXT DEFAULT '',
                 job_level TEXT DEFAULT '',
+                matched_role TEXT DEFAULT '',
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
             );
@@ -238,6 +239,10 @@ def init_db():
             pass
         try:
             cur.execute("ALTER TABLE jobs ADD COLUMN job_level TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            cur.execute("ALTER TABLE jobs ADD COLUMN matched_role TEXT DEFAULT ''")
         except Exception:
             pass
         conn.commit()
@@ -417,6 +422,8 @@ def get_filtered_jobs(sid: str, min_score: int = 0, site: str = "", experience_l
             del d["session_id"]
             del d["is_raw"]
             del d["created_at"]
+            if "matched_role" in d:
+                d["_matched_role"] = d.pop("matched_role")
             jobs.append(d)
         return jobs
 
@@ -445,16 +452,17 @@ def set_raw_jobs(sid: str, jobs: list):
                     "date_posted": job.get("posted_at", job.get("date_posted", "")),
                     "company_url": job.get("company_url", ""),
                     "job_level": job.get("job_level", ""),
+                    "matched_role": job.get("_matched_role", ""),
                     "created_at": _now(),
                 })
             if rows:
                 cur.executemany("""INSERT INTO jobs
                     (session_id, title, company, location, url, description, tags,
                      ai_score, keyword_score, total_score, reason, salary,
-                     experience_level, is_raw, date_posted, company_url, job_level, created_at)
+                     experience_level, is_raw, date_posted, company_url, job_level, matched_role, created_at)
                     VALUES (:session_id, :title, :company, :location, :url, :description, :tags,
                             :ai_score, :keyword_score, :total_score, :reason, :salary,
-                            :experience_level, :is_raw, :date_posted, :company_url, :job_level, :created_at)""", rows)
+                            :experience_level, :is_raw, :date_posted, :company_url, :job_level, :matched_role, :created_at)""", rows)
             conn.commit()
 
 
@@ -476,6 +484,8 @@ def get_raw_jobs(sid: str) -> list[dict]:
             del d["session_id"]
             del d["is_raw"]
             del d["created_at"]
+            if "matched_role" in d:
+                d["_matched_role"] = d.pop("matched_role")
             jobs.append(d)
         return jobs
 

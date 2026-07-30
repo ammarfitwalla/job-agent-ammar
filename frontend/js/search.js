@@ -47,13 +47,12 @@ let _referralCounts = {};
 
 let suggestedRoles = [];
 let searchIds = [];
-let roleSearchIdMap = {};
 
 // Tab state
 let customJobs = [];
 let aiJobs = [];
-let customSearchIds = [];
-let aiSearchIds = [];
+let _customRoleList = [];
+let _aiRoleList = [];
 let searchMode = 'current';
 let activeTab = 'custom';
 let customPollTimer = null;
@@ -837,9 +836,8 @@ function clearSearchState() {
   customJobs = [];
   aiJobs = [];
   searchIds = [];
-  customSearchIds = [];
-  aiSearchIds = [];
-  roleSearchIdMap = {};
+  _customRoleList = [];
+  _aiRoleList = [];
   suggestedRoles = [];
   searchMode = 'current';
   _searchComplete = false;
@@ -970,10 +968,7 @@ function applyThreshold() {
   if (_activeSubFilterRole === 'all') {
     renderAllJobs(baseJobs);
   } else {
-    const sids = Array.isArray(roleSearchIdMap[_activeSubFilterRole])
-      ? roleSearchIdMap[_activeSubFilterRole]
-      : [roleSearchIdMap[_activeSubFilterRole]];
-    renderAllJobs(baseJobs.filter(j => sids.includes(j._searchId)));
+    renderAllJobs(baseJobs.filter(j => j._matched_role === _activeSubFilterRole));
   }
 }
 
@@ -1355,9 +1350,8 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   _selectedSites = sites.slice();
 
   searchIds = [];
-  customSearchIds = [];
-  aiSearchIds = [];
-  roleSearchIdMap = {};
+  _customRoleList = [];
+  _aiRoleList = [];
   allJobs = [];
   customJobs = [];
   aiJobs = [];
@@ -1374,25 +1368,23 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   const userAISelected = allSelectedRoles.filter(r => aiRoleSet.has(r.toLowerCase()));
   const userCustomSelected = allSelectedRoles.filter(r => !aiRoleSet.has(r.toLowerCase()));
 
-  let rolesToScrape, customRolesToScrape, aiRolesToScrape;
+  let rolesToScrape;
   if (userAISelected.length > 0) {
-    // User picked at least one AI role → scrape ONLY what they selected
-    customRolesToScrape = userCustomSelected;
-    aiRolesToScrape = userAISelected;
+    _customRoleList = userCustomSelected;
+    _aiRoleList = userAISelected;
     rolesToScrape = [...new Set(allSelectedRoles)];
   } else {
-    // User picked no AI role → auto-include all 3 suggested
-    customRolesToScrape = [...new Set([...allSelectedRoles, ...suggestedRoles])];
-    aiRolesToScrape = suggestedRoles;
-    rolesToScrape = customRolesToScrape;
+    _customRoleList = [...new Set([...allSelectedRoles, ...suggestedRoles])];
+    _aiRoleList = suggestedRoles;
+    rolesToScrape = _customRoleList;
   }
 
   // In internship mode, discard senior/managerial roles
   if (internshipMode) {
     const SENIORITY_RE = /\b(senior|sr\.?|lead|principal|staff|director|vp|vice president|chief|head of|manager|architect|founding|partner)\b/i;
     rolesToScrape = rolesToScrape.filter(r => !SENIORITY_RE.test(r));
-    customRolesToScrape = customRolesToScrape.filter(r => !SENIORITY_RE.test(r));
-    aiRolesToScrape = aiRolesToScrape.filter(r => !SENIORITY_RE.test(r));
+    _customRoleList = _customRoleList.filter(r => !SENIORITY_RE.test(r));
+    _aiRoleList = _aiRoleList.filter(r => !SENIORITY_RE.test(r));
   }
 
   const btn = document.getElementById("searchBtn");
@@ -1412,44 +1404,22 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   logEvent("search_started", { sites, keywords_count: keywords.length, roles_count: rolesToScrape.length });
 
   try {
-    // Per-board + per-role scraping with staggered delays (1-3s between) to avoid rate limits
-    let cumulativeDelay = 0;
-    const scrapePromises = [];
-    for (const role of rolesToScrape) {
-      for (const site of sites) {
-        cumulativeDelay += 1000 + Math.random() * 2000;
-        const roleId = crypto.randomUUID();
-        searchIds.push(roleId);
-        if (!roleSearchIdMap[role]) roleSearchIdMap[role] = [];
-        roleSearchIdMap[role].push(roleId);
-        if (aiRolesToScrape.map(r => r.toLowerCase()).includes(role.toLowerCase())) {
-          aiSearchIds.push(roleId);
-        } else {
-          customSearchIds.push(roleId);
-        }
-        scrapePromises.push(new Promise(resolve => {
-          setTimeout(() => {
-            fetch("/scrape", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                sites: [site], roles: [role], search_id: roleId,
-                location: getLocation() || document.getElementById("locationInput").value,
-                internship_mode: internshipMode,
-                adzuna_country: getAdzunaCountry(),
-                indeed_country: getIndeedCountry(),
-                user_email: (window.getProfile() || {}).email || "",
-                scrape_limit: 200,
-              })
-            }).then(resolve).catch(resolve);
-          }, cumulativeDelay);
-        }));
-      }
-    }
-    await Promise.all(scrapePromises);
+    searchIds = [_searchId];
+    await fetch("/scrape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sites, roles: rolesToScrape, search_id: _searchId,
+        location: getLocation() || document.getElementById("locationInput").value,
+        internship_mode: internshipMode,
+        adzuna_country: getAdzunaCountry(),
+        indeed_country: getIndeedCountry(),
+        user_email: (window.getProfile() || {}).email || "",
+        scrape_limit: 200,
+      })
+    });
 
-    // Show tabs immediately if both types exist
-    if (customSearchIds.length > 0 && aiSearchIds.length > 0) {
+    if (_customRoleList.length > 0 && _aiRoleList.length > 0) {
       showTabBar();
       switchTab('custom');
     } else {
@@ -1474,30 +1444,25 @@ function pollAllScrapes() {
   let consecutiveErrors = 0;
   pollTimer = setInterval(async () => {
     attempts++;
-    let allDone = true;
-    let allLogs = [];
+    const sid = searchIds[0];
+    if (!sid) { clearInterval(pollTimer); pollTimer = null; return; }
 
-    for (const sid of searchIds) {
-      try {
-        const r = await fetch(`/scrape/status?search_id=${sid}`);
-        const d = await r.json();
-        if (d.status === 'running') allDone = false;
-        allLogs.push(...(d.logs || []));
-        consecutiveErrors = 0;
-      } catch {
-        consecutiveErrors++;
-      }
+    let allDone = true;
+    try {
+      const r = await fetch(`/scrape/status?search_id=${sid}`);
+      const d = await r.json();
+      if (d.status === 'running') allDone = false;
+      consecutiveErrors = 0;
+    } catch {
+      consecutiveErrors++;
     }
 
     let allRaw = [];
-    for (const sid of searchIds) {
-      try {
-        const r = await fetch(`/jobs?search_id=${sid}&raw=true`);
-        const d = await r.json();
-        (d.jobs || []).forEach(j => { j._searchId = sid; });
-        allRaw.push(...(d.jobs || []));
-      } catch {}
-    }
+    try {
+      const r = await fetch(`/jobs?search_id=${sid}&raw=true`);
+      const d = await r.json();
+      allRaw = d.jobs || [];
+    } catch {}
 
     const seen = new Set();
     allJobs = allRaw.filter(j => {
@@ -1507,9 +1472,9 @@ function pollAllScrapes() {
       return true;
     });
 
-    // Route jobs to tab arrays by search ID
-    customJobs = allJobs.filter(j => customSearchIds.includes(j._searchId));
-    aiJobs = allJobs.filter(j => aiSearchIds.includes(j._searchId));
+    // Route jobs to tab arrays by matched role
+    customJobs = allJobs.filter(j => _customRoleList.includes(j._matched_role));
+    aiJobs = allJobs.filter(j => _aiRoleList.includes(j._matched_role));
 
     showElement("results");
 
@@ -1522,7 +1487,7 @@ function pollAllScrapes() {
         setStatus("Collecting job data...", "blue");
       }
       document.title = `(${totalJobs}) Jobs - AI Job Agent`;
-      if (customSearchIds.length > 0 && aiSearchIds.length > 0) {
+      if (_customRoleList.length > 0 && _aiRoleList.length > 0) {
         updateTabCounts();
         renderActiveTab();
       } else {
@@ -1530,7 +1495,7 @@ function pollAllScrapes() {
       }
     } else {
       await checkSavedStatuses();
-      if (customSearchIds.length > 0 && aiSearchIds.length > 0) {
+      if (_customRoleList.length > 0 && _aiRoleList.length > 0) {
         showTabBar();
         switchTab('custom');
       } else {
@@ -1554,15 +1519,14 @@ function pollAllScrapes() {
     if (allDone) {
       clearInterval(pollTimer);
       pollTimer = null;
-      logEvent("scrape_done", { roles: Object.keys(roleSearchIdMap), jobs: totalJobs });
+      logEvent("scrape_done", { roles: _customRoleList.concat(_aiRoleList), jobs: totalJobs });
       resetSearchBtn();
       // Cache
       localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify({
         searchIds,
-        roleSearchIdMap,
+        _customRoleList,
+        _aiRoleList,
         searchMode: (customJobs.length > 0 && aiJobs.length > 0) ? 'tabs' : 'single',
-        customSearchIds,
-        aiSearchIds,
         timestamp: Date.now(),
         params: {
           sites: getSelectedSites ? getSelectedSites() : [],
@@ -1616,21 +1580,14 @@ function renderAllJobs(jobs) {
   const tabBar = document.getElementById('tabBar');
   const isTabs = tabBar && !tabBar.classList.contains('hidden');
   const baseScope = isTabs ? (activeTab === 'custom' ? customJobs : aiJobs) : allJobs;
-  const baseSearchIds = [...new Set(baseScope.map(j => j._searchId).filter(Boolean))];
-  const baseRoles = Object.entries(roleSearchIdMap)
-    .filter(([role, sids]) => {
-      const arr = Array.isArray(sids) ? sids : [sids];
-      return arr.some(sid => baseSearchIds.includes(sid));
-    })
-    .map(([role]) => role);
+  const baseRoles = [...new Set(baseScope.map(j => j._matched_role).filter(Boolean))];
   subFilterHtml = `<div class="flex flex-wrap items-center justify-between gap-2 mb-4" id="subFilters">`;
   if (baseRoles.length > 1) {
     const allActive = _activeSubFilterRole === 'all';
     subFilterHtml += `<div class="flex flex-wrap gap-2">
       <span class="cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${allActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-role-filter="all">All (${baseScope.length})</span>`;
     for (const role of baseRoles) {
-      const sids = Array.isArray(roleSearchIdMap[role]) ? roleSearchIdMap[role] : [roleSearchIdMap[role]];
-      const count = baseScope.filter(j => sids.includes(j._searchId)).length;
+      const count = baseScope.filter(j => j._matched_role === role).length;
       const isActive = _activeSubFilterRole === role;
       subFilterHtml += `<span class="cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${isActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-role-filter="${role}">${role} (${count})</span>`;
     }
@@ -1787,28 +1744,21 @@ document.addEventListener('click', (e) => {
   try {
     if (saved.searchIds && saved.searchIds.length) {
       searchIds = saved.searchIds;
-      roleSearchIdMap = {};
-      for (const [r, sids] of Object.entries(saved.roleSearchIdMap || {})) {
-        roleSearchIdMap[r] = Array.isArray(sids) ? sids : [sids];
-      }
-      customSearchIds = saved.customSearchIds || [];
-      aiSearchIds = saved.aiSearchIds || [];
+      _customRoleList = saved._customRoleList || [];
+      _aiRoleList = saved._aiRoleList || [];
       searchMode = saved.searchMode || 'single';
 
-      let allDone = true;
-      for (const sid of searchIds) {
-        const r = await fetch(`/scrape/status?search_id=${sid}`);
-        const d = await r.json();
-        if (d.status === 'running') allDone = false;
-      }
+      const sid = searchIds[0];
+      if (!sid) return;
+
+      const r = await fetch(`/scrape/status?search_id=${sid}`);
+      const d = await r.json();
+      const allDone = d.status !== 'running';
 
       if (allDone) {
-        for (const sid of searchIds) {
-          const r = await fetch(`/jobs?search_id=${sid}&raw=true`);
-          const d = await r.json();
-          (d.jobs || []).forEach(j => { j._searchId = sid; });
-          allJobs.push(...(d.jobs || []));
-        }
+        const r = await fetch(`/jobs?search_id=${sid}&raw=true`);
+        const data = await r.json();
+        allJobs = data.jobs || [];
         const seen = new Set();
         allJobs = allJobs.filter(j => {
           const key = j.url || `${j.title}|${j.company}`;
@@ -1817,11 +1767,11 @@ document.addEventListener('click', (e) => {
           return true;
         });
 
-        customJobs = allJobs.filter(j => customSearchIds.includes(j._searchId));
-        aiJobs = allJobs.filter(j => aiSearchIds.includes(j._searchId));
+        customJobs = allJobs.filter(j => _customRoleList.includes(j._matched_role));
+        aiJobs = allJobs.filter(j => _aiRoleList.includes(j._matched_role));
 
         showElement("results");
-        if (customSearchIds.length > 0 && aiSearchIds.length > 0) {
+        if (_customRoleList.length > 0 && _aiRoleList.length > 0) {
           showTabBar();
           switchTab('custom');
         } else {

@@ -85,29 +85,38 @@ def run_scrape(sid, sites, roles, location, adzuna_country, indeed_country,
                keywords=None, internship_mode=False, user_email="", scrape_limit=200):
     import importlib
     from match_engine.relevance_engine import keyword_score as _kw_score, role_match_count as _role_match
+    from utils.delay import delay as _delay
+    from db import set_raw_jobs as _set_raw
+    from utils.experience_level import detect_experience_level
 
     create_session(sid, sites=sites, keywords=keywords or [], roles=roles or [])
     update_session(sid, status="running", cancel=False)
 
     all_jobs = []
+    seen_urls = set()
+    combo_index = 0
+    total_combos = len(roles) * len(sites)
 
-    for site_key in sites:
-        s = get_session(sid)
-        if s and s.get("cancel"):
-            log(f"[SCRAPE] Cancelled by user", sid)
-            update_session(sid, status="done")
-            return
+    for role in roles:
+        for site_key in sites:
+            combo_index += 1
+            if _is_cancelled(sid):
+                log(f"[SCRAPE] Cancelled by user", sid)
+                _set_raw(sid, all_jobs)
+                _save_elapsed(sid)
+                update_session(sid, status="done")
+                return
 
-        module_name, func_name = SITE_MAP.get(site_key, (None, None))
-        if not module_name:
-            log(f"[SCRAPE] Unknown site: {site_key}", sid)
-            continue
-        try:
-            log(f"[SCRAPE] Running {site_key}...", sid)
-            mod = importlib.import_module(f"scrapers.{module_name}")
-            scraper_fn = getattr(mod, func_name)
+            module_name, func_name = SITE_MAP.get(site_key, (None, None))
+            if not module_name:
+                log(f"[SCRAPE] Unknown site: {site_key}", sid)
+                continue
+
+            log(f"[SCRAPE] {role} @ {site_key} ({combo_index}/{total_combos})...", sid)
             try:
-                kwargs = {"roles": roles}
+                mod = importlib.import_module(f"scrapers.{module_name}")
+                scraper_fn = getattr(mod, func_name)
+                kwargs = {"roles": [role]}
                 if site_key == "adzuna":
                     kwargs["country"] = adzuna_country
                     kwargs["internship_mode"] = internship_mode
@@ -119,65 +128,85 @@ def run_scrape(sid, sites, roles, location, adzuna_country, indeed_country,
                     kwargs["country_indeed"] = indeed_country
                 jobs = scraper_fn(**kwargs)
             except TypeError:
-                jobs = scraper_fn()
-            log(f"[SCRAPE] {site_key} returned {len(jobs)} jobs", sid)
-            all_jobs.extend(jobs)
-            from utils.delay import delay as _rd
-            _rd(3, 6)
-        except Exception as e:
-            log(f"[SCRAPE] {site_key} failed: {e}", sid)
+                try:
+                    jobs = scraper_fn()
+                except Exception as e:
+                    log(f"[SCRAPE] {site_key} failed: {e}", sid)
+                    continue
+            except Exception as e:
+                log(f"[SCRAPE] {site_key} failed: {e}", sid)
+                continue
 
-    log(f"[SCRAPE] Total raw jobs: {len(all_jobs)}", sid)
-    update_session(sid, scraped=len(all_jobs))
-    _harvest_companies(all_jobs)
+            # Title-filter by this role and tag matching jobs
+            combo_jobs = []
+            for j in jobs:
+                if _role_match(j.get("title", ""), [role]) > 0:
+                    j["_matched_role"] = role
+                    combo_jobs.append(j)
+            log(f"[SCRAPE] {role} @ {site_key}: {len(jobs)} fetched, {len(combo_jobs)} title-matched", sid)
 
-    if not all_jobs:
-        log(f"[SCRAPE] No jobs found", sid)
-        from db import set_raw_jobs as _set_raw
-        _set_raw(sid, [])
-        _save_elapsed(sid)
-        update_session(sid, status="done")
-        return
+            if not combo_jobs:
+                _delay(1, 3)
+                continue
 
-    # Filter by title relevance to role
-    before_count = len(all_jobs)
-    all_jobs = [j for j in all_jobs if _role_match(j.get("title", ""), roles) > 0]
-    dropped = before_count - len(all_jobs)
-    if dropped:
-        log(f"[SCRAPE] Title filter: {before_count} → {len(all_jobs)} (dropped {dropped} irrelevant)", sid)
-
-    # In internship mode, drop senior/mid-level jobs
-    if internship_mode:
-        from utils.experience_level import detect_experience_level
-        before_exp = len(all_jobs)
-        for job in all_jobs:
-            if "experience_level" not in job:
-                job["experience_level"] = detect_experience_level(
-                    job.get("title", ""), job.get("description", "")
+            # Experience level detection (required for internship filter and display)
+            for j in combo_jobs:
+                j["experience_level"] = detect_experience_level(
+                    j.get("title", ""), j.get("description", "")
                 )
-        all_jobs = [
-            j for j in all_jobs
-            if j.get("experience_level") in ("internship", "entry_level")
-        ]
-        dropped_exp = before_exp - len(all_jobs)
-        if dropped_exp:
-            log(f"[SCRAPE] Internship filter: {before_exp} → {len(all_jobs)} (dropped {dropped_exp} senior/mid-level)", sid)
 
-    # Keyword sort
-    from db import set_raw_jobs as _set_raw
-    for job in all_jobs:
-        job["keyword_score"] = _kw_score(
-            job.get("title", ""),
-            job.get("description", ""),
-            job.get("tags", []),
-            keywords=keywords or [],
-        )
-    all_jobs.sort(key=lambda j: j.get("keyword_score", 0), reverse=True)
+            # In internship mode, drop non-entry-level for this combo
+            if internship_mode:
+                before = len(combo_jobs)
+                combo_jobs = [j for j in combo_jobs if j.get("experience_level") in ("internship", "entry_level")]
+                dropped = before - len(combo_jobs)
+                if dropped:
+                    log(f"[SCRAPE] {role} @ {site_key}: internship filter {before} → {len(combo_jobs)} (dropped {dropped})", sid)
+                if not combo_jobs:
+                    _delay(1, 3)
+                    continue
 
-    _set_raw(sid, all_jobs)
+            # Dedup against accumulated jobs
+            new_count = 0
+            for j in combo_jobs:
+                key = j.get("url", "") or f"{j.get('title', '')}|{j.get('company', '')}"
+                if key not in seen_urls:
+                    seen_urls.add(key)
+                    all_jobs.append(j)
+                    new_count += 1
+            log(f"[SCRAPE] {role} @ {site_key}: {new_count} new after dedup", sid)
+
+            if not all_jobs:
+                _delay(1, 3)
+                continue
+
+            # Keyword-score all accumulated jobs
+            for j in all_jobs:
+                if "keyword_score" not in j or not isinstance(j["keyword_score"], int):
+                    j["keyword_score"] = _kw_score(
+                        j.get("title", ""),
+                        j.get("description", ""),
+                        j.get("tags", []),
+                        keywords=keywords or [],
+                    )
+            all_jobs.sort(key=lambda j: j.get("keyword_score", 0), reverse=True)
+
+            # Write partial results — frontend picks these up during polling
+            _set_raw(sid, all_jobs)
+            log(f"[SCRAPE] {role} @ {site_key}: {len(all_jobs)} total jobs stored", sid)
+
+            # Staggered delay before next combo
+            _delay(1, 3)
+
+    log(f"[SCRAPE] Pipeline complete — {len(all_jobs)} total jobs", sid)
+    _harvest_companies(all_jobs)
+    update_session(sid, scraped=len(all_jobs))
     _save_elapsed(sid)
     update_session(sid, status="done")
-    log(f"[SCRAPE] Pipeline complete — {len(all_jobs)} raw jobs stored", sid)
+
+    if not all_jobs:
+        _set_raw(sid, [])
+        log(f"[SCRAPE] No jobs found", sid)
 
 
 @router.post("")
