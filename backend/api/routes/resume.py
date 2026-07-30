@@ -119,7 +119,10 @@ async def extract_keywords(req: ResumeKeywordsRequest):
                 parsed = extract_json(response)
                 if isinstance(parsed, dict):
                     words = parsed.get("keywords", [])[:30]
-                    suggested = parsed.get("suggested_roles", [])[:3]
+                    attempt_roles = parsed.get("suggested_roles", [])[:3]
+                    if attempt_roles and not suggested:
+                        suggested = attempt_roles
+                    print(f"[KEYWORDS] Parsed: {len(words)} keywords, {len(attempt_roles)} suggested roles (kept {len(suggested)})")
                     if words:
                         break
                     print(f"[KEYWORDS] Dict parsed but empty keywords, attempt {attempt+1}/2")
@@ -136,4 +139,5 @@ async def extract_keywords(req: ResumeKeywordsRequest):
             print(f"[KEYWORDS] Exception on attempt {attempt+1}/2: {e}")
 
     keywords = [{"word": w, "suggested": True, "selected": True} for w in words]
+    print(f"[KEYWORDS] Final: {len(keywords)} keywords, {len(suggested)} suggested roles: {suggested}")
     return ResumeKeywordsResponse(keywords=keywords, suggested_roles=suggested)

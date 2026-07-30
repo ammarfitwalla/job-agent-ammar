@@ -404,6 +404,10 @@ class TestIntegrationReferralFlow(unittest.TestCase):
         outgoing = self.client.get(f"/api/referrals/outgoing?email={self.from_email}").json()
         rid = outgoing["requests"][0]["id"]
         self.client.put(f"/api/referrals/{rid}/accept", json={"email": self.to_email})
+        conn, cur = _fresh_conn()
+        cur.execute("UPDATE referral_requests SET accepted_at = datetime('now', '-1 hour') WHERE id = ?", (rid,))
+        conn.commit()
+        conn.close()
         r = self.client.put(f"/api/referrals/{rid}/complete", json={"email": self.to_email})
         self.assertEqual(r.status_code, 200)
         data = r.json()

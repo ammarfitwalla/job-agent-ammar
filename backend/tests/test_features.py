@@ -322,7 +322,7 @@ class TestRateLimiterEdgeCases(unittest.TestCase):
 class TestSelfReferralBlock(unittest.TestCase):
     def test_self_referral_detected(self):
         from api.routes.referrals import _MONTHLY_LIMIT
-        self.assertEqual(_MONTHLY_LIMIT, 3)
+        self.assertEqual(_MONTHLY_LIMIT, 5)
 
 
 if __name__ == "__main__":

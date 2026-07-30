@@ -99,14 +99,17 @@ def scrape_indeed(roles=None, location="", country_indeed="USA", internship_mode
                             row.get("currency"),
                             row.get("interval"),
                         )
+                        posted = row.get("date_posted", "")
                         all_jobs.append({
                             "title": title,
                             "company": str(row.get("company", "") or ""),
+                            "company_url": row.get("company_url", "") or "",
                             "location": row.get("location", "") or "",
                             "url": url,
                             "description": row.get("description", "") or "",
                             "tags": ["indeed"],
                             "salary": salary,
+                            "posted_at": str(posted) if posted else "",
                         })
                     if not jobs_df.empty:
                         break
@@ -115,7 +118,6 @@ def scrape_indeed(roles=None, location="", country_indeed="USA", internship_mode
 
         # Fallback: broad "intern" search in internship mode to catch missed opportunities
         if internship_mode:
-            # Only keep jobs whose title suggests tech/engineering relevance
             role_words = set()
             for r in roles:
                 for w in r.lower().split():
@@ -159,14 +161,17 @@ def scrape_indeed(roles=None, location="", country_indeed="USA", internship_mode
                             row.get("min_amount"), row.get("max_amount"),
                             row.get("currency"), row.get("interval"),
                         )
+                        posted = row.get("date_posted", "")
                         all_jobs.append({
                             "title": title,
                             "company": str(row.get("company", "") or ""),
+                            "company_url": row.get("company_url", "") or "",
                             "location": row.get("location", "") or "",
                             "url": url,
                             "description": row.get("description", "") or "",
                             "tags": ["indeed"],
                             "salary": salary,
+                            "posted_at": str(posted) if posted else "",
                         })
             except Exception as e:
                 print(f"[INDEED] Fallback intern search failed: {e}")

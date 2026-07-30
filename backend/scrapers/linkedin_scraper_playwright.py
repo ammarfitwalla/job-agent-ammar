@@ -122,14 +122,18 @@ def scrape_linkedin(roles=None, location="", internship_mode=False, results_want
                         if title_lower.startswith("general interest") or title_lower.startswith("internship application"):
                             continue
                         seen_urls.add(url)
+                        posted = row.get("date_posted", "")
                         all_jobs.append({
                             "title": title,
                             "company": str(row.get("company", "") or ""),
+                            "company_url": row.get("company_url", "") or "",
                             "location": job_location,
                             "url": url,
                             "description": row.get("description", "") or "",
                             "tags": ["linkedin"],
                             "salary": _format_salary(row),
+                            "posted_at": str(posted) if posted else "",
+                            "job_level": row.get("job_level", "") or "",
                         })
                     if not jobs_df.empty:
                         break
@@ -181,14 +185,18 @@ def scrape_linkedin(roles=None, location="", internship_mode=False, results_want
                         if not any((re.search(rf'\b{re.escape(tw)}\b', title_lower) if len(tw) <= 3 else tw in title_lower) for tw in tech_words):
                             continue
                         seen_urls.add(url)
+                        posted = row.get("date_posted", "")
                         all_jobs.append({
                             "title": title,
                             "company": str(row.get("company", "") or ""),
+                            "company_url": row.get("company_url", "") or "",
                             "location": job_location,
                             "url": url,
                             "description": row.get("description", "") or "",
                             "tags": ["linkedin"],
                             "salary": _format_salary(row),
+                            "posted_at": str(posted) if posted else "",
+                            "job_level": row.get("job_level", "") or "",
                         })
             except Exception as e:
                 print(f"[LINKEDIN] Fallback intern search failed: {e}")

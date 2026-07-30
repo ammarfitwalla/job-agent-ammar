@@ -66,6 +66,9 @@ def init_db():
                 salary TEXT DEFAULT '',
                 experience_level TEXT,
                 is_raw INTEGER DEFAULT 0,
+                date_posted TEXT DEFAULT '',
+                company_url TEXT DEFAULT '',
+                job_level TEXT DEFAULT '',
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
             );
@@ -224,6 +227,19 @@ def init_db():
                 cur.execute(f"ALTER TABLE referral_requests ADD COLUMN {col}")
             except Exception:
                 pass
+        # Migrate jobs table — add date_posted column
+        try:
+            cur.execute("ALTER TABLE jobs ADD COLUMN date_posted TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            cur.execute("ALTER TABLE jobs ADD COLUMN company_url TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            cur.execute("ALTER TABLE jobs ADD COLUMN job_level TEXT DEFAULT ''")
+        except Exception:
+            pass
         conn.commit()
         try:
             cur.execute("ALTER TABLE sessions ADD COLUMN elapsed_seconds REAL DEFAULT 0")
@@ -329,6 +345,9 @@ def _job_to_row(sid: str, job: dict) -> dict:
         "salary": job.get("salary"),
         "experience_level": job.get("experience_level"),
         "is_raw": 0,
+        "date_posted": job.get("posted_at", job.get("date_posted", "")),
+        "company_url": job.get("company_url", ""),
+        "job_level": job.get("job_level", ""),
         "created_at": _now(),
     }
 
@@ -340,8 +359,8 @@ def set_filtered_jobs(sid: str, jobs: list):
             rows = [_job_to_row(sid, j) for j in jobs]
             if rows:
                 cur.executemany("""INSERT INTO jobs
-                    (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, created_at)
-                    VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :created_at)""", rows)
+                    (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, date_posted, company_url, job_level, created_at)
+                    VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :date_posted, :company_url, :job_level, :created_at)""", rows)
             conn.commit()
             _job_count_cache.pop(sid, None)
 
@@ -351,8 +370,8 @@ def add_filtered_job(sid: str, job: dict):
         with _get_conn() as (conn, cur):
             row = _job_to_row(sid, job)
             cur.execute("""INSERT INTO jobs
-                (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, created_at)
-                VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :created_at)""", row)
+                (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, date_posted, company_url, job_level, created_at)
+                VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :date_posted, :company_url, :job_level, :created_at)""", row)
             conn.commit()
             _job_count_cache.pop(sid, None)
 
@@ -367,7 +386,7 @@ def count_filtered_jobs(sid: str) -> int:
         return count
 
 
-def get_filtered_jobs(sid: str, min_score: int = 0, site: str = "", experience_level: str = "") -> list:
+def get_filtered_jobs(sid: str, min_score: int = 0, site: str = "", experience_level: str = "", sort: str = "relevant") -> list:
     with _get_conn() as (conn, cur):
         clauses = ["session_id = ?", "is_raw = 0"]
         params = [sid]
@@ -380,7 +399,11 @@ def get_filtered_jobs(sid: str, min_score: int = 0, site: str = "", experience_l
         if experience_level:
             clauses.append("experience_level = ?")
             params.append(experience_level)
-        query = f"SELECT * FROM jobs WHERE {' AND '.join(clauses)} ORDER BY COALESCE(total_score, 0) DESC"
+        if sort == "recent":
+            order = "CASE WHEN date_posted = '' THEN 1 ELSE 0 END, date_posted DESC, created_at DESC"
+        else:
+            order = "total_score IS NULL DESC, COALESCE(total_score, 0) DESC, created_at ASC"
+        query = f"SELECT * FROM jobs WHERE {' AND '.join(clauses)} ORDER BY {order}"
         cur.execute(query, params)
         rows = cur.fetchall()
         jobs = []
@@ -396,6 +419,71 @@ def get_filtered_jobs(sid: str, min_score: int = 0, site: str = "", experience_l
             del d["created_at"]
             jobs.append(d)
         return jobs
+
+
+def set_raw_jobs(sid: str, jobs: list):
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute("DELETE FROM jobs WHERE session_id = ? AND is_raw = 1", (sid,))
+            rows = []
+            for job in jobs:
+                rows.append({
+                    "session_id": sid,
+                    "title": job.get("title", ""),
+                    "company": job.get("company", ""),
+                    "location": job.get("location", ""),
+                    "url": job.get("url", ""),
+                    "description": job.get("description", ""),
+                    "tags": json.dumps(job.get("tags", [])),
+                    "ai_score": None,
+                    "keyword_score": job.get("keyword_score"),
+                    "total_score": None,
+                    "reason": "",
+                    "salary": job.get("salary"),
+                    "experience_level": job.get("experience_level"),
+                    "is_raw": 1,
+                    "date_posted": job.get("posted_at", job.get("date_posted", "")),
+                    "company_url": job.get("company_url", ""),
+                    "job_level": job.get("job_level", ""),
+                    "created_at": _now(),
+                })
+            if rows:
+                cur.executemany("""INSERT INTO jobs
+                    (session_id, title, company, location, url, description, tags,
+                     ai_score, keyword_score, total_score, reason, salary,
+                     experience_level, is_raw, date_posted, company_url, job_level, created_at)
+                    VALUES (:session_id, :title, :company, :location, :url, :description, :tags,
+                            :ai_score, :keyword_score, :total_score, :reason, :salary,
+                            :experience_level, :is_raw, :date_posted, :company_url, :job_level, :created_at)""", rows)
+            conn.commit()
+
+
+def get_raw_jobs(sid: str) -> list[dict]:
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            "SELECT * FROM jobs WHERE session_id = ? AND is_raw = 1 "
+            "ORDER BY CASE WHEN date_posted = '' THEN 1 ELSE 0 END, date_posted DESC, created_at DESC",
+            (sid,))
+        rows = cur.fetchall()
+        jobs = []
+        for row in rows:
+            d = dict(row)
+            try:
+                d["tags"] = json.loads(d["tags"])
+            except (json.JSONDecodeError, TypeError):
+                d["tags"] = []
+            del d["id"]
+            del d["session_id"]
+            del d["is_raw"]
+            del d["created_at"]
+            jobs.append(d)
+        return jobs
+
+
+def count_raw_jobs(sid: str) -> int:
+    with _get_conn() as (conn, cur):
+        cur.execute("SELECT COUNT(*) FROM jobs WHERE session_id = ? AND is_raw = 1", (sid,))
+        return cur.fetchone()[0]
 
 
 # ── Events ──

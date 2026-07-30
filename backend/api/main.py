@@ -68,8 +68,6 @@ app.include_router(stats.router)
 @app.on_event("startup")
 async def startup():
     init_db()
-    from marketing.scheduler import start_scheduler
-    start_scheduler()
 
 
 @app.get("/votes")

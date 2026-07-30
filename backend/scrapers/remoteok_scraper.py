@@ -2,37 +2,8 @@ import re
 import requests
 from bs4 import BeautifulSoup
 from utils.logger import log
-from config import SCRAPE_LIMIT, TARGET_ROLES  # removed ROLES_BY_CATEGORY
-
-GENERIC_WORDS = {"senior", "lead", "staff", "founding", "junior", "mid", "remote"}
-
-
-def _sig_words(role: str) -> set:
-    return {w for w in role.lower().split() if len(w) >= 3 and w not in GENERIC_WORDS}
-
-
-def _role_matches(position_lower: str, role: str) -> bool:
-    role_lower = role.lower()
-    sig = _sig_words(role)
-
-    # C1: Full phrase in title
-    if role_lower in position_lower:
-        return True
-
-    # C2: Word overlap in title (handles compound words e.g. "fullstack" → "full" + "stack")
-    if sig:
-        title_words = set(re.findall(r'[a-z]{3,}', position_lower))
-        matched_count = len(sig & title_words)
-        threshold = len(sig) if len(sig) <= 2 else max(2, len(sig) // 2)
-        if matched_count >= threshold:
-            return True
-        # compound-word fallback: check if any sig word is a substring of title tokens
-        for tw in title_words:
-            matched_count += sum(1 for w in sig if w not in title_words and w in tw)
-        if matched_count >= threshold:
-            return True
-
-    return False
+from config import SCRAPE_LIMIT, TARGET_ROLES
+from match_engine.relevance_engine import role_match_count
 
 
 def scrape_remoteok(roles=None):
@@ -72,7 +43,7 @@ def scrape_remoteok(roles=None):
                     continue
 
                 matched_role = next(
-                    (role for role in active_roles if _role_matches(position_lower, role)),
+                    (role for role in active_roles if role_match_count(position_lower, [role]) > 0),
                     None
                 )
                 if not matched_role:

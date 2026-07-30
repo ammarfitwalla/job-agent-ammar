@@ -215,6 +215,11 @@ def _fetch_search_page(keywords: str, location: str, start: int = 0, hours_old: 
 
                 title = title_el.get_text(strip=True) if title_el else ""
                 company = company_el.get_text(strip=True) if company_el else ""
+                company_url = ""
+                if company_el:
+                    company_link = company_el.select_one("a")
+                    if company_link:
+                        company_url = (company_link.get("href", "") or "").split("?")[0]
                 location = location_el.get_text(strip=True) if location_el else ""
                 posted_at = date_el.get("datetime", "") if date_el else ""
                 url = (link_el.get("href", "") or "").split("?")[0] if link_el else ""
@@ -228,6 +233,7 @@ def _fetch_search_page(keywords: str, location: str, start: int = 0, hours_old: 
                 jobs.append({
                     "title": title,
                     "company": company,
+                    "company_url": company_url,
                     "location": location,
                     "url": url,
                     "posted_at": posted_at,
@@ -242,24 +248,32 @@ def _fetch_search_page(keywords: str, location: str, start: int = 0, hours_old: 
         return []
 
 
-def _fetch_description(job_id: str) -> str:
-    """Fetch job description from LinkedIn's guest job API."""
+def _fetch_description(job_id: str) -> tuple:
+    """Fetch job description and job_level from LinkedIn's guest job API."""
     if not job_id:
-        return ""
+        return "", ""
     try:
         resp = requests.get(f"{LINKEDIN_JOB_API}/{job_id}", headers=_get_headers(), timeout=10)
         if resp.status_code != 200:
             _save_debug_response(resp, f"desc_{resp.status_code}_{job_id}")
-            return ""
+            return "", ""
         soup = BeautifulSoup(resp.text, "lxml")
         desc_el = soup.select_one(".show-more-less-html__markup")
-        if desc_el:
-            return desc_el.get_text(strip=True)
-        _save_debug_response(resp, f"desc_no_markup_{job_id}")
-        return ""
+        description = desc_el.get_text(strip=True) if desc_el else ""
+        job_level = ""
+        criteria_headers = soup.select("h3.description__job-criteria-subheader")
+        for header in criteria_headers:
+            if "seniority" in header.get_text(strip=True).lower():
+                value_el = header.find_next_sibling("span")
+                if value_el:
+                    job_level = value_el.get_text(strip=True)
+                break
+        if not description:
+            _save_debug_response(resp, f"desc_no_markup_{job_id}")
+        return description, job_level
     except requests.RequestException as e:
         print(f"[LINKEDIN] Request failed for description {job_id}: {e}")
-        return ""
+        return "", ""
 
 
 def scrape_linkedin(roles=None, location="", internship_mode=False, results_wanted=20, hours_old=72):
@@ -335,11 +349,13 @@ def _scrape_http(roles=None, location="", internship_mode=False, results_wanted=
                 all_jobs.append({
                     "title": job["title"],
                     "company": job["company"],
+                    "company_url": job.get("company_url", ""),
                     "location": job_location,
                     "url": job["url"],
                     "description": job.get("description", ""),
                     "tags": ["linkedin"],
                     "salary": job.get("salary"),
+                    "posted_at": job.get("posted_at", ""),
                 })
 
             if page_jobs:
@@ -380,11 +396,13 @@ def _scrape_http(roles=None, location="", internship_mode=False, results_wanted=
                     all_jobs.append({
                         "title": job["title"],
                         "company": job["company"],
+                        "company_url": job.get("company_url", ""),
                         "location": job_location,
                         "url": job["url"],
                         "description": job.get("description", ""),
                         "tags": ["linkedin"],
                         "salary": job.get("salary"),
+                        "posted_at": job.get("posted_at", ""),
                     })
         except Exception:
             pass
@@ -398,22 +416,24 @@ def _scrape_http(roles=None, location="", internship_mode=False, results_wanted=
 
 
 def _enrich_descriptions(jobs: list[dict], max_workers: int = 5):
-    """Fetch job descriptions in parallel for jobs that don't have one."""
-    need_desc = [j for j in jobs if not j.get("description") and j.get("url")]
-    if not need_desc:
+    """Fetch job descriptions and job_level in parallel for jobs that don't have one."""
+    need_fetch = [j for j in jobs if (not j.get("description") or not j.get("job_level")) and j.get("url")]
+    if not need_fetch:
         return
 
     def _get_desc(job):
         job_id = _extract_job_id(job["url"])
         if job_id:
-            desc = _fetch_description(job_id)
-            if desc:
+            desc, level = _fetch_description(job_id)
+            if desc and not job.get("description"):
                 job["description"] = desc
+            if level and not job.get("job_level"):
+                job["job_level"] = level
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = [pool.submit(_get_desc, j) for j in need_desc]
+        futures = [pool.submit(_get_desc, j) for j in need_fetch]
         for _ in as_completed(futures):
             pass
 
-    filled = sum(1 for j in need_desc if j.get("description"))
-    print(f"[LINKEDIN] Fetched {filled}/{len(need_desc)} descriptions")
+    filled = sum(1 for j in need_fetch if j.get("description"))
+    print(f"[LINKEDIN] Fetched {filled}/{len(need_fetch)} descriptions")

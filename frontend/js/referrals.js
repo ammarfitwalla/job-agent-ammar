@@ -10,6 +10,7 @@ let _companyUserCache = {};
 
 // Referral Dashboard state
 let _referralTab = "incoming";
+let _referralNotifTimer = null;
 
 async function loadCompanyUserCounts(companies) {
   const unique = [...new Set(companies.filter(Boolean))];
@@ -37,6 +38,7 @@ async function refreshCompanyUser(company) {
 }
 
 async function checkReferralNotifications() {
+  if (_referralNotifTimer) { clearTimeout(_referralNotifTimer); _referralNotifTimer = null; }
   const profile = getProfile();
   if (!profile) return;
   try {
@@ -53,7 +55,7 @@ async function checkReferralNotifications() {
       }
     }
   } catch {}
-  setTimeout(checkReferralNotifications, 30000);
+  _referralNotifTimer = setTimeout(checkReferralNotifications, 30000);
 }
 
 // ── Referral Modal ──

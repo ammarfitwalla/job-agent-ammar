@@ -82,7 +82,7 @@ async function loadStats() {
       { n: d.errors, l: "Errors", c: "red" },
       { n: d.total_users, l: "Registrations", c: "purple" },
       { n: d.total_raw_jobs, l: "Raw Jobs", c: "sky" },
-      { n: d.total_relevant_jobs, l: "Relevant Jobs", c: "green" },
+      { n: d.total_relevant_jobs, l: "Scraped Jobs", c: "green" },
       { n: formatDuration(d.avg_duration_seconds), l: "Avg Duration", c: "blue" },
       { n: Math.round(d.completed / total * 100) + "%", l: "Completion Rate", c: "green" },
       { n: d.total_raw_jobs ? Math.round(d.total_raw_jobs / total) : "\u2014", l: "Avg Jobs/Session", c: "sky" },
@@ -225,13 +225,13 @@ async function toggleDetail(sid) {
       html += `</div>`;
     }
     if (jobs.length) {
-      html += `<div class="section"><div class="section-title">Top Scoring Jobs</div>`;
+      html += `<div class="section"><div class="section-title">Keyword Scored Jobs</div>`;
       html += `<table style="width:100%"><tr><th>Title</th><th>Company</th><th>Score</th><th></th></tr>`;
       html += jobs.map(j => `<tr>
         <td style="max-width:300px"><span class="truncate" title="${j.title}">${j.title}</span></td>
         <td>${j.company || "\u2014"}</td>
-        <td class="score-cell">${j.total_score ?? "\u2014"} <span style="font-size:11px;color:#94a3b8">(AI ${j.ai_score || 0} / KW ${j.keyword_score || 0})</span>
-          <div class="score-bar"><div class="score-fill" style="width:${Math.min(j.total_score || 0, 100)}%"></div></div>
+        <td class="score-cell">${j.keyword_score ?? 0}
+          <div class="score-bar"><div class="score-fill" style="width:${Math.min(j.keyword_score || 0, 100)}%"></div></div>
         </td>
         <td>${j.url ? `<a class="job-link" href="${j.url}" target="_blank">Open &#8599;</a>` : "\u2014"}</td>
       </tr>`).join("");

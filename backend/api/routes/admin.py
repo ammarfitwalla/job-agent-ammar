@@ -64,14 +64,10 @@ async def admin_stats():
         cur.execute("SELECT COUNT(*) FROM leads")
         total_leads = cur.fetchone()[0]
 
-        cur.execute("""
-            SELECT COALESCE(SUM(CASE WHEN s.scraped > j.cnt THEN s.scraped ELSE j.cnt END), 0)
-            FROM sessions s
-            LEFT JOIN (SELECT session_id, COUNT(*) as cnt FROM jobs WHERE is_raw = 0 GROUP BY session_id) j ON j.session_id = s.id
-        """)
+        cur.execute("SELECT COUNT(*) FROM jobs WHERE is_raw = 1")
         total_raw = cur.fetchone()[0]
 
-        cur.execute("SELECT COUNT(*) FROM jobs WHERE is_raw = 0")
+        cur.execute("SELECT COUNT(*) FROM jobs WHERE is_raw = 1")
         total_relevant = cur.fetchone()[0]
 
         cur.execute(
@@ -153,13 +149,13 @@ async def admin_sessions():
             s["has_stop_event"] = any("stop" in e.lower() or "cancel" in e.lower() for e in evs)
 
         cur.execute(
-            "SELECT session_id, COUNT(*) as cnt FROM jobs WHERE is_raw = 0 GROUP BY session_id"
+            "SELECT session_id, COUNT(*) as cnt FROM jobs WHERE is_raw = 1 GROUP BY session_id"
         )
         job_counts = {r["session_id"]: r["cnt"] for r in cur.fetchall()}
 
         cur.execute(
-            "SELECT session_id, title, url FROM jobs WHERE is_raw = 0 AND url != '' "
-            "AND url IS NOT NULL ORDER BY COALESCE(total_score, 0) DESC"
+            "SELECT session_id, title, url FROM jobs WHERE is_raw = 1 AND url != '' "
+            "AND url IS NOT NULL ORDER BY COALESCE(keyword_score, 0) DESC"
         )
         job_links = {}
         for r in cur.fetchall():
@@ -192,8 +188,8 @@ async def admin_session_detail(sid: str):
         events = [dict(r) for r in cur.fetchall()]
 
         cur.execute(
-            "SELECT title, company, location, url, ai_score, keyword_score, total_score, reason, experience_level, salary, created_at "
-            "FROM jobs WHERE session_id = ? AND is_raw = 0 ORDER BY COALESCE(total_score, 0) DESC",
+            "SELECT title, company, location, url, keyword_score, experience_level, salary, created_at "
+            "FROM jobs WHERE session_id = ? AND is_raw = 1 ORDER BY COALESCE(keyword_score, 0) DESC",
             (sid,),
         )
         jobs = [dict(r) for r in cur.fetchall()]
@@ -236,14 +232,14 @@ async def admin_scores():
 
     with _get_conn() as (conn, cur):
         cur.execute(
-            "SELECT total_score, ai_score, keyword_score, session_id, created_at "
-            "FROM jobs WHERE is_raw = 0 AND total_score IS NOT NULL ORDER BY created_at DESC"
+            "SELECT keyword_score, session_id, created_at "
+            "FROM jobs WHERE is_raw = 1 AND keyword_score IS NOT NULL ORDER BY created_at DESC"
         )
         scores = [dict(r) for r in cur.fetchall()]
 
     bins = {}
     for j in scores:
-        b = (j["total_score"] // 10) * 10
+        b = (j["keyword_score"] // 10) * 10
         bins[b] = bins.get(b, 0) + 1
     distribution = [{"range": f"{k}-{k+9}", "count": v} for k, v in sorted(bins.items())]
 

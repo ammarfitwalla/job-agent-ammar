@@ -19,22 +19,64 @@ _internship_provider = CerebrasProvider(
     rate_limit=INTERNSHIP_CEREBRAS_RATE,
 )
 
+SENIORITY_WORDS = {"senior", "lead", "staff", "junior", "mid", "founding", "associate", "principal"}
+
+ABBREVIATIONS = {
+    "ml": "machine learning",
+    "ai": "artificial intelligence",
+    "nlp": "natural language processing",
+    "cv": "computer vision",
+    "rl": "reinforcement learning",
+    "ds": "data science",
+    "da": "data analysis",
+    "se": "software engineer",
+    "sre": "site reliability engineer",
+    "devops": "development operations",
+    "qa": "quality assurance",
+    "pm": "product manager",
+    "ux": "user experience",
+    "ui": "user interface",
+    "db": "database",
+}
+
+
+def _expand_role_words(role: str) -> list:
+    """Strip seniority words and expand abbreviations in a role string."""
+    words = role.lower().split()
+    expanded = []
+    for w in words:
+        if w in SENIORITY_WORDS:
+            continue
+        if w in ABBREVIATIONS:
+            expanded.extend(ABBREVIATIONS[w].split())
+        else:
+            expanded.append(w)
+    return expanded
+
+
+def _expand_words(words: list) -> list:
+    """Expand abbreviations in a list of words."""
+    expanded = []
+    for w in words:
+        if w in ABBREVIATIONS:
+            expanded.extend(ABBREVIATIONS[w].split())
+        else:
+            expanded.append(w)
+    return expanded
+
 
 def role_match_count(title: str, roles: Optional[list] = None) -> int:
     if not roles:
         return 0
-    title_lower = title.lower()
+    raw_title_words = re.findall(r'[a-z]+', title.lower())
+    title_words = _expand_words(raw_title_words)
     count = 0
     for role in roles:
-        role_lower = role.lower()
-        words = role_lower.split()
+        words = _expand_role_words(role)
         if not words:
             continue
         if all(
-            any(
-                _word_match(tw, w)
-                for tw in re.findall(r'[a-z]+', title_lower)
-            )
+            any(_word_match(tw, w) for tw in title_words)
             for w in words
         ):
             count += 1

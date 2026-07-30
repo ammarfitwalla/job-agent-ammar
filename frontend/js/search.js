@@ -1,4 +1,21 @@
 // ===== STATE =====
+function relativeDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const diffMs = now - d;
+  const diffDays = Math.floor(diffMs / 86400000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  if (diffHours < 1) return 'just now';
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 0) return 'today';
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 const SEARCH_CACHE_KEY = "jobagent_last_search";
 const SEARCH_CACHE_TTL = 30 * 60 * 1000;
 let pollTimer = null;
@@ -9,19 +26,15 @@ let selectedRoles = new Set();
 let customKeywords = [];
 let scrapeAttempts = 0;
 let shownSlowWarning = false;
-let voteCount = 0;
-let voteThreshold = 100;
-let hasVoted = false;
 let countriesMap = {};
 let selectedLocation = null;
 let searchTimeout = null;
 let lastQuery = "";
 let lastRenderedCount = 0;
-let lastFilteredGen = 0;
-let lastPassNum = 0;
 let allStates = [];
 let internshipMode = false;
 let activeFilters = { site: '', experience_level: '' };
+let currentSort = 'relevant';
 let _searchId = crypto.randomUUID();
 
 let _selectedSites = [];
@@ -30,6 +43,24 @@ let _searchComplete = false;
 let _pendingSaveJob = null;
 let _uploadedFilename = "";
 let _authEmail = "";
+let _referralCounts = {};
+
+let suggestedRoles = [];
+let searchIds = [];
+let roleSearchIdMap = {};
+
+// Tab state
+let customJobs = [];
+let aiJobs = [];
+let customSearchIds = [];
+let aiSearchIds = [];
+let searchMode = 'current';
+let activeTab = 'custom';
+let customPollTimer = null;
+let aiPollTimer = null;
+let customPollTimers = {};
+let aiLogs = [];
+let aiStatus = '';
 
 // ── Visit Tracking ──
 (function() {
@@ -456,10 +487,7 @@ async function doSaveJob(job) {
         url: job.url || "",
         location: job.location || "",
         salary: job.salary || "",
-        total_score: job.total_score || 0,
-        ai_score: job.ai_score || 0,
         keyword_score: job.keyword_score || 0,
-        reason: job.reason || "",
         experience_level: job.experience_level || "",
         tags: job.tags || [],
         site: job._site || "",
@@ -489,7 +517,7 @@ async function doUnsaveJob(job) {
 function updateSaveButtons() {
   document.querySelectorAll(".bookmark-btn").forEach(btn => {
     const url = btn.dataset.url;
-    const job = allJobs.find(j => j.url === url);
+  const job = allJobs.find(j => j.url === url) || customJobs.find(j => j.url === url) || aiJobs.find(j => j.url === url);
     if (!job) return;
     if (job._saved) {
       btn.innerHTML = '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> Saved';
@@ -506,7 +534,8 @@ function updateSaveButtons() {
 async function checkSavedStatuses() {
   const profile = window.getProfile();
   if (!profile) return;
-  const urls = allJobs.map(j => j.url).filter(Boolean);
+  const jobsToCheck = allJobs;
+  const urls = jobsToCheck.map(j => j.url).filter(Boolean);
   if (!urls.length) return;
   try {
     const r = await fetch("/api/saved-jobs/batch-check", {
@@ -516,7 +545,7 @@ async function checkSavedStatuses() {
     });
     const d = await r.json();
     if (d.saved_map) {
-      allJobs.forEach(j => {
+      jobsToCheck.forEach(j => {
         const sid = d.saved_map[j.url];
         if (sid) {
           j._saved = true;
@@ -537,11 +566,12 @@ function logEvent(event, data = {}, elapsed = 0) {
 }
 
 function cancelActiveSearch() {
-  if (_searchId && pollTimer) {
-    try { navigator.sendBeacon(`/scrape/stop?search_id=${_searchId}`); } catch {}
-    clearInterval(pollTimer);
-    pollTimer = null;
+  const allIds = searchIds.length > 0 ? searchIds : (_searchId ? [_searchId] : []);
+  for (const sid of allIds) {
+    try { navigator.sendBeacon(`/scrape/stop?search_id=${sid}`); } catch {}
   }
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
 }
 window.addEventListener("beforeunload", cancelActiveSearch);
 window.addEventListener("pagehide", cancelActiveSearch);
@@ -565,51 +595,9 @@ function siteFromUrl(url) {
   return new URL(url).hostname.replace('www.', '').split('.')[0];
 }
 
-function renderFilterBar() {
-  const bar = document.getElementById("filterBar");
-  if (!allJobs.length) { bar.classList.add("hidden"); return; }
-  bar.classList.remove("hidden");
-
-  const sites = [...new Set(allJobs.map(j => siteFromUrl(j.url)).filter(Boolean))];
-  const exps = [...new Set(allJobs.map(j => j.experience_level).filter(Boolean))];
-
-  const allActive = !activeFilters.site && !activeFilters.experience_level;
-  let html = `<span class="cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${allActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-filter="all">All Results</span>`;
-
-  sites.forEach(s => {
-    const active = activeFilters.site.toLowerCase() === s.toLowerCase();
-    html += `<span class="cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors flex items-center gap-1 ${active ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-filter="site" data-value="${s}">${s}${active ? '<svg class="w-3 h-3 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>' : ''}</span>`;
-  });
-
-  exps.forEach(e => {
-    const active = activeFilters.experience_level === e;
-    const label = e === "internship" ? "Internship" : e === "entry_level" ? "Entry Level" : e;
-    html += `<span class="cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors flex items-center gap-1 ${active ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-filter="exp" data-value="${e}">${label}${active ? '<svg class="w-3 h-3 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>' : ''}</span>`;
-  });
-
-  bar.innerHTML = html;
-
-  bar.querySelectorAll("span[data-filter]").forEach(chip => {
-    chip.addEventListener("click", () => {
-      const filter = chip.dataset.filter;
-      const value = chip.dataset.value;
-      if (filter === "all") {
-        activeFilters = { site: '', experience_level: '' };
-      } else if (filter === "site") {
-        activeFilters.site = activeFilters.site === value ? '' : value;
-      } else if (filter === "exp") {
-        activeFilters.experience_level = activeFilters.experience_level === value ? '' : value;
-      }
-      applyThreshold();
-      renderFilterBar();
-    });
-  });
-}
-
 // ===== INIT =====
 checkRawJobs();
 loadRoles();
-fetchVoteCount();
 updateSearchBtn();
 setupLocationSearch();
 (async () => {
@@ -638,16 +626,17 @@ async function checkRawJobs() {
   try { const r = await fetch("/scrape/status"); const d = await r.json(); hasRawJobs = d.last_scrape_raw > 0; } catch {}
 }
 
-async function fetchVoteCount() {
-  try { const r = await fetch("/votes"); const d = await r.json(); voteCount = d.votes; voteThreshold = d.threshold; } catch {}
-}
-
 // ===== HELPERS =====
 function showElement(id) { document.getElementById(id).classList.remove("hidden"); }
 function hideElement(id) { document.getElementById(id).classList.add("hidden"); }
 
 function setStatus(msg, type = "blue") {
   const el = document.getElementById("status");
+  if (!msg) {
+    el.classList.add("hidden");
+    el.innerHTML = "";
+    return;
+  }
   el.classList.remove("hidden", "bg-indigo-50", "text-indigo-700", "border-indigo-100", "bg-red-50", "text-red-700", "border-red-100", "bg-emerald-50", "text-emerald-700", "border-emerald-100", "bg-amber-50", "text-amber-700", "border-amber-100");
 
   let icon = '';
@@ -669,14 +658,7 @@ function setStatus(msg, type = "blue") {
 }
 
 function renderTimeline(logs, status) {
-  const el = document.getElementById("stepProgress");
-  if (!el) return;
-  el.classList.remove("hidden", "step-progress-exit");
-  hideElement("results");
-
   const siteIcons = { linkedin: "in", indeed: "indeed", adzuna: "ADZ", remoteok: "ROK", weworkremotely: "WWR", naukri: "NAU", gulftalent: "GT", eurojobs: "EUR" };
-  const timeline = document.getElementById("timeline");
-  if (!timeline) return;
 
   let html = "";
   const shown = new Set();
@@ -686,7 +668,7 @@ function renderTimeline(logs, status) {
     const elapsed = log.elapsed_seconds || 0;
     const ts = elapsed ? `${elapsed}s` : "";
 
-    let m = msg.match(/\[SCRAPE\] (Pass \d+\/\d+ — )?(\w+)\.\.\.$/);
+    let m = msg.match(/\[(?:SCRAPE|DIRECT)\] (Pass \d+\/\d+ — )?(\w+)\.\.\.$/);
     if (m) {
       const site = m[2];
       const key = `site-start-${site}`;
@@ -702,7 +684,7 @@ function renderTimeline(logs, status) {
       continue;
     }
 
-    m = msg.match(/\[SCRAPE\] (\w+) returned (\d+) jobs/);
+    m = msg.match(/\[(?:SCRAPE|DIRECT)\] (\w+) returned (\d+) jobs/);
     if (m) {
       const site = m[1];
       const count = m[2];
@@ -719,7 +701,7 @@ function renderTimeline(logs, status) {
       continue;
     }
 
-    m = msg.match(/\[SCRAPE\] (\w+): (\d+) fetched, (\d+) new/);
+    m = msg.match(/\[(?:SCRAPE|DIRECT)\] (\w+): (\d+) fetched, (\d+) new/);
     if (m) {
       const site = m[1];
       const count = m[2];
@@ -737,12 +719,32 @@ function renderTimeline(logs, status) {
       continue;
     }
 
-    m = msg.match(/\[SCRAPE\] Total raw jobs: (\d+)/);
+    m = msg.match(/\[(?:SCRAPE|DIRECT)\] Total raw jobs: (\d+)/);
     if (m && !shown.has("total-raw")) {
       shown.add("total-raw");
       html += `<div class="flex items-center gap-3 py-1.5 text-slate-500 border-t border-slate-100 mt-1 pt-2">
         <span class="w-14 text-xs text-slate-400 shrink-0">${ts}</span>
         <span class="text-slate-600">${m[1]} jobs collected</span>
+      </div>`;
+      continue;
+    }
+
+    m = msg.match(/\[(?:DIRECT)\] Title filter: \d+ → (\d+)/);
+    if (m && !shown.has("title-filter")) {
+      shown.add("title-filter");
+      html += `<div class="flex items-center gap-3 py-1.5 text-slate-600">
+        <span class="w-14 text-xs text-slate-400 shrink-0">${ts}</span>
+        <span class="text-slate-600">${m[1]} jobs match role</span>
+      </div>`;
+      continue;
+    }
+
+    m = msg.match(/\[(?:DIRECT)\] Internship filter: \d+ → (\d+)/);
+    if (m && !shown.has("exp-filter")) {
+      shown.add("exp-filter");
+      html += `<div class="flex items-center gap-3 py-1.5 text-slate-600">
+        <span class="w-14 text-xs text-slate-400 shrink-0">${ts}</span>
+        <span class="text-slate-600">${m[1]} internship/entry-level jobs</span>
       </div>`;
       continue;
     }
@@ -769,7 +771,7 @@ function renderTimeline(logs, status) {
       continue;
     }
 
-    m = msg.match(/\[SCRAPE\] Pipeline complete/);
+    m = msg.match(/\[(?:SCRAPE|DIRECT)\] Pipeline complete/);
     if (m && !shown.has("complete")) {
       shown.add("complete");
       const matchCount = msg.match(/(\d+) relevant/);
@@ -782,7 +784,7 @@ function renderTimeline(logs, status) {
       continue;
     }
 
-    m = msg.match(/\[SCRAPE\] Enough relevant \((\d+).*\), stopping/);
+    m = msg.match(/\[(?:SCRAPE|DIRECT)\] Enough relevant \((\d+).*\), stopping/);
     if (m && !shown.has("enough")) {
       shown.add("enough");
       html += `<div class="flex items-center gap-3 py-1.5 text-slate-700">
@@ -814,14 +816,7 @@ function renderTimeline(logs, status) {
     }
   }
 
-  timeline.innerHTML = html;
-}
-
-function hideStepProgress() {
-  const el = document.getElementById("stepProgress");
-  if (!el) return;
-  el.classList.add("step-progress-exit");
-  setTimeout(() => el.classList.add("hidden"), 350);
+  return `<div class="premium-card p-4 mb-4"><div class="flex flex-col gap-1.5 text-sm font-mono">${html}</div></div>`;
 }
 
 function resetSearchBtn() {
@@ -839,16 +834,23 @@ function updateSearchBtn() {}
 function clearSearchState() {
   cancelActiveSearch();
   allJobs = [];
+  customJobs = [];
+  aiJobs = [];
+  searchIds = [];
+  customSearchIds = [];
+  aiSearchIds = [];
+  roleSearchIdMap = {};
+  suggestedRoles = [];
+  searchMode = 'current';
   _searchComplete = false;
   _searchId = crypto.randomUUID();
   _uploadedFilename = "";
   lastRenderedCount = 0;
-  lastFilteredGen = 0;
-  lastPassNum = 0;
   hasRawJobs = false;
   scrapeAttempts = 0;
   shownSlowWarning = false;
   activeFilters = { site: '', experience_level: '' };
+  currentSort = 'relevant';
   document.getElementById("results").innerHTML = `
     <div class="premium-card min-h-[400px] flex flex-col items-center justify-center text-center p-8">
       <div class="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center mb-5 border border-slate-100">
@@ -859,14 +861,76 @@ function clearSearchState() {
     </div>`;
   const fb = document.getElementById("filterBar");
   if (fb) fb.classList.add("hidden");
-  const tl = document.getElementById("timeline");
-  if (tl) tl.innerHTML = "";
+  hideTabBar();
   const sr = document.getElementById("suggestedRoles");
   if (sr) { sr.innerHTML = ""; sr.classList.add("hidden"); }
-  hideElement("stepProgress");
   document.title = "AI Job Agent";
   setStatus("", "");
   localStorage.removeItem(SEARCH_CACHE_KEY);
+}
+
+// ===== TAB MANAGEMENT =====
+const SPINNER_SVG = '<svg class="w-3.5 h-3.5 animate-spin inline mr-1.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>';
+
+function statusBanner(msg, color = 'blue') {
+  if (!msg) return '';
+  const colors = {
+    blue: 'bg-blue-50 text-blue-700 border-blue-100',
+    green: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+    red: 'bg-red-50 text-red-700 border-red-100'
+  };
+  return `<div class="flex items-center px-4 py-2.5 mb-4 rounded-xl border text-sm font-medium ${colors[color] || colors.blue}">${msg}</div>`;
+}
+
+const SITE_ICONS = { linkedin: "in", indeed: "indeed", adzuna: "ADZ", remoteok: "ROK", weworkremotely: "WWR", naukri: "NAU", gulftalent: "GT", eurojobs: "EUR" };
+
+function isRoleSimilar(roleA, roleB) {
+  const a = roleA.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  const b = roleB.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  const wordsA = a.split(/\s+/);
+  const wordsB = b.split(/\s+/);
+  const common = wordsA.filter(w => wordsB.includes(w) && w.length > 3);
+  return common.length >= Math.min(wordsA.length, wordsB.length) * 0.6;
+}
+
+// ===== TAB FUNCTIONS =====
+function showTabBar() {
+  const el = document.getElementById("tabBar");
+  if (el) el.classList.remove("hidden");
+  updateTabCounts();
+}
+
+function hideTabBar() {
+  const el = document.getElementById("tabBar");
+  if (el) el.classList.add("hidden");
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  const customBtn = document.getElementById("tabCustom");
+  const aiBtn = document.getElementById("tabAI");
+  if (tab === 'custom') {
+    customBtn.className = 'px-4 py-2.5 text-sm font-semibold border-b-2 border-indigo-600 text-slate-900 transition-colors rounded-t-lg hover:bg-slate-50';
+    aiBtn.className = 'px-4 py-2.5 text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-600 transition-colors rounded-t-lg hover:bg-slate-50';
+  } else {
+    aiBtn.className = 'px-4 py-2.5 text-sm font-semibold border-b-2 border-indigo-600 text-slate-900 transition-colors rounded-t-lg hover:bg-slate-50';
+    customBtn.className = 'px-4 py-2.5 text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-600 transition-colors rounded-t-lg hover:bg-slate-50';
+  }
+  renderActiveTab();
+}
+
+function updateTabCounts() {
+  const c = document.getElementById("tabCustomCount");
+  const a = document.getElementById("tabAICount");
+  if (c) c.textContent = customJobs.length;
+  if (a) a.textContent = aiJobs.length;
+}
+
+function renderActiveTab() {
+  const jobs = activeTab === 'custom' ? customJobs : aiJobs;
+  renderAllJobs(jobs);
 }
 
 document.getElementById("resume").addEventListener("input", updateSearchBtn);
@@ -900,17 +964,17 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
 });
 
 function applyThreshold() {
-  const displayJobs = getFilteredJobs();
-  const companies = displayJobs.map(j => j.company);
-  if (typeof window.loadCompanyUserCounts === "function") {
-    window.loadCompanyUserCounts(companies).then(() => {
-      renderJobs(displayJobs);
-    });
+  const tabBar = document.getElementById('tabBar');
+  const isTabs = tabBar && !tabBar.classList.contains('hidden');
+  const baseJobs = isTabs ? (activeTab === 'custom' ? customJobs : aiJobs) : allJobs;
+  if (_activeSubFilterRole === 'all') {
+    renderAllJobs(baseJobs);
   } else {
-    renderJobs(displayJobs);
+    const sids = Array.isArray(roleSearchIdMap[_activeSubFilterRole])
+      ? roleSearchIdMap[_activeSubFilterRole]
+      : [roleSearchIdMap[_activeSubFilterRole]];
+    renderAllJobs(baseJobs.filter(j => sids.includes(j._searchId)));
   }
-  updateCountBadge(displayJobs.length);
-  renderFilterBar();
 }
 
 // ===== RESUME -> KEYWORDS =====
@@ -924,7 +988,10 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
     const r = await fetch("/resume/keywords", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resume_text: resume }) });
     const d = await r.json();
     renderKeywords(d.keywords);
-    if (d.suggested_roles) renderSuggestedRoles(d.suggested_roles);
+    if (d.suggested_roles) {
+      renderSuggestedRoles(d.suggested_roles);
+      suggestedRoles = d.suggested_roles;
+    }
     setStatus("Keywords successfully extracted.", "green");
   } catch (e) { setStatus("Failed to extract keywords.", "red"); }
   finally { btn.textContent = "✨ Auto-Extract Keywords"; btn.disabled = false; }
@@ -1284,11 +1351,49 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   if (!resume) return setStatus("Missing required field: Please paste or upload your resume.", "red");
 
   _searchStart = Date.now();
-  const sites = getSelectedSites(), keywords = getSelectedKeywords(), roles = getSelectedRoles();
+  const sites = getSelectedSites(), keywords = getSelectedKeywords();
   _selectedSites = sites.slice();
-  if (!roles.length) return setStatus("Missing required field: Select at least one job role.", "red");
+
+  searchIds = [];
+  customSearchIds = [];
+  aiSearchIds = [];
+  roleSearchIdMap = {};
+  allJobs = [];
+  customJobs = [];
+  aiJobs = [];
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
+
+  const allSelectedRoles = getSelectedRoles();
+  if (!allSelectedRoles.length) return setStatus("Missing required field: Select at least one job role.", "red");
   if (!sites.length) return setStatus("Missing required field: Select at least one job board.", "red");
   if (!document.getElementById("locationInput").value.trim()) return setStatus("Missing required field: Enter a location.", "red");
+
+  // Separate roles into custom (user-selected non-AI) vs AI-suggested
+  const aiRoleSet = new Set(suggestedRoles.map(r => r.toLowerCase()));
+  const userAISelected = allSelectedRoles.filter(r => aiRoleSet.has(r.toLowerCase()));
+  const userCustomSelected = allSelectedRoles.filter(r => !aiRoleSet.has(r.toLowerCase()));
+
+  let rolesToScrape, customRolesToScrape, aiRolesToScrape;
+  if (userAISelected.length > 0) {
+    // User picked at least one AI role → scrape ONLY what they selected
+    customRolesToScrape = userCustomSelected;
+    aiRolesToScrape = userAISelected;
+    rolesToScrape = [...new Set(allSelectedRoles)];
+  } else {
+    // User picked no AI role → auto-include all 3 suggested
+    customRolesToScrape = [...new Set([...allSelectedRoles, ...suggestedRoles])];
+    aiRolesToScrape = suggestedRoles;
+    rolesToScrape = customRolesToScrape;
+  }
+
+  // In internship mode, discard senior/managerial roles
+  if (internshipMode) {
+    const SENIORITY_RE = /\b(senior|sr\.?|lead|principal|staff|director|vp|vice president|chief|head of|manager|architect|founding|partner)\b/i;
+    rolesToScrape = rolesToScrape.filter(r => !SENIORITY_RE.test(r));
+    customRolesToScrape = customRolesToScrape.filter(r => !SENIORITY_RE.test(r));
+    aiRolesToScrape = aiRolesToScrape.filter(r => !SENIORITY_RE.test(r));
+  }
 
   const btn = document.getElementById("searchBtn");
   btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Searching Data...';
@@ -1298,213 +1403,248 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   _searchId = crypto.randomUUID();
   _searchComplete = false;
   lastRenderedCount = 0;
-  lastFilteredGen = 0;
-  lastPassNum = 0;
-  allJobs = [];
   activeFilters = { site: '', experience_level: '' };
+  currentSort = 'relevant';
   document.getElementById("filterBar").classList.add("hidden");
 
-  renderTimeline([], "running");
-  document.title = "🔍 Searching... - AI Job Agent";
+  document.title = "Searching... - AI Job Agent";
   setStatus("Initializing data collection...", "blue");
-  logEvent("search_started", { sites, keywords_count: keywords.length, roles_count: roles.length });
+  logEvent("search_started", { sites, keywords_count: keywords.length, roles_count: rolesToScrape.length });
 
   try {
-    await fetch("/scrape", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-      sites, keywords, resume_text: resume, roles,
-      adzuna_country: getAdzunaCountry(),
-      indeed_country: getIndeedCountry(),
-      location: getLocation() || document.getElementById("locationInput").value,
-      internship_mode: internshipMode,
-      search_id: _searchId,
-      original_resume: _uploadedFilename,
-      user_email: (window.getProfile() || {}).email || "",
-    })});
+    // Per-board + per-role scraping with staggered delays (1-3s between) to avoid rate limits
+    let cumulativeDelay = 0;
+    const scrapePromises = [];
+    for (const role of rolesToScrape) {
+      for (const site of sites) {
+        cumulativeDelay += 1000 + Math.random() * 2000;
+        const roleId = crypto.randomUUID();
+        searchIds.push(roleId);
+        if (!roleSearchIdMap[role]) roleSearchIdMap[role] = [];
+        roleSearchIdMap[role].push(roleId);
+        if (aiRolesToScrape.map(r => r.toLowerCase()).includes(role.toLowerCase())) {
+          aiSearchIds.push(roleId);
+        } else {
+          customSearchIds.push(roleId);
+        }
+        scrapePromises.push(new Promise(resolve => {
+          setTimeout(() => {
+            fetch("/scrape", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sites: [site], roles: [role], search_id: roleId,
+                location: getLocation() || document.getElementById("locationInput").value,
+                internship_mode: internshipMode,
+                adzuna_country: getAdzunaCountry(),
+                indeed_country: getIndeedCountry(),
+                user_email: (window.getProfile() || {}).email || "",
+                scrape_limit: 200,
+              })
+            }).then(resolve).catch(resolve);
+          }, cumulativeDelay);
+        }));
+      }
+    }
+    await Promise.all(scrapePromises);
+
+    // Show tabs immediately if both types exist
+    if (customSearchIds.length > 0 && aiSearchIds.length > 0) {
+      showTabBar();
+      switchTab('custom');
+    } else {
+      hideTabBar();
+    }
+
     _uploadedFilename = "";
     scrapeAttempts = 0;
-    pollResults();
+    pollAllScrapes();
   } catch (e) {
     document.title = "AI Job Agent";
     setStatus("Error: " + e.message, "red");
     logEvent("search_error", { error: e.message }, Math.round((Date.now() - _searchStart) / 1000));
-    resetSearchBtn(); hideElement("stepProgress"); showElement("results");
+    resetSearchBtn(); showElement("results");
   }
 });
 
-// ===== VOTE =====
-async function handleVote(btn) {
-  if (hasVoted) return;
-  try {
-    const r = await fetch("/vote", { method: "POST" });
-    const d = await r.json();
-    voteCount = d.votes;
-    voteThreshold = d.threshold;
-    hasVoted = true;
-    applyThreshold();
-  } catch {}
-}
-
-// ===== POLL =====
-function pollResults() {
+// ===== POLL ALL SCRAPES =====
+function pollAllScrapes() {
   if (pollTimer) clearInterval(pollTimer);
+  let attempts = 0;
+  let consecutiveErrors = 0;
   pollTimer = setInterval(async () => {
-    scrapeAttempts++;
-    try {
-      const r = await fetch(`/scrape/status?search_id=${_searchId}`);
-      const d = await r.json();
+    attempts++;
+    let allDone = true;
+    let allLogs = [];
 
-      if (d.queue_position > 0) {
-        renderTimeline([], d.status);
-        document.title = "⏳ Queued... - AI Job Agent";
-        return;
+    for (const sid of searchIds) {
+      try {
+        const r = await fetch(`/scrape/status?search_id=${sid}`);
+        const d = await r.json();
+        if (d.status === 'running') allDone = false;
+        allLogs.push(...(d.logs || []));
+        consecutiveErrors = 0;
+      } catch {
+        consecutiveErrors++;
       }
+    }
 
-      if (!_searchComplete && lastRenderedCount === 0) {
-        renderTimeline(d.logs || [], d.status);
+    let allRaw = [];
+    for (const sid of searchIds) {
+      try {
+        const r = await fetch(`/jobs?search_id=${sid}&raw=true`);
+        const d = await r.json();
+        (d.jobs || []).forEach(j => { j._searchId = sid; });
+        allRaw.push(...(d.jobs || []));
+      } catch {}
+    }
+
+    const seen = new Set();
+    allJobs = allRaw.filter(j => {
+      const key = j.url || `${j.title}|${j.company}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // Route jobs to tab arrays by search ID
+    customJobs = allJobs.filter(j => customSearchIds.includes(j._searchId));
+    aiJobs = allJobs.filter(j => aiSearchIds.includes(j._searchId));
+
+    showElement("results");
+
+    const totalJobs = allJobs.length;
+
+    if (!allDone) {
+      if (totalJobs > 0) {
+        setStatus(`${totalJobs} jobs collected`, "blue");
+      } else {
+        setStatus("Collecting job data...", "blue");
       }
-
-      if (d.status === "running") {
-        const inPass = d.max_passes > 0 && d.pass_num > 0;
-        const genChanged = d.filtered_gen !== lastFilteredGen;
-        const countChanged = d.last_scrape_relevant !== lastRenderedCount;
-
-        if (d.last_scrape_relevant > 0) {
-          if (genChanged && inPass) {
-            setStatus(`Batch ${d.pass_num}/${d.max_passes} processed — ${d.last_scrape_relevant} matches`, "blue");
-          } else if (countChanged) {
-            setStatus(`Evaluating... ${d.last_scrape_relevant} matches so far`, "blue");
-          } else if (d.pass_num > lastPassNum && lastPassNum > 0) {
-            setStatus(`${d.last_scrape_relevant} matches, scanning deeper (pass ${d.pass_num}/${d.max_passes})`, "amber");
-          } else {
-            setStatus(`${d.last_scrape_relevant} matches found`, "blue");
-          }
-          await loadResultsIncremental(d.filtered_gen);
-        } else {
-          setStatus(d.last_scrape_raw > 0 ? "Scoring results..." : "Collecting job data...", "blue");
-        }
-        document.title = d.last_scrape_relevant > 0
-          ? `(${d.last_scrape_relevant}) Jobs - AI Job Agent`
-          : (d.last_scrape_raw > 0 ? "🤖 Scoring... - AI Job Agent" : "📡 Scraping... - AI Job Agent");
-        lastFilteredGen = d.filtered_gen;
-        lastPassNum = d.pass_num;
+      document.title = `(${totalJobs}) Jobs - AI Job Agent`;
+      if (customSearchIds.length > 0 && aiSearchIds.length > 0) {
+        updateTabCounts();
+        renderActiveTab();
+      } else {
+        renderAllJobs(allJobs);
       }
-
-      if (d.status === "done" || d.status === "error") {
-        clearInterval(pollTimer); pollTimer = null;
-        if (d.status === "error") {
-          document.title = "AI Job Agent";
-          setStatus("Data collection encountered an error.", "red");
-          logEvent("search_error", { status: "error" }, Math.round((Date.now() - _searchStart) / 1000));
-          await loadResults(d);
-        } else {
-          if (lastRenderedCount === 0) {
-            renderTimeline(d.logs || [], "done");
-            await new Promise(r => setTimeout(r, 800));
-            hideStepProgress();
-          }
-          await loadResults(d);
-        }
-      } else if (scrapeAttempts > 80 && !shownSlowWarning) {
-        shownSlowWarning = true;
-        setStatus("Network responses are slower than usual, continuing processing...", "amber");
+    } else {
+      await checkSavedStatuses();
+      if (customSearchIds.length > 0 && aiSearchIds.length > 0) {
+        showTabBar();
+        switchTab('custom');
+      } else {
+        hideTabBar();
+        renderAllJobs(allJobs);
       }
-    } catch {
-      clearInterval(pollTimer); pollTimer = null;
-      document.title = "AI Job Agent";
-      setStatus("Connection lost while polling.", "red");
-      resetSearchBtn(); hideElement("stepProgress"); showElement("results");
+      let msg = `Analysis complete — ${totalJobs} jobs found`;
+      setStatus(msg, totalJobs ? "green" : "amber");
+      document.title = `(${totalJobs}) Jobs - AI Job Agent`;
+    }
+
+    if (consecutiveErrors >= 3) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      setStatus("Connection lost. Server may be down.", "red");
+      hideTabBar();
+      renderAllJobs();
+      return;
+    }
+
+    if (allDone) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      logEvent("scrape_done", { roles: Object.keys(roleSearchIdMap), jobs: totalJobs });
+      resetSearchBtn();
+      // Cache
+      localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify({
+        searchIds,
+        roleSearchIdMap,
+        searchMode: (customJobs.length > 0 && aiJobs.length > 0) ? 'tabs' : 'single',
+        customSearchIds,
+        aiSearchIds,
+        timestamp: Date.now(),
+        params: {
+          sites: getSelectedSites ? getSelectedSites() : [],
+          keywords: getSelectedKeywords ? getSelectedKeywords() : [],
+          roles: getSelectedRoles ? getSelectedRoles() : [],
+          location: document.getElementById("locationInput")?.value || "",
+          internshipMode: internshipMode,
+        },
+      }));
+    }
+
+    if (attempts > 80) {
+      clearInterval(pollTimer);
+      pollTimer = null;
     }
   }, 3000);
 }
-
-async function loadResultsIncremental(filteredGen) {
-  if (_searchComplete) return;
-  const gen = filteredGen !== undefined ? filteredGen : lastFilteredGen;
-  try {
-    const r = await fetch(`/jobs?search_id=${_searchId}`);
-    const d = await r.json();
-    const jobs = d.jobs || [];
-    if (jobs.length > 0 && (jobs.length !== lastRenderedCount || gen !== lastFilteredGen)) {
-      lastRenderedCount = jobs.length;
-      lastFilteredGen = gen;
-      allJobs = jobs;
-      showElement("results");
-      hideElement("stepProgress");
-      document.title = `(${jobs.length}) Jobs - AI Job Agent`;
-      await checkSavedStatuses();
-      applyThreshold();
-    }
-  } catch {}
-}
-
-// ===== LOAD RESULTS =====
-async function loadResults(statusData) {
-  _searchComplete = true;
-  try {
-    const r = await fetch(`/jobs?search_id=${_searchId}`);
-    const d = await r.json();
-    allJobs = d.jobs || [];
-    hasRawJobs = true;
-    showElement("results");
-    await checkSavedStatuses();
-    applyThreshold();
-    localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify({
-      searchId: _searchId,
-      timestamp: Date.now(),
-      params: {
-        sites: getSelectedSites ? getSelectedSites() : [],
-        keywords: getSelectedKeywords ? getSelectedKeywords() : [],
-        roles: getSelectedRoles ? getSelectedRoles() : [],
-        location: document.getElementById("locationInput")?.value || "",
-        internshipMode: internshipMode,
-      },
-    }));
-    let msg;
-    if (allJobs.length) {
-      const siteCount = (statusData?.logs || []).reduce((acc, log) => {
-        const m = (log.event || log.message || "").match(/\[SCRAPE\] (\w+) returned \d+ jobs/);
-        if (m) acc.add(m[1]);
-        return acc;
-      }, new Set()).size;
-      const passSummary = siteCount > 0 ? ` across ${siteCount} sources` : "";
-      msg = `Analysis complete: ${allJobs.length} matches found${passSummary}.`;
-      document.title = `(${allJobs.length}) Jobs - AI Job Agent`;
-      logEvent("search_completed", { jobs_count: allJobs.length }, Math.round((Date.now() - _searchStart) / 1000));
-    } else {
-      msg = "Analysis complete: No high-confidence matches found in this region.";
-      document.title = "AI Job Agent";
-      logEvent("search_completed", { jobs_count: 0 }, Math.round((Date.now() - _searchStart) / 1000));
-    }
-    setStatus(msg, allJobs.length ? "green" : "amber");
-
-  } catch (e) { setStatus("Failed to render final results: " + e.message, "red"); }
-  resetSearchBtn();
-}
-
 // ===== RENDER JOBS =====
-function renderJobs(jobs, companyUsers) {
+// ===== RENDER ALL JOBS =====
+function renderAllJobs(jobs) {
   const c = document.getElementById("results");
-  if (!jobs.length) {
+  let displayJobs = jobs || allJobs;
+  if (currentSort === 'recent') {
+    displayJobs = [...displayJobs].sort((a, b) => {
+      const da = a.date_posted || '';
+      const db = b.date_posted || '';
+      if (da && db) return db.localeCompare(da);
+      if (da) return -1;
+      if (db) return 1;
+      return 0;
+    });
+  } else if (currentSort === 'referral') {
+    displayJobs = [...displayJobs].sort((a, b) => (_referralCounts[b.company] || 0) - (_referralCounts[a.company] || 0));
+  } else {
+    displayJobs = [...displayJobs].sort((a, b) => (b.keyword_score || 0) - (a.keyword_score || 0));
+  }
+  if (!displayJobs.length) {
     c.innerHTML = `
       <div class="premium-card min-h-[400px] flex flex-col items-center justify-center text-center p-8">
         <div class="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center mb-4 border border-slate-100">
           <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
         </div>
-        <h3 class="text-sm font-semibold text-slate-800">No jobs match your current filters</h3>
-        <p class="text-xs text-slate-500 mt-1">Try broadening your target roles or selecting more job boards.</p>
+        <h3 class="text-sm font-semibold text-slate-800">No jobs found</h3>
+        <p class="text-xs text-slate-500 mt-1">Try different roles or broaden your job board selection.</p>
       </div>`;
     return;
   }
 
-  const showAll = voteCount >= voteThreshold || !!window.getProfile();
-  const limit = 5;
+  // Sub-filter pills — always show if the base scope has multiple roles
+  let subFilterHtml = "";
+  const tabBar = document.getElementById('tabBar');
+  const isTabs = tabBar && !tabBar.classList.contains('hidden');
+  const baseScope = isTabs ? (activeTab === 'custom' ? customJobs : aiJobs) : allJobs;
+  const baseSearchIds = [...new Set(baseScope.map(j => j._searchId).filter(Boolean))];
+  const baseRoles = Object.entries(roleSearchIdMap)
+    .filter(([role, sids]) => {
+      const arr = Array.isArray(sids) ? sids : [sids];
+      return arr.some(sid => baseSearchIds.includes(sid));
+    })
+    .map(([role]) => role);
+  subFilterHtml = `<div class="flex flex-wrap items-center justify-between gap-2 mb-4" id="subFilters">`;
+  if (baseRoles.length > 1) {
+    const allActive = _activeSubFilterRole === 'all';
+    subFilterHtml += `<div class="flex flex-wrap gap-2">
+      <span class="cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${allActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-role-filter="all">All (${baseScope.length})</span>`;
+    for (const role of baseRoles) {
+      const sids = Array.isArray(roleSearchIdMap[role]) ? roleSearchIdMap[role] : [roleSearchIdMap[role]];
+      const count = baseScope.filter(j => sids.includes(j._searchId)).length;
+      const isActive = _activeSubFilterRole === role;
+      subFilterHtml += `<span class="cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${isActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-role-filter="${role}">${role} (${count})</span>`;
+    }
+    subFilterHtml += `</div>`;
+  }
+  subFilterHtml += `<span class="flex items-center gap-1.5 text-xs text-slate-400 ml-auto"><span>Sort:</span>
+    <select id="sortSelect" class="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <option value="relevant" ${currentSort === 'relevant' ? 'selected' : ''}>Most Relevant</option>
+      <option value="recent" ${currentSort === 'recent' ? 'selected' : ''}>Most Recent</option>
+      <option value="referral" ${currentSort === 'referral' ? 'selected' : ''}>Most Referrals</option>
+    </select></span>
+  </div>`;
 
-  function cardHtml(j) {
-    const sc = j.total_score || 0;
-    const scoreClass = sc >= 85 ? "text-emerald-600 bg-emerald-50 border-emerald-100" :
-                       sc >= 60 ? "text-indigo-600 bg-indigo-50 border-indigo-100" :
-                       "text-amber-600 bg-amber-50 border-amber-100";
-    const barColor = sc >= 85 ? "bg-emerald-500" : sc >= 60 ? "bg-indigo-500" : "bg-amber-500";
+  function rawCardHtml(j) {
     const siteName = siteFromUrl(j.url);
     const isSaved = j._saved || false;
 
@@ -1514,40 +1654,39 @@ function renderJobs(jobs, companyUsers) {
         ? '<span class="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-md font-medium">Entry Level</span>'
         : "";
 
+    const levelBadge = j.job_level && j.job_level !== "Not Applicable"
+      ? `<span class="text-xs bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-md font-medium">${j.job_level}</span>`
+      : "";
+
+    const companyHtml = j.company_url
+      ? `<span class="font-medium text-indigo-600 hover:underline cursor-pointer" onclick="event.preventDefault(); event.stopPropagation(); window.open('${j.company_url.replace(/'/g, "\\'")}', '_blank')">${j.company}</span>`
+      : `<span class="font-medium">${j.company}</span>`;
+
+    const tagsHtml = j.tags && j.tags.length
+      ? `<div class="mt-3 flex flex-wrap gap-1.5">${j.tags.slice(0, 6).map(t =>
+          `<span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">${typeof t === 'string' ? t : ''}</span>`
+        ).join("")}</div>`
+      : "";
+
     return `
     <a href="${j.url}" target="_blank" class="block group relative bg-white rounded-2xl p-5 sm:p-6 border border-[#e8ecf1] hover:border-slate-300 hover:shadow-lg transition-all duration-300 outline-none focus:ring-2 focus:ring-indigo-500">
-
       <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div class="flex-1 min-w-0">
           <div class="flex flex-wrap items-center gap-2 mb-2">
             <h3 class="text-sm sm:text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate pr-1">${j.title}</h3>
-            ${expBadge}
+            ${expBadge} ${levelBadge}
           </div>
           <p class="text-sm text-slate-600 flex items-center gap-2 truncate">
-            <span class="font-medium">${j.company}</span>
+            ${companyHtml}
             <span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span>
             <span>${j.location}</span>
             ${j.salary ? `<span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span><span class="premium-badge bg-emerald-50 text-emerald-700 border-emerald-100 font-medium">${j.salary}</span>` : ""}
+            ${j.date_posted ? `<span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span><span class="text-xs text-slate-400">${relativeDate(j.date_posted)}</span>` : ""}
           </p>
-        </div>
-
-        <div class="flex flex-row sm:flex-col items-center sm:items-end gap-3 sm:gap-1 shrink-0">
-          <div class="flex items-center gap-2">
-            <span class="text-[11px] uppercase font-bold tracking-wider text-slate-400">Match</span>
-            <span class="px-3 py-1 rounded-lg border font-mono text-sm font-bold ${scoreClass}">${sc}</span>
-          </div>
-          <div class="text-[11px] text-slate-400 flex items-center gap-2">
-            <span title="AI Relevancy">AI <span class="font-medium text-slate-600">${j.ai_score || 0}</span></span>
-            <span class="text-slate-300">|</span>
-            <span title="Keyword Hits">KW <span class="font-medium text-slate-600">${j.keyword_score || 0}</span></span>
-          </div>
         </div>
       </div>
 
-      ${j.reason ? `
-      <div class="mt-4 bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-        <p class="text-sm text-slate-600 leading-relaxed"><strong class="text-slate-800">✨ AI Note:</strong> ${j.reason}</p>
-      </div>` : ""}
+      ${tagsHtml}
 
       <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
         <div class="flex items-center gap-2.5 flex-1 pr-3 min-w-0">
@@ -1557,9 +1696,9 @@ function renderJobs(jobs, companyUsers) {
               : '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg> Save'
             }
           </button>
-          <button class="shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100 active:bg-violet-200" onclick="event.preventDefault(); event.stopPropagation(); window._referralJobTitle='${(j.title||'').replace(/'/g, "\\'")}'; window._referralMatchScore=${j.total_score||0}; window._referralJobUrl='${(j.url||'').replace(/'/g, "\\'")}'; showReferralUsers('${j.company.replace(/'/g, "\\'")}')" title="See referrals at this company">
+          <button class="shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100 active:bg-violet-200 referral-btn" data-company="${j.company.replace(/"/g, '&quot;')}" onclick="event.preventDefault(); event.stopPropagation(); window._referralJobTitle='${(j.title||'').replace(/'/g, "\\'")}'; window._referralMatchScore=0; window._referralJobUrl='${(j.url||'').replace(/'/g, "\\'")}'; showReferralUsers('${j.company.replace(/'/g, "\\'")}')" title="See referrals at this company">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
-            Referrals
+            <span class="referral-label">Referrals</span>
           </button>
         </div>
         <div class="flex items-center gap-1.5 text-xs font-medium text-slate-400 shrink-0">
@@ -1567,38 +1706,75 @@ function renderJobs(jobs, companyUsers) {
           <svg class="w-4 h-4 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
         </div>
       </div>
-
-      <div class="absolute bottom-0 left-0 h-0.5 w-full bg-slate-100 rounded-b-2xl overflow-hidden">
-        <div class="h-full ${barColor} transition-all duration-500" style="width: ${Math.min(sc, 100)}%"></div>
-      </div>
     </a>`;
   }
 
-  if (jobs.length > limit && !showAll) {
-    const lockedCount = jobs.length - limit;
-    const profile = window.getProfile();
-    const unlockHtml = profile
-      ? `<button class="premium-btn premium-btn-primary mt-3" onclick="handleVote(this)">Unlock All Results <span class="bg-white/20 px-1.5 rounded text-xs">${voteCount}/${voteThreshold}</span></button>`
-      : `<button class="premium-btn premium-btn-primary mt-3" onclick="showAuthModal()">Sign in</button>`;
-
-    c.innerHTML = jobs.slice(0, limit).map(j => cardHtml(j)).join("") + `
-      <div class="relative rounded-2xl overflow-hidden mt-4">
-        <div class="blur-job space-y-4 px-1">${jobs.slice(limit, limit+2).map(j => cardHtml(j)).join("")}</div>
-        <div class="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-[#f8fafc] via-white/80 to-transparent">
-          <div class="bg-white border border-[#e8ecf1] rounded-2xl p-6 text-center shadow-lg mx-4 max-w-sm w-full transform -translate-y-4">
-            <div class="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center mx-auto mb-3">
-              <svg class="w-5 h-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-            </div>
-            <h4 class="font-semibold text-slate-900 text-sm">${lockedCount} more high-match roles hidden</h4>
-            <p class="text-xs text-slate-500 mt-1">${profile ? 'Support the project via a free vote to instantly unlock all results.' : 'Sign in to unlock all results and request referrals.'}</p>
-            ${unlockHtml}
+  const limit = 10;
+  const profile = window.getProfile();
+  if (!profile && displayJobs.length > limit) {
+    const visible = displayJobs.slice(0, limit).map(rawCardHtml).join("");
+    const locked = displayJobs.slice(limit).map(rawCardHtml).join("");
+    c.innerHTML = subFilterHtml + visible +
+      `<div class="relative mt-4">
+        <div class="blur-sm pointer-events-none select-none">${locked}</div>
+        <div class="absolute inset-0 flex items-center justify-center bg-black/10 rounded-2xl">
+          <div class="bg-white/90 backdrop-blur-sm rounded-xl px-6 py-5 shadow-lg text-center max-w-xs">
+            <svg class="w-10 h-10 mx-auto text-slate-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+            <p class="text-base font-semibold text-slate-700">${displayJobs.length - limit} more jobs locked</p>
+            <p class="text-sm text-slate-500 mt-1 mb-4">Sign in to see all matching jobs and request referrals.</p>
+            <button onclick="showAuthModal()" class="premium-btn premium-btn-primary w-full">Sign in to unlock</button>
           </div>
         </div>
       </div>`;
   } else {
-    c.innerHTML = jobs.map(j => cardHtml(j)).join("");
+    c.innerHTML = subFilterHtml + displayJobs.map(rawCardHtml).join("");
+  }
+
+  document.getElementById('sortSelect')?.addEventListener('change', async (e) => {
+    currentSort = e.target.value;
+    if (currentSort === 'referral') {
+      const companies = [...new Set(allJobs.map(j => j.company).filter(Boolean))];
+      if (companies.length) {
+        try {
+          const profile = window.getProfile();
+          const email = profile?.email || '';
+          const r = await fetch(`/api/users/company-counts?companies=${encodeURIComponent(companies.join(","))}&user_email=${encodeURIComponent(email)}`);
+          const d = await r.json();
+          _referralCounts = d.counts || {};
+        } catch {}
+      }
+    }
+    applyThreshold();
+  });
+
+  // Update referral counts
+  if (profile) {
+    const companies = [...new Set(displayJobs.map(j => j.company).filter(Boolean))];
+    if (companies.length) {
+      const email = profile.email || '';
+      fetch(`/api/users/company-counts?companies=${encodeURIComponent(companies.join(","))}&user_email=${encodeURIComponent(email)}`)
+        .then(r => r.json())
+        .then(d => {
+          _referralCounts = d.counts || {};
+          document.querySelectorAll(".referral-btn[data-company]").forEach(btn => {
+            const company = btn.getAttribute("data-company");
+            const count = _referralCounts[company] || 0;
+            const label = btn.querySelector(".referral-label");
+            if (label) label.textContent = `Referrals - ${count}`;
+          });
+        }).catch(() => {});
+    }
   }
 }
+
+  // Sub-filter event delegation (single handler, survives re-renders)
+let _activeSubFilterRole = 'all';
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('#subFilters [data-role-filter]');
+  if (!el) return;
+  _activeSubFilterRole = el.dataset.roleFilter;
+  applyThreshold();
+});
 
 // ===== RESTORE LAST SEARCH ON PAGE LOAD =====
 (async function restoreLastSearch() {
@@ -1606,15 +1782,56 @@ function renderJobs(jobs, companyUsers) {
   if (!raw) return;
   let saved;
   try { saved = JSON.parse(raw); } catch { return; }
-  if (!saved || !saved.searchId || Date.now() - saved.timestamp > SEARCH_CACHE_TTL) return;
+  if (!saved || Date.now() - saved.timestamp > SEARCH_CACHE_TTL) return;
+
   try {
-    const r = await fetch(`/scrape/status?search_id=${saved.searchId}`);
-    const status = await r.json();
-    if (status.status === "done" || status.status === "error") {
-      _searchId = saved.searchId;
-      _searchComplete = true;
-      if (status.status === "done") {
-        await loadResults(status);
+    if (saved.searchIds && saved.searchIds.length) {
+      searchIds = saved.searchIds;
+      roleSearchIdMap = {};
+      for (const [r, sids] of Object.entries(saved.roleSearchIdMap || {})) {
+        roleSearchIdMap[r] = Array.isArray(sids) ? sids : [sids];
+      }
+      customSearchIds = saved.customSearchIds || [];
+      aiSearchIds = saved.aiSearchIds || [];
+      searchMode = saved.searchMode || 'single';
+
+      let allDone = true;
+      for (const sid of searchIds) {
+        const r = await fetch(`/scrape/status?search_id=${sid}`);
+        const d = await r.json();
+        if (d.status === 'running') allDone = false;
+      }
+
+      if (allDone) {
+        for (const sid of searchIds) {
+          const r = await fetch(`/jobs?search_id=${sid}&raw=true`);
+          const d = await r.json();
+          (d.jobs || []).forEach(j => { j._searchId = sid; });
+          allJobs.push(...(d.jobs || []));
+        }
+        const seen = new Set();
+        allJobs = allJobs.filter(j => {
+          const key = j.url || `${j.title}|${j.company}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        customJobs = allJobs.filter(j => customSearchIds.includes(j._searchId));
+        aiJobs = allJobs.filter(j => aiSearchIds.includes(j._searchId));
+
+        showElement("results");
+        if (customSearchIds.length > 0 && aiSearchIds.length > 0) {
+          showTabBar();
+          switchTab('custom');
+        } else {
+          hideTabBar();
+          renderAllJobs(allJobs);
+        }
+        setStatus(`Restored ${allJobs.length} jobs from last session`, "green");
+      } else {
+        showElement("results");
+        pollAllScrapes();
       }
     }
   } catch {}
@@ -1651,7 +1868,7 @@ window.authSendCode = authSendCode;
 window.authVerifyCode = authVerifyCode;
 window.authResendCode = authResendCode;
 window.toggleSaveJob = toggleSaveJob;
-window.handleVote = handleVote;
+window.switchTab = switchTab;
 window.addRoleFromSearch = addRoleFromSearch;
 window.onRoleToggle = onRoleToggle;
 window.selectSuggestedRole = selectSuggestedRole;
