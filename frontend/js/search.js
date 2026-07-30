@@ -44,6 +44,9 @@ let _pendingSaveJob = null;
 let _uploadedFilename = "";
 let _authEmail = "";
 let _referralCounts = {};
+let _refreshCooldown = false;
+let _currentPage = 1;
+const _pageSize = 10;
 
 let suggestedRoles = [];
 let searchIds = [];
@@ -846,6 +849,7 @@ function clearSearchState() {
   shownSlowWarning = false;
   activeFilters = { site: '', experience_level: '' };
   currentSort = 'relevant';
+  _currentPage = 1;
   document.getElementById("results").innerHTML = `
     <div class="premium-card min-h-[400px] flex flex-col items-center justify-center text-center p-8">
       <div class="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center mb-5 border border-slate-100">
@@ -933,6 +937,12 @@ document.getElementById("resume").addEventListener("input", () => {
   if (document.getElementById("resume").value.trim()) clearSearchState();
 });
 
+// Enable Refresh button only when resume text exists (respects cooldown)
+document.getElementById("resume").addEventListener("input", () => {
+  const hasResume = !!document.getElementById("resume").value.trim();
+  document.getElementById("refreshRolesBtn").disabled = !hasResume || _refreshCooldown;
+});
+
 // ===== RESUME UPLOAD =====
 document.getElementById("fileInput").addEventListener("change", async (e) => {
   const file = e.target.files[0];
@@ -946,6 +956,7 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
     const r = await fetch("/resume/upload", { method: "POST", body: form });
     const d = await r.json();
     document.getElementById("resume").value = d.text;
+    document.getElementById("refreshRolesBtn").disabled = false;
     clearSearchState();
     _uploadedFilename = d.filename;
     updateSearchBtn();
@@ -959,6 +970,7 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
 });
 
 function applyThreshold() {
+  _currentPage = 1;
   const tabBar = document.getElementById('tabBar');
   const isTabs = tabBar && !tabBar.classList.contains('hidden');
   const baseJobs = isTabs ? (activeTab === 'custom' ? customJobs : aiJobs) : allJobs;
@@ -990,8 +1002,12 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
 });
 
 document.getElementById("refreshRolesBtn").addEventListener("click", async () => {
+  if (_refreshCooldown) return;
   const resume = document.getElementById("resume").value.trim();
   if (!resume) { setStatus("Paste or upload your resume first.", "red"); return; }
+  _refreshCooldown = true;
+  const btn = document.getElementById("refreshRolesBtn");
+  btn.disabled = true;
   try {
     const r = await fetch("/resume/keywords", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resume_text: resume }) });
     const d = await r.json();
@@ -1001,6 +1017,12 @@ document.getElementById("refreshRolesBtn").addEventListener("click", async () =>
     }
     setStatus("Recommended roles refreshed.", "green");
   } catch (e) { setStatus("Failed to refresh roles.", "red"); }
+  setTimeout(() => {
+    _refreshCooldown = false;
+    if (document.getElementById("resume").value.trim()) {
+      btn.disabled = false;
+    }
+  }, 10000);
 });
 
 function renderKeywords(kws) {
@@ -1419,7 +1441,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        sites, roles: rolesToScrape, search_id: _searchId,
+        sites, keywords, roles: rolesToScrape, search_id: _searchId,
         location: getLocation() || document.getElementById("locationInput").value,
         internship_mode: internshipMode,
         indeed_country: getIndeedCountry(),
@@ -1675,25 +1697,40 @@ function renderAllJobs(jobs) {
     </a>`;
   }
 
-  const limit = 10;
+  const totalPages = Math.ceil(displayJobs.length / _pageSize);
+  const start = (_currentPage - 1) * _pageSize;
+  const pageJobs = displayJobs.slice(start, start + _pageSize);
   const profile = window.getProfile();
-  if (!profile && displayJobs.length > limit) {
-    const visible = displayJobs.slice(0, limit).map(rawCardHtml).join("");
-    const locked = displayJobs.slice(limit).map(rawCardHtml).join("");
-    c.innerHTML = subFilterHtml + visible +
-      `<div class="relative mt-4">
-        <div class="blur-sm pointer-events-none select-none">${locked}</div>
+
+  function paginationBarHtml(tp) {
+    if (tp <= 1) return '';
+    const p = _currentPage;
+    let html = `<div class="flex items-center justify-center gap-2 mt-6">`;
+    html += `<button class="page-btn text-xs font-medium px-3 py-1.5 rounded-lg border ${p <= 1 ? 'text-slate-300 border-slate-100 cursor-not-allowed' : 'text-slate-600 border-slate-200 hover:bg-slate-50 cursor-pointer'}" data-page="${p - 1}" ${p <= 1 ? 'disabled' : ''}>Prev</button>`;
+    for (let i = 1; i <= tp; i++) {
+      html += `<button class="page-btn text-xs font-medium px-3 py-1.5 rounded-lg border ${i === p ? 'bg-slate-800 text-white border-slate-800 cursor-default' : (profile ? 'text-slate-600 border-slate-200 hover:bg-slate-50 cursor-pointer' : 'text-slate-400 border-slate-100 cursor-pointer')}" data-page="${i}">${i}</button>`;
+    }
+    html += `<button class="page-btn text-xs font-medium px-3 py-1.5 rounded-lg border ${p >= tp ? 'text-slate-300 border-slate-100 cursor-not-allowed' : 'text-slate-600 border-slate-200 hover:bg-slate-50 cursor-pointer'}" data-page="${p + 1}" ${p >= tp ? 'disabled' : ''}>Next</button>`;
+    html += `</div>`;
+    return html;
+  }
+
+  if (!profile && _currentPage > 1) {
+    const blurred = pageJobs.map(rawCardHtml).join("");
+    c.innerHTML = subFilterHtml +
+      `<div class="relative mt-2">
+        <div class="blur-sm pointer-events-none select-none">${blurred}</div>
         <div class="absolute inset-0 flex items-center justify-center bg-black/10 rounded-2xl">
           <div class="bg-white/90 backdrop-blur-sm rounded-xl px-6 py-5 shadow-lg text-center max-w-xs">
             <svg class="w-10 h-10 mx-auto text-slate-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-            <p class="text-base font-semibold text-slate-700">${displayJobs.length - limit} more jobs locked</p>
+            <p class="text-base font-semibold text-slate-700">${displayJobs.length - _pageSize} more jobs locked</p>
             <p class="text-sm text-slate-500 mt-1 mb-4">Sign in to see all matching jobs and request referrals.</p>
             <button onclick="showAuthModal()" class="premium-btn premium-btn-primary w-full">Sign in to unlock</button>
           </div>
         </div>
-      </div>`;
+      </div>` + paginationBarHtml(totalPages);
   } else {
-    c.innerHTML = subFilterHtml + displayJobs.map(rawCardHtml).join("");
+    c.innerHTML = subFilterHtml + pageJobs.map(rawCardHtml).join("") + paginationBarHtml(totalPages);
   }
 
   document.getElementById('sortSelect')?.addEventListener('change', async (e) => {
@@ -1740,6 +1777,19 @@ document.addEventListener('click', (e) => {
   if (!el) return;
   _activeSubFilterRole = el.dataset.roleFilter;
   applyThreshold();
+});
+
+// Pagination event delegation
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('.page-btn');
+  if (!el) return;
+  const page = parseInt(el.dataset.page);
+  if (!page || page < 1) return;
+  _currentPage = page;
+  const tabBar = document.getElementById('tabBar');
+  const isTabs = tabBar && !tabBar.classList.contains('hidden');
+  const baseJobs = isTabs ? (activeTab === 'custom' ? customJobs : aiJobs) : allJobs;
+  renderAllJobs(_activeSubFilterRole === 'all' ? baseJobs : baseJobs.filter(j => j._matched_role === _activeSubFilterRole));
 });
 
 // ===== RESTORE LAST SEARCH ON PAGE LOAD =====
