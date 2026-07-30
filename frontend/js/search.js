@@ -989,6 +989,20 @@ document.getElementById("extractBtn").addEventListener("click", async () => {
   finally { btn.textContent = "✨ Auto-Extract Keywords"; btn.disabled = false; }
 });
 
+document.getElementById("refreshRolesBtn").addEventListener("click", async () => {
+  const resume = document.getElementById("resume").value.trim();
+  if (!resume) { setStatus("Paste or upload your resume first.", "red"); return; }
+  try {
+    const r = await fetch("/resume/keywords", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resume_text: resume }) });
+    const d = await r.json();
+    if (d.suggested_roles) {
+      renderSuggestedRoles(d.suggested_roles);
+      suggestedRoles = d.suggested_roles;
+    }
+    setStatus("Recommended roles refreshed.", "green");
+  } catch (e) { setStatus("Failed to refresh roles.", "red"); }
+});
+
 function renderKeywords(kws) {
   const c = document.getElementById("keywords");
   if (!kws.length) { c.innerHTML = '<span class="text-sm text-slate-400 italic">No keywords found</span>'; return; }
@@ -1368,7 +1382,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   if (userAISelected.length > 0) {
     _customRoleList = userCustomSelected;
     _aiRoleList = userAISelected;
-    rolesToScrape = [...new Set(allSelectedRoles)];
+    rolesToScrape = [...new Set([...userCustomSelected, ...userAISelected])];
   } else {
     _customRoleList = [...new Set([...allSelectedRoles, ...suggestedRoles])];
     _aiRoleList = suggestedRoles;
