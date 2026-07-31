@@ -116,6 +116,8 @@ function renderJobList() {
 
       <div class="flex items-center justify-between w-full sm:w-auto gap-3 sm:pl-5 sm:border-l sm:border-slate-100 shrink-0">
         <div class="flex items-center gap-2">
+          ${j.match_score > 0 ? `
+          <span class="inline-flex items-center justify-center min-w-[2.75rem] px-2.5 py-1 rounded-lg text-xs font-bold text-white shadow-sm bg-gradient-to-r ${j.match_score >= 70 ? "from-emerald-500 to-teal-600" : j.match_score >= 50 ? "from-amber-500 to-orange-500" : "from-slate-400 to-slate-600"}" title="AI match score against your resume">${Math.round(j.match_score)}%</span>` : ""}
           <div class="relative inline-block">
             <select class="status-select outline-none border-0 bg-transparent text-xs font-semibold cursor-pointer pr-4 appearance-none ${sc.text}" onchange="updateStatus(${j.id}, this.value)" title="Change status">
               <option value="saved" ${status === "saved" ? "selected" : ""}>Saved</option>

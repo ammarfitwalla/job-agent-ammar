@@ -18,6 +18,9 @@ function relativeDate(dateStr) {
 
 const SEARCH_CACHE_KEY = "jobagent_last_search";
 const SEARCH_CACHE_TTL = 30 * 60 * 1000;
+const RELEVANCE_LIMIT = 5;
+const RELEVANCE_CACHE_KEY = "jobagent_relevance_used";
+const RESUME_CACHE_KEY = "jobagent_resume_text";
 let pollTimer = null;
 let hasRawJobs = false;
 let allJobs = [];
@@ -36,6 +39,8 @@ let internshipMode = false;
 let activeFilters = { site: '', experience_level: '' };
 let currentSort = 'relevant';
 let _searchId = crypto.randomUUID();
+let _relevanceUsed = 0;
+let _relevanceScoring = new Set();
 
 let _selectedSites = [];
 let _searchStart = 0;
@@ -276,6 +281,7 @@ async function authRegister() {
     document.getElementById("authStep4").classList.add("hidden");
     document.getElementById("authStep3").classList.remove("hidden");
     window.updateProfileIcon();
+    refreshProfileResumeBtn();
     setTimeout(() => {
       closeAuthModal();
       _pendingAuthRefresh = true;
@@ -385,6 +391,7 @@ async function authVerifyCode() {
       window.setProfile({ email: d.user.email, name: d.user.name || d.user.email.split("@")[0], company: d.user.company, position: d.user.position || "", linkedin_url: d.user.linkedin_url || "", referral_credits: d.user.referral_credits || 0 });
       document.getElementById("authStep3").classList.remove("hidden");
       window.updateProfileIcon();
+      refreshProfileResumeBtn();
       setTimeout(() => closeAuthModal(), 500);
       _pendingAuthRefresh = true;
     } else {
@@ -432,9 +439,49 @@ function setupCodeInputs() {
     });
   });
 }
+async function refreshProfileResumeBtn() {
+  const btn = document.getElementById("useProfileResume");
+  if (!btn) return;
+  const profile = getProfile();
+  if (!profile) { btn.classList.add("hidden"); return; }
+  let hasResume = !!(profile.resume_filename || "");
+  if (!profile.resume_filename) {
+    try {
+      const r = await fetch(`/api/profile?email=${encodeURIComponent(profile.email)}`);
+      const d = await r.json();
+      if (d && d.email) { window.setProfile(d); hasResume = !!(d.resume_filename || ""); }
+    } catch {}
+  }
+  btn.classList.toggle("hidden", !hasResume);
+}
+
+async function useProfileResume() {
+  const profile = getProfile();
+  if (!profile || !profile.email) return;
+  const btn = document.getElementById("useProfileResume");
+  const lbl = document.getElementById("useProfileResumeLabel");
+  if (btn) { btn.disabled = true; if (lbl) lbl.textContent = "Loading..."; }
+  try {
+    const r = await fetch(`/api/profile/resume/text?email=${encodeURIComponent(profile.email)}`);
+    const d = await r.json();
+    if (!d.ok || !d.text) throw new Error(d.error || "No resume found");
+    const ta = document.getElementById("resume");
+    ta.value = d.text;
+    try { localStorage.setItem(RESUME_CACHE_KEY, d.text); } catch {}
+    clearSearchState();
+    document.getElementById("refreshRolesBtn").disabled = false;
+    updateSearchBtn();
+    document.getElementById("extractBtn").click();
+  } catch (e) {
+    setStatus("Could not load your profile resume: " + (e.message || e), "red");
+  } finally {
+    if (btn) { btn.disabled = false; if (lbl) lbl.textContent = "Use my profile resume"; }
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   setupCodeInputs();
-  window.fetchProfile().then(() => window.updateProfileIcon());
+  window.fetchProfile().then(() => { window.updateProfileIcon(); refreshProfileResumeBtn(); });
   loadStatsBar();
 });
 
@@ -475,6 +522,256 @@ async function toggleSaveJob(event) {
     await doSaveJob(job);
   }
 }
+
+function jobCardHtml(j) {
+  const siteName = siteFromUrl(j.url);
+  const isSaved = j._saved || false;
+  const scored = j.total_score != null;
+  const limitReached = _relevanceUsed >= RELEVANCE_LIMIT;
+
+  const expBadge = j.experience_level === "internship"
+    ? '<span class="text-xs bg-teal-50 text-teal-700 border border-teal-100 px-2.5 py-1 rounded-md font-medium flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0z"/></svg> Internship</span>'
+    : j.experience_level === "entry_level"
+      ? '<span class="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-md font-medium">Entry Level</span>'
+      : "";
+
+  const levelBadge = j.job_level && j.job_level !== "Not Applicable"
+    ? `<span class="text-xs bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-md font-medium">${j.job_level}</span>`
+    : "";
+
+  const companyHtml = j.company_url
+    ? `<span class="font-medium text-indigo-600 hover:underline cursor-pointer" onclick="event.preventDefault(); event.stopPropagation(); window.open('${j.company_url.replace(/'/g, "\\'")}', '_blank')">${j.company}</span>`
+    : `<span class="font-medium">${j.company}</span>`;
+
+  const tagsHtml = j.tags && j.tags.length
+    ? `<div class="mt-3 flex flex-wrap gap-1.5">${j.tags.slice(0, 6).map(t =>
+        `<span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">${typeof t === 'string' ? t : ''}</span>`
+      ).join("")}</div>`
+    : "";
+
+  const scorePill = scored
+    ? `<div class="shrink-0 text-right">
+        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">AI Match</span>
+        <div class="mt-1 inline-flex items-center justify-center min-w-[3.25rem] px-3 py-1.5 rounded-xl font-bold text-sm text-white shadow-sm bg-gradient-to-r ${j.total_score >= 70 ? 'from-emerald-500 to-teal-600' : j.total_score >= 50 ? 'from-amber-500 to-orange-500' : 'from-slate-400 to-slate-600'}">${Math.round(j.total_score)}%</div>
+      </div>`
+    : "";
+
+  const aiNoteHtml = j.reason
+    ? `<div class="mt-3 rounded-xl bg-gradient-to-r from-indigo-50 to-fuchsia-50 border border-indigo-100 px-3.5 py-3 flex items-start gap-2">
+        <span class="text-sm leading-none shrink-0 mt-0.5">✨</span>
+        <p class="text-xs leading-relaxed text-slate-700">${j.reason}</p>
+      </div>`
+    : "";
+
+  const relevanceBtn = scored
+    ? `<button class="shrink-0 text-xs font-semibold inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-emerald-50 text-emerald-700 border-emerald-200 opacity-60 cursor-default" disabled data-url="${j.url || ''}" title="Scored">
+        <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+        <span>Scored</span>
+      </button>`
+    : `<button data-relevance-btn="true" class="shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${limitReached ? 'bg-slate-50 text-slate-400 border-slate-200 opacity-50 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 active:bg-slate-200'}" data-url="${j.url || ''}" onclick="event.preventDefault(); event.stopPropagation(); checkRelevance(event)" title="Check relevance" ${limitReached ? 'disabled' : ''}>
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span>Check relevance</span>
+      </button>`;
+
+  return `
+    <a href="${j.url}" target="_blank" data-job-url="${j.url || ''}" class="block group relative bg-white rounded-2xl p-5 sm:p-6 border border-[#e8ecf1] hover:border-slate-300 hover:shadow-lg transition-all duration-300 outline-none focus:ring-2 focus:ring-indigo-500">
+      <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-2 mb-2">
+            <h3 class="text-sm sm:text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate pr-1">${j.title}</h3>
+            ${expBadge} ${levelBadge}
+          </div>
+          <p class="text-sm text-slate-600 flex items-center gap-2 truncate">
+            ${companyHtml}
+            <span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span>
+            <span>${j.location}</span>
+            ${j.salary ? `<span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span><span class="premium-badge bg-emerald-50 text-emerald-700 border-emerald-100 font-medium">${j.salary}</span>` : ""}
+            ${j.date_posted ? `<span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span><span class="text-xs text-slate-400">${relativeDate(j.date_posted)}</span>` : ""}
+          </p>
+        </div>
+        ${scorePill}
+      </div>
+
+      ${tagsHtml}
+
+      ${aiNoteHtml}
+
+      <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+        <div class="flex items-center gap-2.5 flex-1 pr-3 min-w-0">
+          <button class="bookmark-btn shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${isSaved ? 'bg-indigo-500 text-white border-indigo-500 hover:bg-indigo-600' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 active:bg-indigo-200'}" data-url="${j.url || ''}" onclick="toggleSaveJob(event)" title="Save job">
+            ${isSaved
+              ? '<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> Saved'
+              : '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg> Save'
+            }
+          </button>
+          ${relevanceBtn}
+          <button class="shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100 active:bg-violet-200 referral-btn" data-company="${j.company.replace(/"/g, '&quot;')}" onclick="event.preventDefault(); event.stopPropagation(); window._referralJobTitle='${(j.title||'').replace(/'/g, "\\'")}'; window._referralMatchScore=0; window._referralJobUrl='${(j.url||'').replace(/'/g, "\\'")}'; showReferralUsers('${j.company.replace(/'/g, "\\'")}')" title="See referrals at this company">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
+            <span class="referral-label">Referrals</span>
+          </button>
+        </div>
+        <div class="flex items-center gap-1.5 text-xs font-medium text-slate-400 shrink-0">
+          <span>via ${siteName}</span>
+          <svg class="w-4 h-4 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+        </div>
+      </div>
+    </a>`;
+}
+
+function loadRelevanceUsed() {
+  try {
+    const raw = localStorage.getItem(RELEVANCE_CACHE_KEY);
+    if (!raw) return 0;
+    const saved = JSON.parse(raw);
+    if (!saved || saved.searchId !== _searchId) return 0;
+    return Math.max(0, parseInt(saved.used, 10) || 0);
+  } catch { return 0; }
+}
+
+function saveRelevanceUsed() {
+  try {
+    localStorage.setItem(RELEVANCE_CACHE_KEY, JSON.stringify({ searchId: _searchId, used: _relevanceUsed }));
+  } catch {}
+}
+
+function resetRelevanceState() {
+  _relevanceUsed = 0;
+  _relevanceScoring.clear();
+  saveRelevanceUsed();
+}
+
+function relevanceButtonsDisabled() {
+  return _relevanceUsed >= RELEVANCE_LIMIT;
+}
+
+function disableAllRelevanceButtons() {
+  document.querySelectorAll('[data-relevance-btn="true"]').forEach(btn => {
+    btn.disabled = true;
+    btn.classList.remove("hover:bg-slate-100", "active:bg-slate-200");
+    btn.classList.add("opacity-50", "cursor-not-allowed");
+  });
+}
+
+function setRelevanceButtonLoading(btn, loading) {
+  if (!btn) return;
+  if (loading) {
+    btn.dataset.origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Scoring…';
+  } else if (btn.dataset.origHtml) {
+    btn.innerHTML = btn.dataset.origHtml;
+    btn.disabled = false;
+    delete btn.dataset.origHtml;
+  }
+}
+
+async function checkRelevance(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const url = event.currentTarget?.dataset?.url;
+  if (!url) return;
+
+  _relevanceUsed = loadRelevanceUsed();
+  if (_relevanceUsed >= RELEVANCE_LIMIT) {
+    disableAllRelevanceButtons();
+    window.showToast(`You've reached the limit of ${RELEVANCE_LIMIT} relevance checks for this search.`, "red");
+    return;
+  }
+
+  const job = allJobs.find(j => j.url === url) || customJobs.find(j => j.url === url) || aiJobs.find(j => j.url === url);
+  if (!job) return;
+  if (job.total_score != null) return;
+  if (_relevanceScoring.has(url)) return;
+
+  const btn = event.currentTarget;
+  const profile = window.getProfile();
+  setRelevanceButtonLoading(btn, true);
+  _relevanceScoring.add(url);
+
+  try {
+    const r = await fetch("/jobs/check-relevance", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        search_id: _searchId,
+        url: url,
+        resume_text: document.getElementById("resume")?.value.trim() || "",
+        email: (profile || {}).email || "",
+      }),
+    });
+    const d = await r.json();
+    if (!d.ok || !d.score) {
+      setRelevanceButtonLoading(btn, false);
+      _relevanceScoring.delete(url);
+      window.showToast(d.error || "Failed to score this job. Try again.", "red");
+      return;
+    }
+
+    job.total_score = d.score.total_score;
+    job.ai_score = d.score.ai_score;
+    job.keyword_score = d.score.keyword_score;
+    job.reason = d.score.reason || "";
+
+    _relevanceUsed += 1;
+    saveRelevanceUsed();
+    _relevanceScoring.delete(url);
+
+    rerenderJobCard(job);
+
+    window.showToast("✓ AI scoring completed for the job", "green");
+    if (_relevanceUsed >= RELEVANCE_LIMIT) {
+      disableAllRelevanceButtons();
+      window.showToast(`All ${RELEVANCE_LIMIT} relevance checks used.`, "blue");
+    }
+  } catch (e) {
+    setRelevanceButtonLoading(btn, false);
+    _relevanceScoring.delete(url);
+    window.showToast("Network error while scoring. Try again.", "red");
+  }
+}
+
+function rerenderJobCard(job) {
+  const url = job.url || "";
+  const card = document.querySelector(`[data-job-url="${CSS.escape(url)}"]`);
+  if (!card) return;
+  const rendered = jobCardHtml(job);
+  const container = document.createElement("div");
+  container.innerHTML = rendered;
+  const newCard = container.firstElementChild;
+  if (newCard) card.replaceWith(newCard);
+}
+
+window.ensureJobScored = async function (url) {
+  const job = allJobs.find(j => j.url === url) || customJobs.find(j => j.url === url) || aiJobs.find(j => j.url === url);
+  if (!job) return 0;
+  if (job.total_score != null) return job.total_score;
+  const profile = window.getProfile();
+  try {
+    const r = await fetch("/jobs/check-relevance", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        search_id: _searchId,
+        url: url,
+        resume_text: document.getElementById("resume")?.value.trim() || "",
+        email: (profile || {}).email || "",
+      }),
+    });
+    const d = await r.json();
+    if (!d.ok || !d.score) return 0;
+    job.total_score = d.score.total_score;
+    job.ai_score = d.score.ai_score;
+    job.keyword_score = d.score.keyword_score;
+    job.reason = d.score.reason || "";
+    rerenderJobCard(job);
+    return job.total_score;
+  } catch {
+    return 0;
+  }
+};
+
+window.getReferralJobDescription = function (url) {
+  const job = allJobs.find(j => j.url === url) || customJobs.find(j => j.url === url) || aiJobs.find(j => j.url === url);
+  return (job && job.description) || "";
+};
 
 async function doSaveJob(job) {
   const profile = window.getProfile();
@@ -597,6 +894,15 @@ function siteFromUrl(url) {
 // ===== INIT =====
 checkRawJobs();
 loadRoles();
+(() => {
+  try {
+    const saved = localStorage.getItem(RESUME_CACHE_KEY);
+    if (saved) {
+      document.getElementById("resume").value = saved;
+      document.getElementById("refreshRolesBtn").disabled = false;
+    }
+  } catch {}
+})();
 updateSearchBtn();
 setupLocationSearch();
 (async () => {
@@ -830,6 +1136,18 @@ function updateCountBadge(n) {
 
 function updateSearchBtn() {}
 
+function clearTargetRoles() {
+  selectedRoles.clear();
+  customRoles = [];
+  document.querySelectorAll(".role-cb").forEach(cb => { cb.checked = false; });
+  renderSelectedRoles();
+  updateRoleCount();
+  const sr = document.getElementById("suggestedRoles");
+  if (sr) { sr.innerHTML = ""; sr.classList.add("hidden"); }
+  const rsi = document.getElementById("roleSearchInput");
+  if (rsi) rsi.value = "";
+}
+
 function clearSearchState() {
   cancelActiveSearch();
   allJobs = [];
@@ -842,6 +1160,7 @@ function clearSearchState() {
   searchMode = 'current';
   _searchComplete = false;
   _searchId = crypto.randomUUID();
+  resetRelevanceState();
   _uploadedFilename = "";
   lastRenderedCount = 0;
   hasRawJobs = false;
@@ -934,6 +1253,7 @@ function renderActiveTab() {
 
 document.getElementById("resume").addEventListener("input", updateSearchBtn);
 document.getElementById("resume").addEventListener("input", () => {
+  try { localStorage.setItem(RESUME_CACHE_KEY, document.getElementById("resume").value); } catch {}
   if (document.getElementById("resume").value.trim()) clearSearchState();
 });
 
@@ -956,7 +1276,9 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
     const r = await fetch("/resume/upload", { method: "POST", body: form });
     const d = await r.json();
     document.getElementById("resume").value = d.text;
+    try { localStorage.setItem(RESUME_CACHE_KEY, d.text); } catch {}
     document.getElementById("refreshRolesBtn").disabled = false;
+    clearTargetRoles();
     clearSearchState();
     _uploadedFilename = d.filename;
     updateSearchBtn();
@@ -1425,6 +1747,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   document.getElementById("extractBtn").disabled = true;
 
   _searchId = crypto.randomUUID();
+  resetRelevanceState();
   _searchComplete = false;
   lastRenderedCount = 0;
   activeFilters = { site: '', experience_level: '' };
@@ -1579,7 +1902,11 @@ function pollAllScrapes() {
 // ===== RENDER ALL JOBS =====
 function renderAllJobs(jobs) {
   const c = document.getElementById("results");
+  _relevanceUsed = loadRelevanceUsed();
   let displayJobs = jobs || allJobs;
+  if (!internshipMode) {
+    displayJobs = displayJobs.filter(j => j.experience_level !== "entry_level");
+  }
   if (currentSort === 'recent') {
     displayJobs = [...displayJobs].sort((a, b) => {
       const da = a.date_posted || '';
@@ -1632,71 +1959,6 @@ function renderAllJobs(jobs) {
     </select></span>
   </div>`;
 
-  function rawCardHtml(j) {
-    const siteName = siteFromUrl(j.url);
-    const isSaved = j._saved || false;
-
-    const expBadge = j.experience_level === "internship"
-      ? '<span class="text-xs bg-teal-50 text-teal-700 border border-teal-100 px-2.5 py-1 rounded-md font-medium flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0z"/></svg> Internship</span>'
-      : j.experience_level === "entry_level"
-        ? '<span class="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-md font-medium">Entry Level</span>'
-        : "";
-
-    const levelBadge = j.job_level && j.job_level !== "Not Applicable"
-      ? `<span class="text-xs bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-md font-medium">${j.job_level}</span>`
-      : "";
-
-    const companyHtml = j.company_url
-      ? `<span class="font-medium text-indigo-600 hover:underline cursor-pointer" onclick="event.preventDefault(); event.stopPropagation(); window.open('${j.company_url.replace(/'/g, "\\'")}', '_blank')">${j.company}</span>`
-      : `<span class="font-medium">${j.company}</span>`;
-
-    const tagsHtml = j.tags && j.tags.length
-      ? `<div class="mt-3 flex flex-wrap gap-1.5">${j.tags.slice(0, 6).map(t =>
-          `<span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">${typeof t === 'string' ? t : ''}</span>`
-        ).join("")}</div>`
-      : "";
-
-    return `
-    <a href="${j.url}" target="_blank" class="block group relative bg-white rounded-2xl p-5 sm:p-6 border border-[#e8ecf1] hover:border-slate-300 hover:shadow-lg transition-all duration-300 outline-none focus:ring-2 focus:ring-indigo-500">
-      <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-        <div class="flex-1 min-w-0">
-          <div class="flex flex-wrap items-center gap-2 mb-2">
-            <h3 class="text-sm sm:text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate pr-1">${j.title}</h3>
-            ${expBadge} ${levelBadge}
-          </div>
-          <p class="text-sm text-slate-600 flex items-center gap-2 truncate">
-            ${companyHtml}
-            <span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span>
-            <span>${j.location}</span>
-            ${j.salary ? `<span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span><span class="premium-badge bg-emerald-50 text-emerald-700 border-emerald-100 font-medium">${j.salary}</span>` : ""}
-            ${j.date_posted ? `<span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span><span class="text-xs text-slate-400">${relativeDate(j.date_posted)}</span>` : ""}
-          </p>
-        </div>
-      </div>
-
-      ${tagsHtml}
-
-      <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
-        <div class="flex items-center gap-2.5 flex-1 pr-3 min-w-0">
-          <button class="bookmark-btn shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${isSaved ? 'bg-indigo-500 text-white border-indigo-500 hover:bg-indigo-600' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 active:bg-indigo-200'}" data-url="${j.url || ''}" onclick="toggleSaveJob(event)" title="Save job">
-            ${isSaved
-              ? '<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> Saved'
-              : '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg> Save'
-            }
-          </button>
-          <button class="shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100 active:bg-violet-200 referral-btn" data-company="${j.company.replace(/"/g, '&quot;')}" onclick="event.preventDefault(); event.stopPropagation(); window._referralJobTitle='${(j.title||'').replace(/'/g, "\\'")}'; window._referralMatchScore=0; window._referralJobUrl='${(j.url||'').replace(/'/g, "\\'")}'; showReferralUsers('${j.company.replace(/'/g, "\\'")}')" title="See referrals at this company">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
-            <span class="referral-label">Referrals</span>
-          </button>
-        </div>
-        <div class="flex items-center gap-1.5 text-xs font-medium text-slate-400 shrink-0">
-          <span>via ${siteName}</span>
-          <svg class="w-4 h-4 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
-        </div>
-      </div>
-    </a>`;
-  }
-
   const totalPages = Math.ceil(displayJobs.length / _pageSize);
   const start = (_currentPage - 1) * _pageSize;
   const pageJobs = displayJobs.slice(start, start + _pageSize);
@@ -1716,7 +1978,7 @@ function renderAllJobs(jobs) {
   }
 
   if (!profile && _currentPage > 1) {
-    const blurred = pageJobs.map(rawCardHtml).join("");
+    const blurred = pageJobs.map(jobCardHtml).join("");
     c.innerHTML = subFilterHtml +
       `<div class="relative mt-2">
         <div class="blur-sm pointer-events-none select-none">${blurred}</div>
@@ -1730,7 +1992,7 @@ function renderAllJobs(jobs) {
         </div>
       </div>` + paginationBarHtml(totalPages);
   } else {
-    c.innerHTML = subFilterHtml + pageJobs.map(rawCardHtml).join("") + paginationBarHtml(totalPages);
+    c.innerHTML = subFilterHtml + pageJobs.map(jobCardHtml).join("") + paginationBarHtml(totalPages);
   }
 
   document.getElementById('sortSelect')?.addEventListener('change', async (e) => {
@@ -1809,6 +2071,8 @@ document.addEventListener('click', (e) => {
 
       const sid = searchIds[0];
       if (!sid) return;
+      _searchId = sid;
+      _relevanceUsed = loadRelevanceUsed();
 
       const r = await fetch(`/scrape/status?search_id=${sid}`);
       const d = await r.json();
@@ -1875,8 +2139,11 @@ window.selectCompany = selectCompany;
 window.authRegister = authRegister;
 window.authSendCode = authSendCode;
 window.authVerifyCode = authVerifyCode;
+window.useProfileResume = useProfileResume;
+window.refreshProfileResumeBtn = refreshProfileResumeBtn;
 window.authResendCode = authResendCode;
 window.toggleSaveJob = toggleSaveJob;
+window.checkRelevance = checkRelevance;
 window.switchTab = switchTab;
 window.addRoleFromSearch = addRoleFromSearch;
 window.onRoleToggle = onRoleToggle;

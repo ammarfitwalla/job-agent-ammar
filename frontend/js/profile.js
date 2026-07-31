@@ -90,6 +90,7 @@ function renderProfile(data) {
   }
 
   const resumeSection = document.getElementById("profileResumeSection");
+  const resumeMissing = document.getElementById("profileResumeMissing");
   const resumeName = document.getElementById("profileResumeName");
   const resumeDownload = document.getElementById("profileResumeDownload");
   const resumeFilename = data.resume_filename || "";
@@ -97,8 +98,10 @@ function renderProfile(data) {
     resumeName.textContent = resumeFilename;
     resumeDownload.href = `/api/profile/resume?email=${encodeURIComponent(data.email)}`;
     resumeSection.classList.remove("hidden");
+    if (resumeMissing) resumeMissing.classList.add("hidden");
   } else if (resumeSection) {
     resumeSection.classList.add("hidden");
+    if (resumeMissing) resumeMissing.classList.remove("hidden");
   }
 
   window.renderStatusTabs(data.status_counts || {});
@@ -263,11 +266,13 @@ async function saveProfile() {
           const rd = await rr.json();
           if (rd.ok && rd.filename) {
             const resumeSection = document.getElementById("profileResumeSection");
+            const resumeMissing = document.getElementById("profileResumeMissing");
             const resumeName = document.getElementById("profileResumeName");
             const resumeDownload = document.getElementById("profileResumeDownload");
             if (resumeName) resumeName.textContent = rd.filename;
             if (resumeDownload) resumeDownload.href = `/api/profile/resume?email=${encodeURIComponent(profile.email)}`;
             if (resumeSection) resumeSection.classList.remove("hidden");
+            if (resumeMissing) resumeMissing.classList.add("hidden");
             const statusEl = document.getElementById("profileResumeEditStatus");
             if (statusEl) statusEl.textContent = "Uploaded: " + rd.filename;
           }

@@ -1,4 +1,4 @@
-import { getProfile, showToast, htmlEscape, formatDate } from "./utils.js";
+import { getProfile, setProfile, showToast, htmlEscape, formatDate } from "./utils.js";
 import { _MONTHLY_LIMIT, REFERRAL_COOLDOWN } from "./constants.js";
 
 // Referral Modal state
@@ -112,7 +112,7 @@ async function showReferralUsers(company) {
   } else {
     remainingEl.classList.add("hidden");
   }
-  if (users.length === 0 && !profile) {
+  if (!profile) {
     list.innerHTML = `
       <div class="space-y-2 opacity-50 pointer-events-none select-none">
         ${[1, 2, 3].map(i => `
@@ -185,20 +185,90 @@ async function showReferralUsers(company) {
   modal.classList.add("flex");
 }
 
-function askReferral(btn, toEmail, toName) {
+function getResumeText() {
+  const el = document.getElementById("resume");
+  if (el && el.value && el.value.trim()) return el.value.trim();
+  try {
+    const cached = localStorage.getItem("jobagent_resume_text");
+    if (cached && cached.trim()) return cached.trim();
+  } catch {}
+  return "";
+}
+
+async function scoreReferralJob() {
+  const profile = getProfile();
+  const url = window._referralJobUrl || "";
+  const title = window._referralJobTitle || "";
+  const company = _referralCompany;
+  if (typeof window.ensureJobScored === "function") {
+    try {
+      const s = await window.ensureJobScored(url) || 0;
+      if (s > 0) return s;
+    } catch {}
+  }
+  const description = typeof window.getReferralJobDescription === "function"
+    ? (window.getReferralJobDescription(url) || "")
+    : (window._referralJobDescription || "");
+  try {
+    const r = await fetch("/api/referrals/score", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from_email: (profile || {}).email || "",
+        job_url: url,
+        job_title: title,
+        company: company,
+        job_description: description,
+        resume_text: getResumeText(),
+      }),
+    });
+    const d = await r.json();
+    return d.ok ? (d.score || 0) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function askReferral(btn, toEmail, toName) {
   const profile = getProfile();
   if (!profile) { closeReferralModal(); window.showAuthModal(); return; }
   if (toEmail === profile.email) {
     showToast("You can't refer yourself");
     return;
   }
+
+  let hasDefaultResume = !!(profile.resume_filename || "");
+  if (!profile.resume_filename) {
+    try {
+      const r = await fetch(`/api/profile?email=${encodeURIComponent(profile.email)}`);
+      const d = await r.json();
+      if (d && d.email) {
+        setProfile(d);
+        hasDefaultResume = !!(d.resume_filename || "");
+      }
+    } catch {}
+  }
+  if (!hasDefaultResume && (isProfilePage() || !getResumeText())) {
+    promptAddResume();
+    return;
+  }
+
   const card = btn.closest(".flex.items-center.justify-between");
   if (!card) return;
   const existing = card.querySelector(".referral-msg-box");
   if (existing) { existing.remove(); return; }
+
+  btn.disabled = true;
+  const origText = btn.textContent;
+  btn.textContent = "Scoring job...";
+  const score = await scoreReferralJob();
+  window._referralMatchScore = score;
+  btn.disabled = false;
+  btn.textContent = origText;
+
   const msgBox = document.createElement("div");
   msgBox.className = "referral-msg-box w-full mt-2 pt-2 border-t border-slate-100";
   msgBox.innerHTML = `
+    ${score > 0 ? `<div class="text-xs font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-1.5 mb-2">✨ AI Match: ${Math.round(score)}% against your resume</div>` : ""}
     <textarea class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:bg-white focus:border-indigo-300 resize-none transition-colors" rows="2" placeholder="Add a message (optional)..." maxlength="500"></textarea>
     <div class="flex gap-2 mt-2">
       <button class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 rounded-lg text-xs font-semibold transition-colors referral-send-btn">Send Request</button>
@@ -213,8 +283,107 @@ function askReferral(btn, toEmail, toName) {
   msgBox.querySelector("textarea").focus();
 }
 
-function sendReferralRequest(btn, toEmail, toName, message, msgBox) {
+let _resumePromptResolve = null;
+
+function closeResumePromptModal() {
+  const modal = document.getElementById("resumePromptModal");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+  const r = _resumePromptResolve;
+  _resumePromptResolve = null;
+  if (r) r(false);
+}
+
+function setDefaultResumeChoice(choice) {
+  const modal = document.getElementById("resumePromptModal");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+  const r = _resumePromptResolve;
+  _resumePromptResolve = null;
+  if (r) r(choice);
+}
+
+function openResumePromptModal() {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("resumePromptModal");
+    _resumePromptResolve = resolve;
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  });
+}
+
+async function uploadDefaultResume(resumeText) {
   const profile = getProfile();
+  if (!profile || !resumeText) return false;
+  const file = new File([resumeText], "resume.txt", { type: "text/plain" });
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const r = await fetch(`/api/profile/resume?email=${encodeURIComponent(profile.email)}`, { method: "POST", body: fd });
+    const d = await r.json();
+    if (d.ok && d.filename) {
+      const p = getProfile();
+      setProfile({ ...p, resume_filename: d.filename });
+      if (typeof window.refreshProfileResumeBtn === "function") window.refreshProfileResumeBtn();
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function isProfilePage() {
+  return !!document.getElementById("editResumeFile");
+}
+
+function promptAddResume() {
+  closeReferralModal();
+  if (isProfilePage()) {
+    showToast("Please edit your profile and upload a resume before sending a referral request.");
+  } else {
+    showToast("Please upload a resume on your Profile page before sending a referral request.");
+  }
+}
+
+async function sendReferralRequest(btn, toEmail, toName, message, msgBox) {
+  const profile = getProfile();
+
+  let hasDefaultResume = true;
+  try {
+    const r = await fetch(`/api/profile?email=${encodeURIComponent(profile.email)}`);
+    const d = await r.json();
+    if (d && d.email) {
+      setProfile(d);
+      hasDefaultResume = !!(d.resume_filename || "");
+    }
+  } catch {
+    hasDefaultResume = true;
+  }
+
+  if (!hasDefaultResume) {
+    const resumeText = getResumeText();
+    if (isProfilePage() || !resumeText) {
+      promptAddResume();
+      return;
+    }
+    const useIt = await openResumePromptModal();
+    if (!useIt) {
+      promptAddResume();
+      return;
+    }
+    const uploaded = await uploadDefaultResume(resumeText);
+    if (!uploaded) {
+      showToast("Failed to set your default resume. Please try again.");
+      return;
+    }
+    showToast("Default resume set");
+  }
+
   btn.disabled = true;
   btn.textContent = "Sending...";
   fetch("/api/referrals/request", {
@@ -227,6 +396,10 @@ function sendReferralRequest(btn, toEmail, toName, message, msgBox) {
       company: _referralCompany,
       match_score: window._referralMatchScore || 0,
       message: message,
+      job_description: typeof window.getReferralJobDescription === "function"
+        ? (window.getReferralJobDescription(window._referralJobUrl || "") || "")
+        : (window._referralJobDescription || ""),
+      resume_text: getResumeText(),
     }),
   }).then(r => r.json()).then(d => {
     if (d.ok) {
@@ -237,6 +410,9 @@ function sendReferralRequest(btn, toEmail, toName, message, msgBox) {
       btn.className = "text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors";
       if (msgBox) msgBox.remove();
       refreshReferralRemaining();
+      if (typeof window.loadSavedJobs === "function") {
+        window.loadSavedJobs().catch(() => {});
+      }
     } else {
       showToast(d.error || "Failed to send request");
       btn.disabled = false;
@@ -299,6 +475,14 @@ async function loadReferrals() {
   const profile = getProfile();
   if (!profile) return;
   const el = document.getElementById("referralListContainer");
+  const setCount = (id, n) => { const e = document.getElementById(id); if (e) e.textContent = n; };
+
+  el.innerHTML = `
+    <div class="flex flex-col items-center justify-center py-12 gap-3 text-slate-400">
+      <svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+      <p class="text-sm">Loading referral requests...</p>
+    </div>`;
+
   try {
     const [inc, out] = await Promise.all([
       fetch(`/api/referrals/incoming?email=${encodeURIComponent(profile.email)}`, { cache: "no-cache" }).then(r => r.json()),
@@ -308,7 +492,6 @@ async function loadReferrals() {
     const outReqs = (out.requests || []).map(r => ({ ...r, _direction: "to" }));
     const allReqs = [...incReqs, ...outReqs];
 
-    const setCount = (id, n) => { const e = document.getElementById(id); if (e) e.textContent = n; };
     setCount("incomingCount", allReqs.filter(r => r._direction === "from" && r.status === "pending").length);
     setCount("outgoingCount", allReqs.filter(r => r._direction === "to" && r.status === "pending").length);
     setCount("acceptedCount", allReqs.filter(r => r.status === "accepted").length);
@@ -329,12 +512,21 @@ async function loadReferrals() {
     const statEl = document.getElementById("statReferrals");
     if (statEl) statEl.textContent = reqs.length;
 
+    const emptyStates = {
+      incoming: ["No pending requests", "When someone asks you for a referral, it will show up here."],
+      outgoing: ["No sent requests", "Requests you send to people at a company will appear here."],
+      accepted: ["No accepted referrals", "Accepted referral requests will appear here."],
+      declined: ["No declined referrals", "Declined referral requests will appear here."],
+    };
+    const es = emptyStates[_referralTab] || emptyStates.incoming;
+
     if (reqs.length === 0) {
       el.innerHTML = `<div class="text-center py-12 px-4 bg-white rounded-2xl border border-slate-200 border-dashed">
         <div class="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
           <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
         </div>
-        <p class="text-sm font-medium text-slate-500">No ${_referralTab} requests</p>
+        <p class="text-sm font-medium text-slate-600">${es[0]}</p>
+        <p class="text-xs text-slate-400 mt-1">${es[1]}</p>
       </div>`;
       return;
     }
@@ -346,23 +538,41 @@ async function loadReferrals() {
       "bg-pink-100 text-pink-600",
     ];
 
+    const STATUS_META = {
+      pending: { label: "Pending", cls: "bg-amber-50 text-amber-700" },
+      accepted: { label: "Accepted", cls: "bg-emerald-50 text-emerald-700" },
+      declined: { label: "Declined", cls: "bg-red-50 text-red-700" },
+      cancelled: { label: "Withdrawn", cls: "bg-slate-100 text-slate-600" },
+    };
+
+    const scorePillCls = s => s >= 70 ? "from-emerald-500 to-teal-600" : s >= 50 ? "from-amber-500 to-orange-500" : "from-slate-400 to-slate-600";
+
+    const cooldownNote = (r) => {
+      if (!r.accepted_at) return "";
+      const elapsed = (Date.now() - new Date(r.accepted_at).getTime()) / 1000;
+      if (elapsed >= REFERRAL_COOLDOWN) return "";
+      const left = REFERRAL_COOLDOWN - elapsed;
+      const h = Math.floor(left / 3600);
+      const m = Math.floor((left % 3600) / 60);
+      return `<p class="text-xs text-slate-400 font-medium inline-flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Ready to confirm in ${h}h ${m}m
+      </p>`;
+    };
+
     const buildCard = (r) => {
       const isIncoming = _referralTab === "incoming" || r._direction === "from";
       const name = isIncoming ? (r.from_name || "Unknown") : (r.to_name || "Unknown");
       const nc = nameColors[name.length % nameColors.length];
-
-      const statusColors = {
-        pending: "bg-amber-50 text-amber-700",
-        accepted: "bg-emerald-50 text-emerald-700",
-        declined: "bg-red-50 text-red-700",
-      };
-      const sc = statusColors[r.status] || "bg-slate-100 text-slate-600";
+      const sm = STATUS_META[r.status] || { label: r.status, cls: "bg-slate-100 text-slate-600" };
+      const dirCls = isIncoming ? "bg-indigo-50 text-indigo-600" : "bg-slate-100 text-slate-600";
+      const dirLabel = isIncoming ? "Received" : "Sent";
 
       let actions = "";
       if (_referralTab === "incoming" && r.status === "pending") {
         actions = `
-          <div class="flex gap-2">
-            <button class="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors" onclick="acceptReferral(${r.id})">
+          <div class="flex items-center gap-2">
+            <button class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 rounded-lg transition-colors shadow-sm" onclick="acceptReferral(${r.id})">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
               Accept
             </button>
@@ -375,28 +585,27 @@ async function loadReferrals() {
       if (_referralTab === "outgoing" && r.status === "pending") {
         actions = `<button class="inline-flex items-center gap-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors" onclick="withdrawReferral(${r.id})">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-          Withdraw
+          Withdraw request
         </button>`;
       } else if (_referralTab === "outgoing" && r.status === "cancelled") {
         const toEmail = r.to_email.replace(/'/g, "\\'");
         const toName = r.to_name.replace(/'/g, "\\'");
-        actions = `<button class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors" onclick="askReferral(this, '${toEmail}', '${toName}')">
+        const jobUrl = (r.job_url || "").replace(/'/g, "\\'");
+        const jobTitle = (r.job_title || "").replace(/'/g, "\\'");
+        const jobCompany = (r.company || "").replace(/'/g, "\\'");
+        actions = `<button class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors" onclick="window._referralJobUrl='${jobUrl}'; window._referralJobTitle='${jobTitle}'; window._referralMatchScore=0; window._referralJobDescription=''; askReferral(this, '${toEmail}', '${toName}')">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
-          Ask for Referral
+          Ask again
         </button>`;
+        _referralCompany = r.company || "";
       }
       if (_referralTab === "accepted" && isIncoming) {
         if (r.credit_awarded) {
-          actions = `<p class="text-xs text-emerald-600 font-semibold inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>Referred — 10 credits earned</p>`;
+          actions = `<p class="text-xs text-emerald-600 font-semibold inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>Referred — +10 credits earned</p>`;
         } else if (r.receiver_confirmed) {
-          actions = `<p class="text-xs text-slate-500 font-medium">You've confirmed. Waiting for sender...</p>`;
-        } else if (r.accepted_at && (Date.now() - new Date(r.accepted_at).getTime()) / 1000 < REFERRAL_COOLDOWN) {
-          const left = REFERRAL_COOLDOWN - ((Date.now() - new Date(r.accepted_at).getTime()) / 1000);
-          const h = Math.floor(left / 3600);
-          const m = Math.floor((left % 3600) / 60);
-          actions = `<p class="text-xs text-slate-400 font-medium">Ready to confirm in ${h}h ${m}m</p>`;
+          actions = `<p class="text-xs text-slate-500 font-medium inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>You've confirmed. Waiting for the sender to confirm...</p>`;
         } else {
-          actions = `<button class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors" onclick="completeReferral(${r.id})">
+          actions = cooldownNote(r) || `<button class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3.5 py-2 rounded-lg transition-colors shadow-sm" onclick="completeReferral(${r.id})">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
             Mark as Referred (+10 credits)
           </button>`;
@@ -404,63 +613,76 @@ async function loadReferrals() {
       }
       if (_referralTab === "accepted" && !isIncoming) {
         if (r.credit_awarded) {
-          actions = `<p class="text-xs text-emerald-600 font-semibold inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>Referred — 10 credits earned</p>`;
+          actions = `<p class="text-xs text-emerald-600 font-semibold inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>Referred — +10 credits earned</p>`;
         } else if (r.sender_confirmed) {
-          actions = `<p class="text-xs text-slate-500 font-medium">You've confirmed. Waiting for receiver...</p>`;
-        } else if (r.accepted_at && (Date.now() - new Date(r.accepted_at).getTime()) / 1000 < REFERRAL_COOLDOWN) {
-          const left = REFERRAL_COOLDOWN - ((Date.now() - new Date(r.accepted_at).getTime()) / 1000);
-          const h = Math.floor(left / 3600);
-          const m = Math.floor((left % 3600) / 60);
-          actions = `<p class="text-xs text-slate-400 font-medium">Ready to confirm in ${h}h ${m}m</p>`;
+          actions = `<p class="text-xs text-slate-500 font-medium inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>You've confirmed. Waiting for the receiver to confirm...</p>`;
         } else {
-          actions = `<button class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors" onclick="senderConfirmReferral(${r.id})">
+          actions = cooldownNote(r) || `<button class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3.5 py-2 rounded-lg transition-colors shadow-sm" onclick="senderConfirmReferral(${r.id})">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
             Confirm Referred
           </button>`;
         }
       }
 
-      const createdLabel = r.created_at ? `<span class="text-xs text-slate-400">${formatDate(r.created_at)}</span>` : "";
-      const updatedLabel = r.updated_at && r.updated_at !== r.created_at ? `<span class="text-xs text-slate-400">· ${r.status === "cancelled" ? "Withdrawn" : r.status} ${formatDate(r.updated_at)}</span>` : "";
+      const dateLabel = r.status === "cancelled" ? "Withdrawn" : r.status === "pending" ? "Asked" : r.status === "accepted" ? "Accepted" : "Declined";
+      const dateStr = r.updated_at || r.created_at;
+
+      const scorePill = r.match_score > 0 ? `
+        <span class="inline-flex items-center justify-center min-w-[2.75rem] px-2.5 py-1 rounded-lg text-xs font-bold text-white shadow-sm bg-gradient-to-r ${scorePillCls(r.match_score)}">${Math.round(r.match_score)}%</span>` : "";
+
+      const contactBox = r.status === "accepted" ? `
+        <div class="mt-3 rounded-xl bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-100 p-3 space-y-2">
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-500">${isIncoming ? "Contact unlocked" : "Receiver info"}</span>
+            <svg class="w-3.5 h-3.5 text-indigo-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
+          </div>
+          ${isIncoming ? `
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-sm font-medium text-slate-700">${htmlEscape(r.from_email)}</span>
+              <button class="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 bg-white border border-indigo-200 hover:bg-indigo-50 px-2 py-1 rounded-md transition-colors" onclick="copyRefEmail(this, '${r.from_email.replace(/'/g, "\\'")}')">Copy</button>
+            </div>
+            ${r.from_company || r.from_position ? `<p class="text-xs text-slate-500">${[r.from_position, r.from_company].filter(Boolean).join(" at ")}</p>` : ""}
+            <div class="flex flex-wrap gap-3 pt-1">
+              ${r.from_linkedin_url ? `<a href="${htmlEscape(r.from_linkedin_url)}" target="_blank" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>LinkedIn</a>` : ""}
+              ${r.from_resume_filename ? `<a href="/api/profile/resume?email=${encodeURIComponent(r.from_email)}" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Resume</a>` : ""}
+            </div>` : `
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-sm font-medium text-slate-700">${htmlEscape(r.to_email)}</span>
+              <button class="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 bg-white border border-indigo-200 hover:bg-indigo-50 px-2 py-1 rounded-md transition-colors" onclick="copyRefEmail(this, '${r.to_email.replace(/'/g, "\\'")}')">Copy</button>
+            </div>
+            ${r.to_linkedin_url ? `<div class="flex flex-wrap gap-3 pt-1"><a href="${htmlEscape(r.to_linkedin_url)}" target="_blank" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>LinkedIn</a></div>` : ""}` }
+        </div>` : "";
 
       return `
-      <div class="bg-white border border-slate-200 rounded-2xl p-4 hover:border-indigo-300 hover:shadow-md transition-all">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 hover:border-indigo-300 hover:shadow-md transition-all">
         <div class="flex items-start justify-between gap-3">
-          <div class="flex items-start gap-3 min-w-0 flex-1">
+          <div class="flex items-center gap-3 min-w-0 flex-1">
             <div class="w-10 h-10 rounded-xl ${nc} flex items-center justify-center font-bold text-lg shrink-0">${htmlEscape(name.charAt(0).toUpperCase())}</div>
             <div class="min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="font-semibold text-slate-900 text-sm">${htmlEscape(name)}</span>
-                <span class="text-xs font-semibold px-2 py-0.5 rounded-lg ${sc}">${r.status}</span>
+                <span class="text-[11px] font-semibold px-2 py-0.5 rounded-lg ${sm.cls}">${sm.label}</span>
+                <span class="text-[11px] font-semibold px-2 py-0.5 rounded-lg ${dirCls}">${dirLabel}</span>
               </div>
-              <div class="mt-1.5 space-y-1">
-                <p class="text-sm font-semibold text-slate-900">${htmlEscape(r.job_title || "Job at " + r.company)}</p>
-                ${r.job_url ? `<a href="${htmlEscape(r.job_url)}" target="_blank" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>View Job Posting</a>` : ""}
-              </div>
-              ${r.match_score ? `<p class="text-xs text-indigo-600 font-medium mt-1">Match score: ${r.match_score}/100</p>` : ""}
-              ${r.message ? `<p class="text-xs text-slate-500 mt-1 italic">${htmlEscape(r.message)}</p>` : ""}
-              <div class="flex items-center gap-1 mt-1">${createdLabel}${updatedLabel}</div>
-              ${r.status === "accepted" && isIncoming ? `
-              <div class="mt-2 p-3 bg-indigo-50 border border-indigo-100 rounded-xl space-y-1.5">
-                <p class="text-xs font-semibold text-indigo-700">Contact revealed</p>
-                <p class="text-xs text-slate-600">${htmlEscape(r.from_email)}</p>
-                ${r.from_company || r.from_position ? `<p class="text-xs text-slate-500">${[r.from_position, r.from_company].filter(Boolean).join(" at ")}</p>` : ""}
-                <div class="flex flex-wrap gap-3">
-                  ${r.from_linkedin_url ? `<a href="${htmlEscape(r.from_linkedin_url)}" target="_blank" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>LinkedIn</a>` : ""}
-                  ${r.from_resume_filename ? `<a href="/api/profile/resume?email=${encodeURIComponent(r.from_email)}" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Resume</a>` : ""}
+              <div class="mt-2 space-y-1.5">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <p class="text-sm font-semibold text-slate-900">${htmlEscape(r.job_title || "Job at " + r.company)}</p>
+                  ${scorePill}
                 </div>
-              </div>` : ""}
-              ${r.status === "accepted" && !isIncoming ? `
-              <div class="mt-2 p-3 bg-indigo-50 border border-indigo-100 rounded-xl space-y-1.5">
-                <p class="text-xs font-semibold text-indigo-700">Receiver info</p>
-                <p class="text-xs text-slate-600">${htmlEscape(r.to_email)}</p>
-                ${r.to_linkedin_url ? `<a href="${htmlEscape(r.to_linkedin_url)}" target="_blank" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>LinkedIn</a>` : ""}
-              </div>` : ""}
+                <div class="flex items-center gap-2 flex-wrap text-xs">
+                  ${r.company ? `<span class="text-slate-500">${htmlEscape(r.company)}</span>` : ""}
+                  ${r.job_url ? `<a href="${htmlEscape(r.job_url)}" target="_blank" class="text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>View Job Posting</a>` : ""}
+                </div>
+              </div>
+              ${r.message ? `<p class="mt-2 rounded-lg bg-indigo-50/70 border border-indigo-100 px-3 py-2 text-xs text-slate-600">${htmlEscape(r.message)}</p>` : ""}
+              ${contactBox}
             </div>
           </div>
-          ${r.match_score ? `<div class="w-9 h-9 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-600 shrink-0">${r.match_score}</div>` : ""}
+          <div class="flex flex-col items-end gap-2 shrink-0">
+            <span class="text-[11px] text-slate-400 whitespace-nowrap">${dateLabel} ${dateStr ? formatDate(dateStr) : ""}</span>
+          </div>
         </div>
-        <div class="mt-3">${actions}</div>
+        ${actions ? `<div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">${actions}</div>` : ""}
       </div>`;
     };
 
@@ -469,14 +691,12 @@ async function loadReferrals() {
       const sent = reqs.filter(r => r._direction === "to");
       const parts = [];
       if (received.length) {
-        parts.push(`<h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Received</h4>`);
+        parts.push(`<h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2"><span class="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400"></span>Received</h4>`);
         parts.push(received.map(buildCard).join(""));
       }
       if (sent.length) {
-        if (received.length) {
-          parts.push(`<div class="mt-6 pt-4 border-t border-slate-100"></div>`);
-        }
-        parts.push(`<h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Sent</h4>`);
+        if (received.length) parts.push(`<div class="mt-6 pt-4 border-t border-slate-100"></div>`);
+        parts.push(`<h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2"><span class="inline-block w-1.5 h-1.5 rounded-full bg-slate-300"></span>Sent</h4>`);
         parts.push(sent.map(buildCard).join(""));
       }
       el.innerHTML = parts.join("");
@@ -576,6 +796,25 @@ async function senderConfirmReferral(id) {
   }
 }
 
+function copyRefEmail(btn, email) {
+  if (!email) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(email).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    }).catch(() => {
+      const orig = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    });
+  } else {
+    const orig = btn.textContent;
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  }
+}
+
 async function withdrawReferral(id) {
   const profile = getProfile();
   if (!profile) return;
@@ -600,6 +839,8 @@ async function withdrawReferral(id) {
 }
 
 window.closeReferralModal = closeReferralModal;
+window.closeResumePromptModal = closeResumePromptModal;
+window.setDefaultResumeChoice = setDefaultResumeChoice;
 window.refreshReferralRemaining = refreshReferralRemaining;
 window.showReferralUsers = showReferralUsers;
 window.askReferral = askReferral;
@@ -611,6 +852,7 @@ window.declineReferral = declineReferral;
 window.completeReferral = completeReferral;
 window.senderConfirmReferral = senderConfirmReferral;
 window.withdrawReferral = withdrawReferral;
+window.copyRefEmail = copyRefEmail;
 window.loadCompanyUserCounts = loadCompanyUserCounts;
 window.refreshCompanyUser = refreshCompanyUser;
 window.checkReferralNotifications = checkReferralNotifications;
