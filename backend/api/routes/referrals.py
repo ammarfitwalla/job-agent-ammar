@@ -1,3 +1,6 @@
+import hashlib
+import os
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
@@ -8,12 +11,75 @@ from db import (
     create_referral_request, get_incoming_referrals, get_outgoing_referrals,
     update_referral_status, get_referral_request, get_user, confirm_referral,
     get_pending_referral, get_monthly_sent_count,
+    get_referral_score, upsert_referral_score,
 )
 from utils.rate_limiter import check_rate_limit
 
 _MONTHLY_LIMIT = 5
 
 router = APIRouter(prefix="/api/referrals", tags=["referrals"])
+
+_RESUME_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
+
+
+def _resolve_resume_text(email: str, resume_text: str) -> str:
+    """Prefer the resume text sent by the frontend; fall back to the user's stored resume file."""
+    if resume_text and resume_text.strip():
+        return resume_text.strip()
+    try:
+        user = get_user(email)
+        fname = (user or {}).get("resume_filename") or ""
+        if fname:
+            filepath = os.path.join(_RESUME_DIR, fname)
+            if os.path.isfile(filepath):
+                from api.routes.resume import _extract_text
+                text = _extract_text(filepath)
+                if text and text.strip():
+                    return text.strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _score_referral_job(job_title: str, company: str, job_description: str, resume_text: str) -> int:
+    """AI score (0-100) of the job against the sender's resume. Returns 0 if it can't be scored."""
+    if not resume_text or not job_title:
+        return 0
+    try:
+        from llm.llm_client import LLMClient
+        from llm.prompts import relevance_prompt
+        from utils.json_parser import extract_json
+        prompt = relevance_prompt(job_title, job_description or company or "", tags=None, resume=resume_text)
+        for _ in range(2):
+            response = LLMClient.chat(prompt, max_tokens=800)
+            parsed = extract_json(response)
+            if isinstance(parsed, dict) and isinstance(parsed.get("score"), int):
+                return max(0, min(100, parsed["score"]))
+    except Exception:
+        pass
+    return 0
+
+
+def _resume_hash(text: str) -> str:
+    return hashlib.md5(text.encode("utf-8", errors="replace")).hexdigest()
+
+
+def _get_or_score_referral_job(from_email: str, job_url: str, job_title: str, company: str,
+                               job_description: str, resume_text: str) -> int:
+    """Reuse a cached AI score for (user, job, resume); otherwise score via LLM and cache it."""
+    resume_text = _resolve_resume_text(from_email, resume_text)
+    h = _resume_hash(resume_text)
+    if from_email and job_url and h:
+        row = get_referral_score(from_email, job_url, h)
+        if row and row.get("score"):
+            return int(row["score"])
+    score = _score_referral_job(job_title, company, job_description, resume_text)
+    if from_email and job_url and h and score > 0:
+        try:
+            upsert_referral_score(from_email, job_url, h, score)
+        except Exception:
+            pass
+    return score
 
 
 class ReferralRequest(BaseModel):
@@ -24,6 +90,24 @@ class ReferralRequest(BaseModel):
     company: str = ""
     match_score: int = 0
     message: str = ""
+    job_description: str = ""
+    resume_text: str = ""
+
+
+class ReferralScoreRequest(BaseModel):
+    from_email: str
+    job_url: str = ""
+    job_title: str = ""
+    company: str = ""
+    job_description: str = ""
+    resume_text: str = ""
+
+
+@router.post("/score")
+async def referral_score(req: ReferralScoreRequest):
+    score = _get_or_score_referral_job(req.from_email, req.job_url, req.job_title, req.company,
+                                       req.job_description, req.resume_text)
+    return {"ok": True, "score": score}
 
 
 @router.post("/request")
@@ -44,11 +128,15 @@ async def referral_create(req: ReferralRequest):
     remaining = max(0, _MONTHLY_LIMIT - sent_count)
     if sent_count >= _MONTHLY_LIMIT:
         return {"ok": False, "error": f"Monthly limit reached ({_MONTHLY_LIMIT}/month). You have 0 remaining requests.", "remaining": 0}
+    match_score = req.match_score
+    if match_score <= 0:
+        match_score = _get_or_score_referral_job(req.from_email, req.job_url, req.job_title, req.company,
+                                                 req.job_description, req.resume_text)
     rid = create_referral_request(
         req.from_email, req.to_email, req.job_url, req.job_title,
-        req.company, req.match_score, req.message,
+        req.company, match_score, req.message,
     )
-    return {"ok": True, "id": rid, "remaining": remaining - 1}
+    return {"ok": True, "id": rid, "remaining": remaining - 1, "match_score": match_score}
 
 
 @router.get("/incoming")

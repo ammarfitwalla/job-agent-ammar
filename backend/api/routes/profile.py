@@ -80,6 +80,21 @@ async def profile_upload_resume(email: str = Query(""), file: UploadFile = File(
     return {"ok": True, "filename": filename}
 
 
+@router.get("/resume/text")
+async def profile_resume_text(email: str = Query("")):
+    if not email:
+        raise HTTPException(400, "email required")
+    user = get_user(email)
+    if not user or not user.get("resume_filename"):
+        raise HTTPException(404, "No resume found")
+    filepath = os.path.join(_RESUME_DIR, user["resume_filename"])
+    if not os.path.isfile(filepath):
+        raise HTTPException(404, "Resume file not found")
+    from api.routes.resume import _extract_text
+    text = _extract_text(filepath)
+    return {"ok": True, "text": text, "filename": user["resume_filename"]}
+
+
 @router.get("/resume")
 async def profile_download_resume(email: str = Query("")):
     if not email:

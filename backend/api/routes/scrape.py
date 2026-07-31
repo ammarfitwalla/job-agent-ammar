@@ -157,6 +157,17 @@ def run_scrape(sid, sites, roles, location, indeed_country,
                     _delay(1, 3)
                     continue
 
+            # In normal mode, drop entry-level jobs
+            if not internship_mode:
+                before = len(combo_jobs)
+                combo_jobs = [j for j in combo_jobs if j.get("experience_level") not in ("entry_level",)]
+                dropped = before - len(combo_jobs)
+                if dropped:
+                    log(f"[SCRAPE] {role} @ {site_key}: normal filter {before} → {len(combo_jobs)} (dropped {dropped} entry-level)", sid)
+                if not combo_jobs:
+                    _delay(1, 3)
+                    continue
+
             # Dedup against accumulated jobs
             new_count = 0
             for j in combo_jobs:

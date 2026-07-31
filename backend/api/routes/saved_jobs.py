@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
-from db import add_saved_job, is_job_saved, get_saved_jobs, update_saved_job_status, delete_saved_job, batch_check_saved
+from db import add_saved_job, is_job_saved, get_saved_jobs, update_saved_job_status, delete_saved_job, batch_check_saved, get_latest_referral_scores
 
 router = APIRouter(prefix="/api/saved-jobs", tags=["saved-jobs"])
 
@@ -42,6 +42,11 @@ async def saved_jobs_list(email: str = Query(""), status: str = Query("")):
     if not email:
         return {"error": "email required"}
     jobs = get_saved_jobs(email, status)
+    scores = get_latest_referral_scores(email)
+    for j in jobs:
+        m = scores.get(j.get("url", ""))
+        if m:
+            j["match_score"] = m
     return {"jobs": jobs}
 
 

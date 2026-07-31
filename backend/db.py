@@ -199,6 +199,17 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_ref_req_from ON referral_requests(from_email);
             CREATE INDEX IF NOT EXISTS idx_ref_req_to ON referral_requests(to_email, status);
+            CREATE TABLE IF NOT EXISTS referral_scores (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_email TEXT NOT NULL,
+                job_url TEXT NOT NULL,
+                resume_hash TEXT NOT NULL,
+                score INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(from_email, job_url, resume_hash)
+            );
+            CREATE INDEX IF NOT EXISTS idx_ref_scores_email ON referral_scores(from_email, job_url);
         """)
         # Migrate existing visits table — add location columns if missing
         for col in ("country", "city", "region"):
@@ -488,6 +499,16 @@ def get_raw_jobs(sid: str) -> list[dict]:
                 d["_matched_role"] = d.pop("matched_role")
             jobs.append(d)
         return jobs
+
+
+def update_raw_job_score(sid: str, url: str, ai_score, keyword_score, total_score, reason: str = ""):
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute(
+                "UPDATE jobs SET ai_score = ?, keyword_score = ?, total_score = ?, reason = ? "
+                "WHERE session_id = ? AND url = ? AND is_raw = 1",
+                (ai_score, keyword_score, total_score, reason, sid, url))
+            conn.commit()
 
 
 def count_raw_jobs(sid: str) -> int:
@@ -978,6 +999,37 @@ def get_monthly_sent_count(email: str) -> int:
     with _get_conn() as (conn, cur):
         cur.execute("SELECT COUNT(*) FROM referral_requests WHERE from_email = ? AND created_at >= date('now', 'start of month') AND status NOT IN ('cancelled', 'declined')", (email,))
         return cur.fetchone()[0]
+
+
+def get_referral_score(from_email: str, job_url: str, resume_hash: str) -> Optional[dict]:
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            "SELECT * FROM referral_scores WHERE from_email = ? AND job_url = ? AND resume_hash = ? ORDER BY id DESC LIMIT 1",
+            (from_email, job_url, resume_hash))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def upsert_referral_score(from_email: str, job_url: str, resume_hash: str, score: int) -> None:
+    now = _now()
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute(
+                "INSERT INTO referral_scores (from_email, job_url, resume_hash, score, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(from_email, job_url, resume_hash) DO UPDATE SET score = excluded.score, updated_at = excluded.updated_at",
+                (from_email, job_url, resume_hash, score, now, now))
+            conn.commit()
+
+
+def get_latest_referral_scores(email: str) -> dict:
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            "SELECT job_url, score FROM referral_scores WHERE from_email = ? "
+            "AND id IN (SELECT MAX(id) FROM referral_scores WHERE from_email = ? GROUP BY job_url)",
+            (email, email))
+        return {row[0]: row[1] for row in cur.fetchall()}
+
+
 
 
 def create_referral_request(from_email: str, to_email: str, job_url: str, job_title: str,

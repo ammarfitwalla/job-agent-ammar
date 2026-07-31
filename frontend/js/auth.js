@@ -14,8 +14,13 @@ function initEmailJS() {
 
 async function sendEmailJS(templateParams) {
   if (!emailjsInitialized) {
-    console.warn("EmailJS not initialized.");
-    return { ok: false, error: "EmailJS not configured" };
+    if (typeof emailjs !== "undefined" && EMAILJS_PUBLIC_KEY) {
+      emailjs.init(EMAILJS_PUBLIC_KEY);
+      emailjsInitialized = true;
+    } else {
+      console.warn("EmailJS not initialized.");
+      return { ok: false, error: "EmailJS not configured" };
+    }
   }
   try {
     const res = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
