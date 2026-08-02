@@ -30,8 +30,7 @@ async function loadStatsBar() {
     if (d.total_users === undefined) return;
     content.innerHTML = [
       { label: "searches", value: d.total_searches },
-      { label: "scraped", value: d.total_raw_jobs },
-      { label: "matches", value: d.total_relevant_jobs },
+      { label: "jobs scraped", value: d.total_raw_jobs },
     ].map(s => `<span class="inline-flex items-center gap-1"><span class="font-semibold text-slate-700">${s.value.toLocaleString()}</span> <span class="text-slate-400">${s.label}</span></span>`).join('<span class="text-slate-200">·</span>');
     bar.classList.remove("hidden");
   } catch (e) {}

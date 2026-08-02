@@ -343,10 +343,37 @@ function isProfilePage() {
 
 function promptAddResume() {
   closeReferralModal();
-  if (isProfilePage()) {
-    showToast("Please edit your profile and upload a resume before sending a referral request.");
+  const msgEl = document.getElementById("addResumeMsg");
+  if (msgEl) {
+    msgEl.textContent = isProfilePage()
+      ? "Please edit your profile and upload a resume before sending a referral request."
+      : "Please upload a resume on your Profile page before sending a referral request.";
+  }
+  openAddResumeModal();
+}
+
+function openAddResumeModal() {
+  const modal = document.getElementById("addResumeModal");
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  }
+}
+
+function closeAddResumeModal() {
+  const modal = document.getElementById("addResumeModal");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+}
+
+function addResumePrimaryAction() {
+  closeAddResumeModal();
+  if (typeof window.enableProfileEdit === "function") {
+    window.enableProfileEdit();
   } else {
-    showToast("Please upload a resume on your Profile page before sending a referral request.");
+    window.location.href = "profile.html";
   }
 }
 
@@ -841,6 +868,8 @@ async function withdrawReferral(id) {
 window.closeReferralModal = closeReferralModal;
 window.closeResumePromptModal = closeResumePromptModal;
 window.setDefaultResumeChoice = setDefaultResumeChoice;
+window.closeAddResumeModal = closeAddResumeModal;
+window.addResumePrimaryAction = addResumePrimaryAction;
 window.refreshReferralRemaining = refreshReferralRemaining;
 window.showReferralUsers = showReferralUsers;
 window.askReferral = askReferral;

@@ -20,6 +20,49 @@ def _classify(s):
     return "Completed"
 
 
+def _resumes_dir() -> str:
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
+
+
+def _resolve_session_resume(sid: str, s: dict):
+    """Resolve the resume file for a session -> (filename, path) or ("", None).
+
+    Priority: session's own resume_filename, then the user's profile resume,
+    then legacy {sid}.* files, then the temp txt cache.
+    """
+    from db import get_user
+    from db import _get_conn
+
+    def _file(fname: str):
+        p = os.path.join(_resumes_dir(), fname)
+        if os.path.isfile(p):
+            return fname, p
+        return "", None
+
+    fname = (s or {}).get("resume_filename") or ""
+    if fname:
+        fn, p = _file(fname)
+        if p:
+            return fn, p
+    uemail = (s or {}).get("user_email") or ""
+    if uemail:
+        with _get_conn() as (conn, cur):
+            cur.execute("SELECT resume_filename FROM users WHERE email = ?", (uemail,))
+            row = cur.fetchone()
+        if row and row["resume_filename"]:
+            fn, p = _file(row["resume_filename"])
+            if p:
+                return fn, p
+    for ext in (".pdf", ".docx", ".txt"):
+        fn, p = _file(f"{sid}{ext}")
+        if p:
+            return fn, p
+    tp = os.path.join(tempfile.gettempdir(), "job_agent_resumes", f"{sid}.txt")
+    if os.path.isfile(tp):
+        return f"{sid}.txt", tp
+    return "", None
+
+
 def _get_session_events(sids: list[str]) -> dict[str, list[str]]:
     from db import _get_conn
     if not sids:
@@ -64,11 +107,8 @@ async def admin_stats():
         cur.execute("SELECT COUNT(*) FROM leads")
         total_leads = cur.fetchone()[0]
 
-        cur.execute("SELECT COUNT(*) FROM jobs WHERE is_raw = 1")
-        total_raw = cur.fetchone()[0]
-
-        cur.execute("SELECT COUNT(*) FROM jobs WHERE is_raw = 1")
-        total_relevant = cur.fetchone()[0]
+        cur.execute("SELECT SUM(scraped) FROM sessions")
+        total_scraped = cur.fetchone()[0] or 0
 
         cur.execute(
             """SELECT AVG(CASE WHEN elapsed_seconds > 0 THEN elapsed_seconds
@@ -108,8 +148,7 @@ async def admin_stats():
         "errors": errors,
         "total_users": total_users,
         "total_leads": total_leads,
-        "total_raw_jobs": total_raw,
-        "total_relevant_jobs": total_relevant,
+        "total_scraped_jobs": total_scraped,
         "avg_duration_seconds": avg_duration,
         "daily": daily,
         "by_mode": by_mode,
@@ -168,6 +207,8 @@ async def admin_sessions():
         for s in sessions:
             s["relevant_jobs"] = job_counts.get(s["id"], 0)
             s["job_links"] = job_links.get(s["id"], [])
+            fn, _ = _resolve_session_resume(s["id"], s)
+            s["resume_available"] = bool(fn)
 
     return {"sessions": sessions}
 
@@ -180,50 +221,61 @@ async def admin_session_detail(sid: str):
     if not s:
         return {"error": "Session not found"}
 
-    with _get_conn() as (conn, cur):
-        cur.execute(
-            "SELECT event, elapsed_seconds, created_at FROM events WHERE session_id = ? ORDER BY id",
-            (sid,),
-        )
-        events = [dict(r) for r in cur.fetchall()]
+    email = s.get("user_email") or ""
 
-        cur.execute(
-            "SELECT title, company, location, url, keyword_score, experience_level, salary, created_at "
-            "FROM jobs WHERE session_id = ? AND is_raw = 1 ORDER BY COALESCE(keyword_score, 0) DESC",
-            (sid,),
-        )
-        jobs = [dict(r) for r in cur.fetchall()]
-        for j in jobs:
-            j["url"] = j["url"] or ""
+    with _get_conn() as (conn, cur):
+        if email:
+            cur.execute(
+                "SELECT id, title, company, url, location, salary, total_score, "
+                "application_status, saved_at FROM saved_jobs "
+                "WHERE user_email = ? ORDER BY saved_at DESC",
+                (email,),
+            )
+            saved_jobs = [dict(r) for r in cur.fetchall()]
+            for j in saved_jobs:
+                j["url"] = j["url"] or ""
+            from db import get_latest_referral_scores
+            _scores = get_latest_referral_scores(email)
+            for j in saved_jobs:
+                m = _scores.get(j["url"])
+                if m and not j.get("total_score"):
+                    j["total_score"] = m
+
+            cur.execute(
+                "SELECT r.id, r.job_url, r.job_title, r.company, r.match_score, "
+                "r.to_email, r.status, r.created_at, u.name AS to_name, u.company AS to_company "
+                "FROM referral_requests r LEFT JOIN users u ON u.email = r.to_email "
+                "WHERE r.from_email = ? ORDER BY r.created_at DESC",
+                (email,),
+            )
+            referral_requests = [dict(r) for r in cur.fetchall()]
+        else:
+            saved_jobs = []
+            referral_requests = []
 
     s["classification"] = _classify(s)
 
-    resumes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
-    has_resume = any(
-        os.path.isfile(os.path.join(resumes_dir, f"{sid}{ext}"))
-        for ext in (".pdf", ".docx", ".txt")
-    ) or os.path.isfile(os.path.join(tempfile.gettempdir(), "job_agent_resumes", f"{sid}.txt"))
+    fn, _ = _resolve_session_resume(sid, s)
 
     return {
         "session": s,
-        "events": events,
-        "jobs": jobs,
-        "resume_available": has_resume,
+        "saved_jobs": saved_jobs,
+        "referral_requests": referral_requests,
+        "resume_available": bool(fn),
     }
 
 
 @router.get("/sessions/{sid}/resume")
 async def admin_resume(sid: str):
-    resumes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
-    for ext in (".pdf", ".docx", ".txt"):
-        path = os.path.join(resumes_dir, f"{sid}{ext}")
-        if os.path.isfile(path):
-            mime = {"pdf": "application/pdf", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "txt": "text/plain"}.get(ext.lstrip("."), "text/plain")
-            return FileResponse(path, filename=f"resume_{sid}{ext}", media_type=mime)
-    path = os.path.join(tempfile.gettempdir(), "job_agent_resumes", f"{sid}.txt")
-    if os.path.isfile(path):
-        return FileResponse(path, filename=f"resume_{sid}.txt", media_type="text/plain")
-    return {"error": "Resume not found"}
+    from db import get_session
+
+    s = get_session(sid)
+    fn, path = _resolve_session_resume(sid, s or {})
+    if not path:
+        return {"error": "Resume not found"}
+    ext = os.path.splitext(fn)[1].lstrip(".").lower()
+    mime = {"pdf": "application/pdf", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "txt": "text/plain"}.get(ext, "application/octet-stream")
+    return FileResponse(path, filename=f"resume_{sid}_{fn}", media_type=mime)
 
 
 @router.get("/scores")

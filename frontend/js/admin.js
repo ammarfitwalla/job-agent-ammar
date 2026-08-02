@@ -81,11 +81,10 @@ async function loadStats() {
       { n: d.abandoned, l: "Abandoned", c: "red" },
       { n: d.errors, l: "Errors", c: "red" },
       { n: d.total_users, l: "Registrations", c: "purple" },
-      { n: d.total_raw_jobs, l: "Raw Jobs", c: "sky" },
-      { n: d.total_relevant_jobs, l: "Scraped Jobs", c: "green" },
+      { n: d.total_scraped_jobs, l: "Jobs Scraped", c: "green" },
       { n: formatDuration(d.avg_duration_seconds), l: "Avg Duration", c: "blue" },
       { n: Math.round(d.completed / total * 100) + "%", l: "Completion Rate", c: "green" },
-      { n: d.total_raw_jobs ? Math.round(d.total_raw_jobs / total) : "\u2014", l: "Avg Jobs/Session", c: "sky" },
+      { n: d.total_scraped_jobs ? Math.round(d.total_scraped_jobs / total) : "\u2014", l: "Avg Jobs/Session", c: "sky" },
       { n: d.total_users && d.total_sessions ? Math.round(d.total_sessions / d.total_users) : "\u2014", l: "Sessions/User", c: "purple" },
       { n: d.total_visits || 0, l: "Total Visits", c: "teal" },
       { n: d.unique_visitors || 0, l: "Unique Visitors", c: "teal" },
@@ -150,9 +149,9 @@ async function loadSessions() {
 function renderSessions(sessions) {
   const cols = [
     { k: "date", l: "Date" }, { k: "id_label", l: "Session ID" },
-    { k: "mode_label", l: "Mode" }, { k: "classification", l: "Status" },
+    { k: "user_email", l: "User" }, { k: "mode_label", l: "Mode" }, { k: "classification", l: "Status" },
     { k: "location", l: "Location" }, { k: "sites_label", l: "Sites" }, { k: "relevant_jobs", l: "Jobs" },
-    { k: "duration_label", l: "Duration" },
+    { k: "resume", l: "Resume" }, { k: "duration_label", l: "Duration" },
   ];
   const sorted = _sortKey === "date" ? _sortDir : 0;
   document.getElementById("sessionHead").innerHTML =
@@ -166,19 +165,21 @@ function renderSessions(sessions) {
     return `<tr class="clickable" onclick="toggleDetail('${s.id}')">
       <td style="white-space:nowrap">${s.created_at ? formatDate(s.created_at) : "\u2014"}</td>
       <td><span class="sid-cell" title="${s.id}">${s.id?.slice(0, 12)}...</span></td>
+      <td title="${s.user_email || ""}">${s.user_email || "\u2014"}</td>
       <td><span class="mode-badge ${mc}">${ml}</span></td>
       <td><span class="badge ${sc}">${s.classification}</span></td>
       <td title="${s.location || ""}">${s.location || "\u2014"}</td>
       <td class="sites-cell" title="${(s.sites || []).join(", ")}">${(s.sites || []).join(", ")}</td>
       <td>${s.relevant_jobs || 0}</td>
+      <td>${s.resume_available ? `<a class="job-link" href="/api/admin/sessions/${s.id}/resume" target="_blank">View &#8599;</a>` : "\u2014"}</td>
       <td>${formatDuration(s.elapsed_seconds)}</td>
-    </tr><tr class="detail-row" id="detail-${s.id}" data-session='${sj}'><td colspan="8"><div class="detail-panel" id="panel-${s.id}"><div class="empty">Loading session details...</div></div></td></tr>`;
-  }).join("") || `<tr><td colspan="8"><div class="empty">No sessions found</div></td></tr>`;
+    </tr><tr class="detail-row" id="detail-${s.id}" data-session='${sj}'><td colspan="10"><div class="detail-panel" id="panel-${s.id}"><div class="empty">Loading session details...</div></div></td></tr>`;
+  }).join("") || `<tr><td colspan="10"><div class="empty">No sessions found</div></td></tr>`;
 }
 
 function sortSessions(key) {
   if (_sortKey === key) _sortDir *= -1; else { _sortKey = key; _sortDir = -1; }
-  const map = { "date": "created_at", "id_label": "id", "mode_label": "internship_mode", "classification": "classification", "sites_label": "sites", "relevant_jobs": "relevant_jobs", "duration_label": "elapsed_seconds" };
+  const map = { "date": "created_at", "id_label": "id", "user_email": "user_email", "mode_label": "internship_mode", "classification": "classification", "sites_label": "sites", "relevant_jobs": "relevant_jobs", "resume": "resume_available", "duration_label": "elapsed_seconds" };
   const ak = map[key] || key;
   const sorted = [...allSessions].sort((a, b) => {
     let va = a[ak] ?? "", vb = b[ak] ?? "";
@@ -195,6 +196,7 @@ function filterSessions() {
     (s.keywords || []).join(" ").toLowerCase().includes(q) ||
     (s.roles || []).join(" ").toLowerCase().includes(q) ||
     (s.sites || []).join(" ").toLowerCase().includes(q) ||
+    (s.user_email || "").toLowerCase().includes(q) ||
     s.classification.toLowerCase().includes(q) ||
     s.id?.toLowerCase().includes(q)
   ));
@@ -215,32 +217,61 @@ async function toggleDetail(sid) {
     const d = await r.json();
     if (d.error) { panel.innerHTML += `<div class="empty">${d.error}</div>`; return; }
 
-    const events = (d.events || []).slice(-30);
-    const jobs = (d.jobs || []).slice(0, 20);
+    const s = d.session || {};
+    const saved = d.saved_jobs || [];
+    const refs = d.referral_requests || [];
+    const email = s.user_email || "";
     let html = "";
 
-    if (events.length) {
-      html += `<div class="section"><div class="section-title">Events (last 30)</div>`;
-      html += events.map(e => `<div class="ev"><span class="ev-time">${e.elapsed_seconds || 0}s</span><span>${e.event}</span></div>`).join("");
-      html += `</div>`;
+    if (email) {
+      html += `<div class="section"><div class="section-title">User</div><div>${email}</div></div>`;
     }
-    if (jobs.length) {
-      html += `<div class="section"><div class="section-title">Keyword Scored Jobs</div>`;
-      html += `<table style="width:100%"><tr><th>Title</th><th>Company</th><th>Score</th><th></th></tr>`;
-      html += jobs.map(j => `<tr>
+
+    if (saved.length) {
+      html += `<div class="section"><div class="section-title">Saved Jobs (${saved.length})</div>`;
+      html += `<table style="width:100%"><tr><th>Title</th><th>Company</th><th>Score</th><th>Status</th><th>Saved</th></tr>`;
+      html += saved.map(j => `<tr>
         <td style="max-width:300px"><span class="truncate" title="${j.title}">${j.title}</span></td>
         <td>${j.company || "\u2014"}</td>
-        <td class="score-cell">${j.keyword_score ?? 0}
-          <div class="score-bar"><div class="score-fill" style="width:${Math.min(j.keyword_score || 0, 100)}%"></div></div>
+        <td class="score-cell">${j.total_score ?? 0}
+          <div class="score-bar"><div class="score-fill" style="width:${Math.min(j.total_score || 0, 100)}%"></div></div>
         </td>
-        <td>${j.url ? `<a class="job-link" href="${j.url}" target="_blank">Open &#8599;</a>` : "\u2014"}</td>
+        <td>${statusPill(j.application_status)}</td>
+        <td style="white-space:nowrap">${formatDate(j.saved_at)}</td>
       </tr>`).join("");
       html += `</table></div>`;
     }
-    if (!events.length && !jobs.length) html += `<div class="empty">No events or jobs for this session</div>`;
+
+    if (refs.length) {
+      html += `<div class="section"><div class="section-title">Referral Requests (${refs.length})</div>`;
+      html += `<table style="width:100%"><tr><th>Job</th><th>Score</th><th>To</th><th>Status</th><th>Date</th></tr>`;
+      html += refs.map(r => `<tr>
+        <td style="max-width:280px"><span class="truncate" title="${r.job_title}">${r.job_title || "\u2014"}</span>
+          ${r.company ? `<div style="font-size:11px;color:#64748b">${r.company}</div>` : ""}</td>
+        <td class="score-cell">${r.match_score ?? 0}
+          <div class="score-bar"><div class="score-fill" style="width:${Math.min(r.match_score || 0, 100)}%"></div></div>
+        </td>
+        <td>${r.to_name || r.to_email || "\u2014"}${r.to_company ? ` <span style="font-size:11px;color:#64748b">(${r.to_company})</span>` : ""}</td>
+        <td>${statusPill(r.status)}</td>
+        <td style="white-space:nowrap">${formatDate(r.created_at)}</td>
+      </tr>`).join("");
+      html += `</table></div>`;
+    }
+
+    if (!saved.length && !refs.length) {
+      html += `<div class="empty">${email ? "No saved jobs or referral requests from this user yet" : "No user recorded for this session (sessions before this change are not linked to a user)"}</div>`;
+    }
     if (d.resume_available) html = `<div class="section"><a href="/api/admin/sessions/${sid}/resume" target="_blank" style="font-size:12px;color:#3b82f6;font-weight:500">View Resume &#8599;</a></div>` + html;
     panel.innerHTML = renderBasicDetail(sid, sd) + html;
   } catch (e) { panel.innerHTML += `<div class="empty">${e.message}</div>`; }
+}
+
+function statusPill(status) {
+  const map = {
+    pending: "badge-amber", accepted: "badge-green", declined: "badge-red", rejected: "badge-red",
+    saved: "badge-blue", applied: "badge-amber", interview: "badge-purple", offer: "badge-green",
+  };
+  return `<span class="badge ${map[status] || "badge-gray"}">${status || "\u2014"}</span>`;
 }
 
 function renderBasicDetail(sid, s) {

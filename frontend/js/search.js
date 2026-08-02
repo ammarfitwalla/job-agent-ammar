@@ -467,6 +467,7 @@ async function useProfileResume() {
     if (!d.ok || !d.text) throw new Error(d.error || "No resume found");
     const ta = document.getElementById("resume");
     ta.value = d.text;
+    _uploadedFilename = "";
     try { localStorage.setItem(RESUME_CACHE_KEY, d.text); } catch {}
     clearSearchState();
     document.getElementById("refreshRolesBtn").disabled = false;
@@ -495,8 +496,7 @@ async function loadStatsBar() {
     if (d.total_users === undefined) return;
     content.innerHTML = [
       { label: "searches", value: d.total_searches },
-      { label: "scraped", value: d.total_raw_jobs },
-      { label: "matches", value: d.total_relevant_jobs },
+      { label: "jobs scraped", value: d.total_raw_jobs },
     ].map(s => `<span class="inline-flex items-center gap-1"><span class="font-semibold text-slate-700">${s.value.toLocaleString()}</span> <span class="text-slate-400">${s.label}</span></span>`).join('<span class="text-slate-200">·</span>');
     bar.classList.remove("hidden");
   } catch {}
@@ -528,6 +528,7 @@ function jobCardHtml(j) {
   const isSaved = j._saved || false;
   const scored = j.total_score != null;
   const limitReached = _relevanceUsed >= RELEVANCE_LIMIT;
+  const relevanceLocked = limitReached || !_searchComplete;
 
   const expBadge = j.experience_level === "internship"
     ? '<span class="text-xs bg-teal-50 text-teal-700 border border-teal-100 px-2.5 py-1 rounded-md font-medium flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0z"/></svg> Internship</span>'
@@ -564,11 +565,11 @@ function jobCardHtml(j) {
     : "";
 
   const relevanceBtn = scored
-    ? `<button class="shrink-0 text-xs font-semibold inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-emerald-50 text-emerald-700 border-emerald-200 opacity-60 cursor-default" disabled data-url="${j.url || ''}" title="Scored">
+    ? `          <button class="w-full sm:w-auto justify-center shrink-0 text-xs font-semibold inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-emerald-50 text-emerald-700 border-emerald-200 opacity-60 cursor-default" disabled data-url="${j.url || ''}" title="Scored">
         <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
         <span>Scored</span>
       </button>`
-    : `<button data-relevance-btn="true" class="shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${limitReached ? 'bg-slate-50 text-slate-400 border-slate-200 opacity-50 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 active:bg-slate-200'}" data-url="${j.url || ''}" onclick="event.preventDefault(); event.stopPropagation(); checkRelevance(event)" title="Check relevance" ${limitReached ? 'disabled' : ''}>
+    : `<button data-relevance-btn="true" class="w-full sm:w-auto justify-center shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${relevanceLocked ? 'bg-slate-50 text-slate-400 border-slate-200 opacity-50 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 active:bg-slate-200'}" data-url="${j.url || ''}" onclick="event.preventDefault(); event.stopPropagation(); checkRelevance(event)" title="Check relevance" ${relevanceLocked ? 'disabled' : ''}>
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         <span>Check relevance</span>
       </button>`;
@@ -597,15 +598,15 @@ function jobCardHtml(j) {
       ${aiNoteHtml}
 
       <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
-        <div class="flex items-center gap-2.5 flex-1 pr-3 min-w-0">
-          <button class="bookmark-btn shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${isSaved ? 'bg-indigo-500 text-white border-indigo-500 hover:bg-indigo-600' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 active:bg-indigo-200'}" data-url="${j.url || ''}" onclick="toggleSaveJob(event)" title="Save job">
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 flex-1 pr-3 min-w-0">
+          <button class="bookmark-btn w-full sm:w-auto justify-center shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${isSaved ? 'bg-indigo-500 text-white border-indigo-500 hover:bg-indigo-600' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 active:bg-indigo-200'}" data-url="${j.url || ''}" onclick="toggleSaveJob(event)" title="Save job">
             ${isSaved
               ? '<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> Saved'
               : '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg> Save'
             }
           </button>
           ${relevanceBtn}
-          <button class="shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100 active:bg-violet-200 referral-btn" data-company="${j.company.replace(/"/g, '&quot;')}" onclick="event.preventDefault(); event.stopPropagation(); window._referralJobTitle='${(j.title||'').replace(/'/g, "\\'")}'; window._referralMatchScore=0; window._referralJobUrl='${(j.url||'').replace(/'/g, "\\'")}'; showReferralUsers('${j.company.replace(/'/g, "\\'")}')" title="See referrals at this company">
+          <button class="w-full sm:w-auto justify-center shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100 active:bg-violet-200 referral-btn" data-company="${j.company.replace(/"/g, '&quot;')}" onclick="event.preventDefault(); event.stopPropagation(); window._referralJobTitle='${(j.title||'').replace(/'/g, "\\'")}'; window._referralMatchScore=0; window._referralJobUrl='${(j.url||'').replace(/'/g, "\\'")}'; showReferralUsers('${j.company.replace(/'/g, "\\'")}')" title="See referrals at this company">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
             <span class="referral-label">Referrals</span>
           </button>
@@ -717,7 +718,7 @@ async function checkRelevance(event) {
 
     rerenderJobCard(job);
 
-    window.showToast("✓ AI scoring completed for the job", "green");
+    window.showToast("Job scored!", "green");
     if (_relevanceUsed >= RELEVANCE_LIMIT) {
       disableAllRelevanceButtons();
       window.showToast(`All ${RELEVANCE_LIMIT} relevance checks used.`, "blue");
@@ -786,6 +787,8 @@ async function doSaveJob(job) {
         url: job.url || "",
         location: job.location || "",
         salary: job.salary || "",
+        total_score: job.total_score || 0,
+        ai_score: job.ai_score || 0,
         keyword_score: job.keyword_score || 0,
         experience_level: job.experience_level || "",
         tags: job.tags || [],
@@ -1769,6 +1772,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
         internship_mode: internshipMode,
         indeed_country: getIndeedCountry(),
         user_email: (window.getProfile() || {}).email || "",
+        resume_filename: _uploadedFilename || "",
         scrape_limit: 200,
       })
     });
@@ -1810,6 +1814,7 @@ function pollAllScrapes() {
     } catch {
       consecutiveErrors++;
     }
+    _searchComplete = allDone;
 
     let allRaw = [];
     try {
@@ -2077,6 +2082,7 @@ document.addEventListener('click', (e) => {
       const r = await fetch(`/scrape/status?search_id=${sid}`);
       const d = await r.json();
       const allDone = d.status !== 'running';
+      _searchComplete = allDone;
 
       if (allDone) {
         const r = await fetch(`/jobs?search_id=${sid}&raw=true`);

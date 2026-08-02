@@ -273,6 +273,20 @@ def init_db():
             cur.execute("ALTER TABLE sessions ADD COLUMN location TEXT DEFAULT ''")
         except Exception:
             pass
+        try:
+            cur.execute("ALTER TABLE sessions ADD COLUMN user_email TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            cur.execute("ALTER TABLE sessions ADD COLUMN resume_filename TEXT DEFAULT ''")
+        except Exception:
+            pass
+        # Legacy cleanup — is_raw=0 rows are dead (nothing writes them anymore)
+        try:
+            cur.execute("DELETE FROM jobs WHERE is_raw = 0")
+        except Exception:
+            pass
+        conn.commit()
 
 
 def gc_sessions(max_age_minutes: int = 240):
@@ -305,17 +319,18 @@ def create_session(sid: str, **kwargs):
                 "resume_length": kwargs.get("resume_length", 0),
                 "internship_mode": 1 if kwargs.get("internship_mode") else 0,
                 "location": kwargs.get("location", ""),
+                "user_email": kwargs.get("user_email", ""),
             }
             cur.execute("""INSERT OR REPLACE INTO sessions
-                (id, created_at, updated_at, sites, keywords, roles, keywords_count, roles_count, resume_length, internship_mode, location)
-                VALUES (:id, :created_at, :updated_at, :sites, :keywords, :roles, :keywords_count, :roles_count, :resume_length, :internship_mode, :location)""", fields)
+                (id, created_at, updated_at, sites, keywords, roles, keywords_count, roles_count, resume_length, internship_mode, location, user_email)
+                VALUES (:id, :created_at, :updated_at, :sites, :keywords, :roles, :keywords_count, :roles_count, :resume_length, :internship_mode, :location, :user_email)""", fields)
             conn.commit()
 
 
 def update_session(sid: str, **kwargs):
     with _write_lock:
         with _get_conn() as (conn, cur):
-            allowed = {"status", "pass_num", "max_passes", "filtered_gen", "cancel", "queue_position", "scraped", "elapsed_seconds"}
+            allowed = {"status", "pass_num", "max_passes", "filtered_gen", "cancel", "queue_position", "scraped", "elapsed_seconds", "resume_filename"}
             updates = {k: v for k, v in kwargs.items() if k in allowed}
             if not updates:
                 return
@@ -704,8 +719,17 @@ def verify_code(email: str, code: str) -> bool:
 def add_saved_job(user_email: str, job: dict) -> dict:
     now = _now()
     tags = job.get("tags")
+    ts = job.get("total_score") or 0
     with _write_lock:
         with _get_conn() as (conn, cur):
+            if not ts:
+                cur.execute(
+                    "SELECT score FROM referral_scores WHERE from_email = ? AND job_url = ? ORDER BY id DESC LIMIT 1",
+                    (user_email, job.get("url", "")),
+                )
+                row = cur.fetchone()
+                if row and row["score"]:
+                    ts = row["score"]
             cur.execute("""INSERT OR IGNORE INTO saved_jobs
                 (user_email, title, company, url, location, salary, total_score, ai_score, keyword_score, reason, experience_level, tags, site, application_status, saved_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'saved', ?, ?)""", (
@@ -715,7 +739,7 @@ def add_saved_job(user_email: str, job: dict) -> dict:
                     job.get("url", ""),
                     job.get("location", ""),
                     job.get("salary", ""),
-                    job.get("total_score", 0),
+                    ts,
                     job.get("ai_score", 0),
                     job.get("keyword_score", 0),
                     job.get("reason", ""),

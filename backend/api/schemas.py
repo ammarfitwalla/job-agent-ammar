@@ -36,4 +36,5 @@ class ScrapeRequest(BaseModel):
     indeed_country: str = "USA"
     internship_mode: bool = False
     user_email: str = ""
+    resume_filename: str = ""
     scrape_limit: int = 30

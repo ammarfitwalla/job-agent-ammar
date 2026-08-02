@@ -76,15 +76,20 @@ def _is_cancelled(sid: str) -> bool:
 
 
 def run_scrape(sid, sites, roles, location, indeed_country,
-               keywords=None, internship_mode=False, user_email="", scrape_limit=200):
+               keywords=None, internship_mode=False, user_email="", resume_filename="", scrape_limit=200):
     import importlib
     from match_engine.relevance_engine import keyword_score as _kw_score, role_match_count as _role_match
     from utils.delay import delay as _delay
     from db import set_raw_jobs as _set_raw
     from utils.experience_level import detect_experience_level
 
-    create_session(sid, sites=sites, keywords=keywords or [], roles=roles or [])
-    update_session(sid, status="running", cancel=False)
+    create_session(sid, sites=sites, keywords=keywords or [], roles=roles or [], user_email=user_email)
+    from db import get_user as _get_user
+    session_resume = resume_filename or ""
+    if not session_resume and user_email:
+        u = _get_user(user_email)
+        session_resume = (u or {}).get("resume_filename") or ""
+    update_session(sid, status="running", cancel=False, resume_filename=session_resume)
 
     all_jobs = []
     seen_urls = set()
@@ -224,6 +229,7 @@ async def trigger_scrape(req: ScrapeRequest):
         "keywords": req.keywords,
         "internship_mode": req.internship_mode,
         "user_email": req.user_email,
+        "resume_filename": req.resume_filename,
         "scrape_limit": req.scrape_limit,
     }, daemon=True)
     t.start()
