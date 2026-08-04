@@ -53,6 +53,23 @@ def _resolve_session_resume(sid: str, s: dict):
             fn, p = _file(row["resume_filename"])
             if p:
                 return fn, p
+        local_part = uemail.split("@")[0].lower()
+        if local_part:
+            try:
+                candidates = [
+                    f for f in os.listdir(_resumes_dir())
+                    if f.lower().startswith(f"resume_{local_part}_")
+                ]
+            except OSError:
+                candidates = []
+            if candidates:
+                candidates.sort(
+                    key=lambda f: os.path.getmtime(os.path.join(_resumes_dir(), f)),
+                    reverse=True,
+                )
+                fn, p = _file(candidates[0])
+                if p:
+                    return fn, p
     for ext in (".pdf", ".docx", ".txt"):
         fn, p = _file(f"{sid}{ext}")
         if p:

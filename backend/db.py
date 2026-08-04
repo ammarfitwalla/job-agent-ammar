@@ -330,7 +330,7 @@ def create_session(sid: str, **kwargs):
 def update_session(sid: str, **kwargs):
     with _write_lock:
         with _get_conn() as (conn, cur):
-            allowed = {"status", "pass_num", "max_passes", "filtered_gen", "cancel", "queue_position", "scraped", "elapsed_seconds", "resume_filename"}
+            allowed = {"status", "pass_num", "max_passes", "filtered_gen", "cancel", "queue_position", "scraped", "elapsed_seconds", "resume_filename", "location"}
             updates = {k: v for k, v in kwargs.items() if k in allowed}
             if not updates:
                 return

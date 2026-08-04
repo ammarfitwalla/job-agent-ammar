@@ -37,5 +37,6 @@ class ScrapeRequest(BaseModel):
     internship_mode: bool = False
     user_email: str = ""
     resume_filename: str = ""
+    resume_text: str = ""
     scrape_limit: int = 30
     hours_old: int = 168

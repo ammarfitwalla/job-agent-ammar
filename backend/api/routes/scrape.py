@@ -84,7 +84,8 @@ def run_scrape(sid, sites, roles, location, indeed_country,
     from db import set_raw_jobs as _set_raw
     from utils.experience_level import detect_experience_level
 
-    create_session(sid, sites=sites, keywords=keywords or [], roles=roles or [], user_email=user_email)
+    create_session(sid, sites=sites, keywords=keywords or [], roles=roles or [], user_email=user_email,
+                   location=location or "")
     from db import get_user as _get_user
     session_resume = resume_filename or ""
     if not session_resume and user_email:
