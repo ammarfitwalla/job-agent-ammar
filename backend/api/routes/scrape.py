@@ -76,7 +76,8 @@ def _is_cancelled(sid: str) -> bool:
 
 
 def run_scrape(sid, sites, roles, location, indeed_country,
-               keywords=None, internship_mode=False, user_email="", resume_filename="", scrape_limit=200):
+               keywords=None, internship_mode=False, user_email="", resume_filename="", scrape_limit=200,
+               hours_old=168):
     import importlib
     from match_engine.relevance_engine import keyword_score as _kw_score, role_match_count as _role_match
     from utils.delay import delay as _delay
@@ -120,6 +121,7 @@ def run_scrape(sid, sites, roles, location, indeed_country,
                     kwargs["location"] = location or "United States"
                     kwargs["results_wanted"] = scrape_limit
                     kwargs["internship_mode"] = internship_mode
+                    kwargs["hours_old"] = hours_old
                 if site_key == "indeed":
                     kwargs["country_indeed"] = indeed_country
                 jobs = scraper_fn(**kwargs)
@@ -231,6 +233,7 @@ async def trigger_scrape(req: ScrapeRequest):
         "user_email": req.user_email,
         "resume_filename": req.resume_filename,
         "scrape_limit": req.scrape_limit,
+        "hours_old": req.hours_old,
     }, daemon=True)
     t.start()
     return {"message": "Scrape started", "status": "running"}

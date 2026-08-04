@@ -38,3 +38,4 @@ class ScrapeRequest(BaseModel):
     user_email: str = ""
     resume_filename: str = ""
     scrape_limit: int = 30
+    hours_old: int = 168

@@ -1,4 +1,3 @@
-import re
 from jobspy import scrape_jobs
 from utils.delay import delay
 
@@ -70,8 +69,15 @@ def scrape_indeed(roles=None, location="", country_indeed="USA", internship_mode
             if i > 0:
                 delay(2, 4)
             try:
-                # Progressive fallback: try role + intern, then role alone
-                search_terms = [f"{role} intern", role] if internship_mode else [role]
+                # Search exactly the selected role; append "intern" in internship
+                # mode unless the role already is an internship.
+                role_lower = role.lower()
+                if "intern" in role_lower:
+                    search_terms = [role]
+                elif internship_mode:
+                    search_terms = [f"{role} intern", role]
+                else:
+                    search_terms = [role]
                 for search_term in search_terms:
                     jobs_df = scrape_jobs(
                         site_name=["indeed"],
@@ -80,7 +86,7 @@ def scrape_indeed(roles=None, location="", country_indeed="USA", internship_mode
                         results_wanted=per_role,
                         hours_old=hours_old,
                         country_indeed=country_indeed,
-                        verbose=0,
+                        verbose=2,
                     )
                     if jobs_df.empty:
                         continue
@@ -116,67 +122,7 @@ def scrape_indeed(roles=None, location="", country_indeed="USA", internship_mode
             except Exception as e:
                 print(f"[INDEED] Role '{role}' failed: {e}")
 
-        # Fallback: broad "intern" search in internship mode to catch missed opportunities
-        if internship_mode:
-            role_words = set()
-            for r in roles:
-                for w in r.lower().split():
-                    if len(w) > 2:
-                        role_words.add(w)
-            tech_words = role_words | {"software", "developer", "data", "it", "support",
-                                       "infrastructure", "platform", "system", "tech",
-                                       "cyber", "security", "analyst", "devops",
-                                       "backend", "frontend", "full stack", "fullstack",
-                                       "site reliability", "sre", "cloud", "network",
-                                       "database", "linux", "dev", "programmer",
-                                       "quality", "qa", "test", "automation",
-                                       "engineering", "application", "ml", "ai",
-                                       "artificial", "machine learning", "solutions",
-                                       "architecture", "technical"}
-            try:
-                delay(2, 4)
-                jobs_df = scrape_jobs(
-                    site_name=["indeed"],
-                    search_term="intern",
-                    location=location,
-                    results_wanted=results_wanted,
-                    hours_old=hours_old,
-                    country_indeed=country_indeed,
-                    verbose=0,
-                )
-                if not jobs_df.empty:
-                    for _, row in jobs_df.iterrows():
-                        title = row.get("title", "") or ""
-                        url = row.get("job_url", "") or ""
-                        if url in seen_urls:
-                            continue
-                        # Only keep fallback jobs with tech-relevant titles
-                        title_lower = title.lower()
-                        if title_lower.startswith("general interest"):
-                            continue
-                        if not any((re.search(rf'\b{re.escape(tw)}\b', title_lower) if len(tw) <= 3 else tw in title_lower) for tw in tech_words):
-                            continue
-                        seen_urls.add(url)
-                        salary = _format_salary(
-                            row.get("min_amount"), row.get("max_amount"),
-                            row.get("currency"), row.get("interval"),
-                        )
-                        posted = row.get("date_posted", "")
-                        all_jobs.append({
-                            "title": title,
-                            "company": str(row.get("company", "") or ""),
-                            "company_url": row.get("company_url", "") or "",
-                            "location": row.get("location", "") or "",
-                            "url": url,
-                            "description": row.get("description", "") or "",
-                            "tags": ["indeed"],
-                            "salary": salary,
-                            "posted_at": str(posted) if posted else "",
-                        })
-            except Exception as e:
-                print(f"[INDEED] Fallback intern search failed: {e}")
-
-        print(f"[INDEED] {len(all_jobs)} unique jobs from {len(roles)} roles + fallback")
+        print(f"[INDEED] {len(all_jobs)} unique jobs from {len(roles)} roles")
         return all_jobs
     except Exception as e:
         print(f"[INDEED] Error: {e}")
