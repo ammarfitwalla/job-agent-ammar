@@ -123,6 +123,8 @@ def run_scrape(sid, sites, roles, location, indeed_country,
                     kwargs["results_wanted"] = scrape_limit
                     kwargs["internship_mode"] = internship_mode
                     kwargs["hours_old"] = hours_old
+                if site_key == "linkedin":
+                    kwargs["fetch_descriptions"] = False
                 if site_key == "indeed":
                     kwargs["country_indeed"] = indeed_country
                 jobs = scraper_fn(**kwargs)
@@ -147,6 +149,11 @@ def run_scrape(sid, sites, roles, location, indeed_country,
             if not combo_jobs:
                 _delay(1, 3)
                 continue
+
+            # Fetch descriptions only for title-matched jobs (LinkedIn skips them in the scraper)
+            if site_key == "linkedin":
+                from scrapers.linkedin_scraper import enrich_descriptions as _enrich
+                _enrich(combo_jobs)
 
             # Experience level detection (required for internship filter and display)
             for j in combo_jobs:
@@ -219,6 +226,20 @@ def run_scrape(sid, sites, roles, location, indeed_country,
         log(f"[SCRAPE] No jobs found", sid)
 
 
+def _run_scrape_guarded(sid: str, *args, **kwargs):
+    """Run run_scrape so the session always ends in a terminal status."""
+    try:
+        run_scrape(sid, *args, **kwargs)
+    except Exception as e:
+        log(f"[SCRAPE] Pipeline error: {e}", sid)
+    finally:
+        try:
+            _save_elapsed(sid)
+            update_session(sid, status="done")
+        except Exception:
+            pass
+
+
 @router.post("")
 async def trigger_scrape(req: ScrapeRequest):
     if not req.search_id:
@@ -226,7 +247,7 @@ async def trigger_scrape(req: ScrapeRequest):
     sid = req.search_id
     log(f"[SCRAPE] Search triggered — sites={req.sites}, "
           f"mode={'internship' if req.internship_mode else 'normal'}", sid)
-    t = threading.Thread(target=run_scrape, args=(
+    t = threading.Thread(target=_run_scrape_guarded, args=(
         sid, req.sites, req.roles, req.location, req.indeed_country,
     ), kwargs={
         "keywords": req.keywords,

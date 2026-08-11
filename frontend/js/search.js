@@ -1798,10 +1798,8 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
 // ===== POLL ALL SCRAPES =====
 function pollAllScrapes() {
   if (pollTimer) clearInterval(pollTimer);
-  let attempts = 0;
   let consecutiveErrors = 0;
   pollTimer = setInterval(async () => {
-    attempts++;
     const sid = searchIds[0];
     if (!sid) { clearInterval(pollTimer); pollTimer = null; return; }
 
@@ -1895,11 +1893,6 @@ function pollAllScrapes() {
           internshipMode: internshipMode,
         },
       }));
-    }
-
-    if (attempts > 80) {
-      clearInterval(pollTimer);
-      pollTimer = null;
     }
   }, 3000);
 }

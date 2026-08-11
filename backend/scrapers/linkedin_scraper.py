@@ -191,10 +191,30 @@ def _get_headers():
     }
 
 
+def _request_with_retry(url, *, params=None, headers=None, timeout=20, max_retries=3):
+    """GET with exponential backoff on 429 (rate limit). Returns the response or None if retries are exhausted."""
+    for attempt in range(max_retries):
+        try:
+            resp = requests.get(url, params=params, headers=headers, timeout=timeout)
+            if resp.status_code != 429:
+                return resp
+            _save_debug_response(resp, f"rate_limited_retry_{attempt + 1}")
+        except requests.RequestException:
+            if attempt == max_retries - 1:
+                raise
+            delay(5 + attempt * 5, 8 + attempt * 5)
+            continue
+        delay(5 + attempt * 5, 8 + attempt * 5)
+    return None
+
+
 def _fetch_search_page(keywords: str, location: str, start: int = 0, hours_old: int = 0) -> list[dict]:
     params = _build_search_params(keywords, location, start, hours_old)
     try:
-        resp = requests.get(LINKEDIN_SEARCH_URL, params=params, headers=_get_headers(), timeout=20)
+        resp = _request_with_retry(LINKEDIN_SEARCH_URL, params=params, headers=_get_headers(), timeout=20)
+        if resp is None:
+            print(f"[LINKEDIN] Search '{keywords}' still rate-limited after retries")
+            return []
         if resp.status_code != 200:
             _save_debug_response(resp, f"search_{resp.status_code}_{keywords}")
             return []
@@ -253,7 +273,10 @@ def _fetch_description(job_id: str) -> tuple:
     if not job_id:
         return "", ""
     try:
-        resp = requests.get(f"{LINKEDIN_JOB_API}/{job_id}", headers=_get_headers(), timeout=10)
+        resp = _request_with_retry(f"{LINKEDIN_JOB_API}/{job_id}", headers=_get_headers(), timeout=10)
+        if resp is None:
+            print(f"[LINKEDIN] Description {job_id} still rate-limited after retries")
+            return "", ""
         if resp.status_code != 200:
             _save_debug_response(resp, f"desc_{resp.status_code}_{job_id}")
             return "", ""
@@ -276,12 +299,12 @@ def _fetch_description(job_id: str) -> tuple:
         return "", ""
 
 
-def scrape_linkedin(roles=None, location="", internship_mode=False, results_wanted=20, hours_old=72):
+def scrape_linkedin(roles=None, location="", internship_mode=False, results_wanted=20, hours_old=72, fetch_descriptions=True):
     """Scrape LinkedIn jobs using HTTP requests (fast).
     Falls back to Playwright-based scraper on failure.
     """
     try:
-        return _scrape_http(roles, location, internship_mode, results_wanted, hours_old)
+        return _scrape_http(roles, location, internship_mode, results_wanted, hours_old, fetch_descriptions)
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
@@ -304,7 +327,7 @@ def scrape_linkedin(roles=None, location="", internship_mode=False, results_want
         return pw_scrape(roles, location, internship_mode, results_wanted, hours_old)
 
 
-def _scrape_http(roles=None, location="", internship_mode=False, results_wanted=20, hours_old=72):
+def _scrape_http(roles=None, location="", internship_mode=False, results_wanted=20, hours_old=72, fetch_descriptions=True):
     if not roles:
         return []
 
@@ -409,19 +432,20 @@ def _scrape_http(roles=None, location="", internship_mode=False, results_wanted=
 
     print(f"[LINKEDIN] {len(all_jobs)} unique jobs from {len(roles)} roles + fallback")
 
-    if all_jobs:
-        _enrich_descriptions(all_jobs)
+    if all_jobs and fetch_descriptions:
+        enrich_descriptions(all_jobs)
 
     return all_jobs
 
 
-def _enrich_descriptions(jobs: list[dict], max_workers: int = 5):
+def enrich_descriptions(jobs: list[dict], max_workers: int = 3):
     """Fetch job descriptions and job_level in parallel for jobs that don't have one."""
     need_fetch = [j for j in jobs if (not j.get("description") or not j.get("job_level")) and j.get("url")]
     if not need_fetch:
         return
 
     def _get_desc(job):
+        delay(1, 2)
         job_id = _extract_job_id(job["url"])
         if job_id:
             desc, level = _fetch_description(job_id)

@@ -65,6 +65,7 @@ def scrape_indeed(roles=None, location="", country_indeed="USA", internship_mode
         all_jobs = []
         results_wanted = results_wanted * 2 if internship_mode else results_wanted
         per_role = max(1, results_wanted // len(roles))
+        per_role = min(per_role, 100)
         for i, role in enumerate(roles):
             if i > 0:
                 delay(2, 4)
@@ -78,12 +79,13 @@ def scrape_indeed(roles=None, location="", country_indeed="USA", internship_mode
                     search_terms = [f"{role} intern", role]
                 else:
                     search_terms = [role]
+                term_wanted = max(1, per_role // len(search_terms))
                 for search_term in search_terms:
                     jobs_df = scrape_jobs(
                         site_name=["indeed"],
                         search_term=search_term,
                         location=location,
-                        results_wanted=per_role,
+                        results_wanted=term_wanted,
                         hours_old=hours_old,
                         country_indeed=country_indeed,
                         verbose=2,
@@ -117,8 +119,6 @@ def scrape_indeed(roles=None, location="", country_indeed="USA", internship_mode
                             "salary": salary,
                             "posted_at": str(posted) if posted else "",
                         })
-                    if not jobs_df.empty:
-                        break
             except Exception as e:
                 print(f"[INDEED] Role '{role}' failed: {e}")
 
