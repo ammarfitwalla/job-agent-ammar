@@ -1172,6 +1172,8 @@ function clearSearchState() {
   activeFilters = { site: '', experience_level: '' };
   currentSort = 'relevant';
   _currentPage = 1;
+  _activeSubFilterRole = 'all';
+  _activeLevelFilter = 'all';
   document.getElementById("results").innerHTML = `
     <div class="premium-card min-h-[400px] flex flex-col items-center justify-center text-center p-8">
       <div class="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center mb-5 border border-slate-100">
@@ -1296,14 +1298,7 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
 
 function applyThreshold() {
   _currentPage = 1;
-  const tabBar = document.getElementById('tabBar');
-  const isTabs = tabBar && !tabBar.classList.contains('hidden');
-  const baseJobs = isTabs ? (activeTab === 'custom' ? customJobs : aiJobs) : allJobs;
-  if (_activeSubFilterRole === 'all') {
-    renderAllJobs(baseJobs);
-  } else {
-    renderAllJobs(baseJobs.filter(j => j._matched_role === _activeSubFilterRole));
-  }
+  renderAllJobs(getFilteredBaseJobs());
 }
 
 // ===== RESUME -> KEYWORDS =====
@@ -1678,12 +1673,10 @@ function getLocation() {
 }
 
 // ===== INTERNSHIP MODE TOGGLE =====
-document.getElementById("internshipToggle").addEventListener("click", () => {
-  internshipMode = !internshipMode;
+function applyInternshipModeUI() {
   const toggle = document.getElementById("internshipToggle");
   const knob = document.getElementById("toggleKnob");
   const btn = document.getElementById("searchBtn");
-
   if (internshipMode) {
     document.body.classList.add("internship-mode");
     toggle.classList.replace("bg-slate-200", "bg-teal-500");
@@ -1695,6 +1688,11 @@ document.getElementById("internshipToggle").addEventListener("click", () => {
     knob.style.transform = "translateX(0)";
     btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Start Search';
   }
+}
+
+document.getElementById("internshipToggle").addEventListener("click", () => {
+  internshipMode = !internshipMode;
+  applyInternshipModeUI();
 });
 
 // ===== SEARCH =====
@@ -1755,6 +1753,8 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   lastRenderedCount = 0;
   activeFilters = { site: '', experience_level: '' };
   currentSort = 'relevant';
+  _activeSubFilterRole = 'all';
+  _activeLevelFilter = 'all';
   document.getElementById("filterBar").classList.add("hidden");
 
   document.title = "Searching... - AI Job Agent";
@@ -1905,6 +1905,9 @@ function renderAllJobs(jobs) {
   if (!internshipMode) {
     displayJobs = displayJobs.filter(j => j.experience_level !== "entry_level");
   }
+  if (_activeLevelFilter !== 'all') {
+    displayJobs = displayJobs.filter(j => j.experience_level === _activeLevelFilter);
+  }
   if (currentSort === 'recent') {
     displayJobs = [...displayJobs].sort((a, b) => {
       const da = a.date_posted || '';
@@ -1937,8 +1940,8 @@ function renderAllJobs(jobs) {
   const isTabs = tabBar && !tabBar.classList.contains('hidden');
   const baseScope = isTabs ? (activeTab === 'custom' ? customJobs : aiJobs) : allJobs;
   const baseRoles = [...new Set(baseScope.map(j => j._matched_role).filter(Boolean))];
-  subFilterHtml = `<div class="flex flex-wrap items-center justify-between gap-2 mb-4" id="subFilters">`;
-  if (baseRoles.length > 1) {
+  subFilterHtml = `<div id="subFilters" class="mb-4"><div class="flex flex-wrap items-center justify-between gap-2">`;
+  if (baseRoles.length >= 1) {
     const allActive = _activeSubFilterRole === 'all';
     subFilterHtml += `<div class="flex flex-wrap gap-2">
       <span class="cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${allActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-role-filter="all">All (${baseScope.length})</span>`;
@@ -1956,6 +1959,21 @@ function renderAllJobs(jobs) {
       <option value="referral" ${currentSort === 'referral' ? 'selected' : ''}>Most Referrals</option>
     </select></span>
   </div>`;
+  const levelScope = internshipMode ? baseScope : baseScope.filter(j => j.experience_level !== 'entry_level');
+  const baseLevels = [...new Set(levelScope.map(j => j.experience_level).filter(Boolean))];
+  if (baseLevels.length > 1) {
+    subFilterHtml += `<div class="flex flex-wrap gap-2 mt-2">`;
+    const allLevelsActive = _activeLevelFilter === 'all';
+    subFilterHtml += `<span class="cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${allLevelsActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-level-filter="all">All Levels (${levelScope.length})</span>`;
+    for (const level of baseLevels) {
+      const count = levelScope.filter(j => j.experience_level === level).length;
+      const isActive = _activeLevelFilter === level;
+      const label = level === 'entry_level' ? 'Entry Level' : level.charAt(0).toUpperCase() + level.slice(1);
+      subFilterHtml += `<span class="cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${isActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-level-filter="${level}">${label} (${count})</span>`;
+    }
+    subFilterHtml += `</div>`;
+  }
+  subFilterHtml += `</div>`;
 
   const totalPages = Math.ceil(displayJobs.length / _pageSize);
   const start = (_currentPage - 1) * _pageSize;
@@ -2032,12 +2050,33 @@ function renderAllJobs(jobs) {
 
   // Sub-filter event delegation (single handler, survives re-renders)
 let _activeSubFilterRole = 'all';
+let _activeLevelFilter = 'all';
 document.addEventListener('click', (e) => {
   const el = e.target.closest('#subFilters [data-role-filter]');
   if (!el) return;
   _activeSubFilterRole = el.dataset.roleFilter;
   applyThreshold();
 });
+
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('#subFilters [data-level-filter]');
+  if (!el) return;
+  _activeLevelFilter = el.dataset.levelFilter;
+  applyThreshold();
+});
+
+function getFilteredBaseJobs() {
+  const tabBar = document.getElementById('tabBar');
+  const isTabs = tabBar && !tabBar.classList.contains('hidden');
+  let baseJobs = isTabs ? (activeTab === 'custom' ? customJobs : aiJobs) : allJobs;
+  if (_activeSubFilterRole !== 'all') {
+    baseJobs = baseJobs.filter(j => j._matched_role === _activeSubFilterRole);
+  }
+  if (_activeLevelFilter !== 'all') {
+    baseJobs = baseJobs.filter(j => j.experience_level === _activeLevelFilter);
+  }
+  return baseJobs;
+}
 
 // Pagination event delegation
 document.addEventListener('click', (e) => {
@@ -2046,10 +2085,7 @@ document.addEventListener('click', (e) => {
   const page = parseInt(el.dataset.page);
   if (!page || page < 1) return;
   _currentPage = page;
-  const tabBar = document.getElementById('tabBar');
-  const isTabs = tabBar && !tabBar.classList.contains('hidden');
-  const baseJobs = isTabs ? (activeTab === 'custom' ? customJobs : aiJobs) : allJobs;
-  renderAllJobs(_activeSubFilterRole === 'all' ? baseJobs : baseJobs.filter(j => j._matched_role === _activeSubFilterRole));
+  renderAllJobs(getFilteredBaseJobs());
 });
 
 // ===== RESTORE LAST SEARCH ON PAGE LOAD =====
@@ -2066,6 +2102,8 @@ document.addEventListener('click', (e) => {
       _customRoleList = saved._customRoleList || [];
       _aiRoleList = saved._aiRoleList || [];
       searchMode = saved.searchMode || 'single';
+      internshipMode = !!(saved.params && saved.params.internshipMode);
+      applyInternshipModeUI();
 
       const sid = searchIds[0];
       if (!sid) return;
