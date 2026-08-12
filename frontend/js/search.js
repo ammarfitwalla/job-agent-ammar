@@ -1948,18 +1948,6 @@ function renderAllJobs(jobs) {
   } else {
     displayJobs = [...displayJobs].sort((a, b) => (b.keyword_score || 0) - (a.keyword_score || 0));
   }
-  if (!displayJobs.length) {
-    c.innerHTML = `
-      <div class="premium-card min-h-[400px] flex flex-col items-center justify-center text-center p-8">
-        <div class="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center mb-4 border border-slate-100">
-          <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-        </div>
-        <h3 class="text-sm font-semibold text-slate-800">No jobs found</h3>
-        <p class="text-xs text-slate-500 mt-1">Try different roles or broaden your job board selection.</p>
-      </div>`;
-    return;
-  }
-
   // Sub-filter pills — always show if the base scope has multiple roles
   let subFilterHtml = "";
   const tabBar = document.getElementById('tabBar');
@@ -1985,13 +1973,14 @@ function renderAllJobs(jobs) {
       <option value="referral" ${currentSort === 'referral' ? 'selected' : ''}>Most Referrals</option>
     </select></span>
   </div>`;
-  const levelScope = internshipMode ? baseScope : baseScope.filter(j => {
+  const roleScope = _activeSubFilterRole !== 'all' ? baseScope.filter(j => j._matched_role === _activeSubFilterRole) : baseScope;
+  const levelScope = internshipMode ? roleScope : roleScope.filter(j => {
     if (j.experience_level === 'entry_level' || j.experience_level === 'internship') return false;
     const jl = (j.job_level || '').toLowerCase();
     return !(jl === 'entry level' || jl === 'associate' || jl === 'trainee' || jl === 'internship');
   });
   const baseLevels = [...new Set(levelScope.map(j => j.experience_level).filter(Boolean))];
-  if (baseLevels.length > 1) {
+  if (baseLevels.length >= 1) {
     subFilterHtml += `<div class="flex flex-wrap gap-2 mt-2">`;
     const allLevelsActive = _activeLevelFilter === 'all';
     subFilterHtml += `<span class="cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${allLevelsActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-level-filter="all">All Levels (${levelScope.length})</span>`;
@@ -2004,6 +1993,18 @@ function renderAllJobs(jobs) {
     subFilterHtml += `</div>`;
   }
   subFilterHtml += `</div>`;
+
+  if (!displayJobs.length) {
+    c.innerHTML = subFilterHtml + `
+      <div class="premium-card min-h-[400px] flex flex-col items-center justify-center text-center p-8">
+        <div class="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center mb-4 border border-slate-100">
+          <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </div>
+        <h3 class="text-sm font-semibold text-slate-800">No jobs found</h3>
+        <p class="text-xs text-slate-500 mt-1">Try a different level or role filter.</p>
+      </div>`;
+    return;
+  }
 
   const totalPages = Math.ceil(displayJobs.length / _pageSize);
   const start = (_currentPage - 1) * _pageSize;

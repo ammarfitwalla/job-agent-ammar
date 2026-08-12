@@ -198,7 +198,7 @@ def _request_with_retry(url, *, params=None, headers=None, timeout=20, max_retri
             resp = requests.get(url, params=params, headers=headers, timeout=timeout)
             if resp.status_code != 429:
                 return resp
-            _save_debug_response(resp, f"rate_limited_retry_{attempt + 1}")
+            # _save_debug_response(resp, f"rate_limited_retry_{attempt + 1}")
         except requests.RequestException:
             if attempt == max_retries - 1:
                 raise
@@ -216,12 +216,12 @@ def _fetch_search_page(keywords: str, location: str, start: int = 0, hours_old: 
             print(f"[LINKEDIN] Search '{keywords}' still rate-limited after retries")
             return []
         if resp.status_code != 200:
-            _save_debug_response(resp, f"search_{resp.status_code}_{keywords}")
+            # _save_debug_response(resp, f"search_{resp.status_code}_{keywords}")
             return []
         soup = BeautifulSoup(resp.text, "lxml")
         cards = soup.select("li")
         if not cards:
-            _save_debug_response(resp, f"search_no_cards_{keywords}")
+            # _save_debug_response(resp, f"search_no_cards_{keywords}")
             return []
         jobs = []
         for card in cards:
@@ -278,7 +278,7 @@ def _fetch_description(job_id: str) -> tuple:
             print(f"[LINKEDIN] Description {job_id} still rate-limited after retries")
             return "", ""
         if resp.status_code != 200:
-            _save_debug_response(resp, f"desc_{resp.status_code}_{job_id}")
+            # _save_debug_response(resp, f"desc_{resp.status_code}_{job_id}")
             return "", ""
         soup = BeautifulSoup(resp.text, "lxml")
         desc_el = soup.select_one(".show-more-less-html__markup")
@@ -292,7 +292,8 @@ def _fetch_description(job_id: str) -> tuple:
                     job_level = value_el.get_text(strip=True)
                 break
         if not description:
-            _save_debug_response(resp, f"desc_no_markup_{job_id}")
+            # _save_debug_response(resp, f"desc_no_markup_{job_id}")
+            pass
         return description, job_level
     except requests.RequestException as e:
         print(f"[LINKEDIN] Request failed for description {job_id}: {e}")
