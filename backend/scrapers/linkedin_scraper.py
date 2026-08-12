@@ -15,6 +15,31 @@ from utils.delay import delay
 DEBUG_DIR = os.path.join(os.path.dirname(__file__), "linkedin_debug")
 
 
+class LinkedInRateLimited(Exception):
+    """Raised once the rate-limit circuit trips, so callers can bail fast
+    instead of paying the full retry/backoff cost on every subsequent request."""
+    pass
+
+
+class _RateLimitCircuit:
+    """Tracks consecutive full-retry-exhaustions for a single scrape run.
+    Once tripped, _request_with_retry raises immediately instead of retrying
+    with escalating backoff, so we stop burning time against a wall that's
+    already up."""
+    def __init__(self, trip_after: int = 2):
+        self.trip_after = trip_after
+        self.consecutive_exhausted = 0
+        self.tripped = False
+
+    def record_success(self):
+        self.consecutive_exhausted = 0
+
+    def record_exhausted(self):
+        self.consecutive_exhausted += 1
+        if self.consecutive_exhausted >= self.trip_after:
+            self.tripped = True
+
+
 def _save_debug_response(resp: requests.Response, label: str):
     os.makedirs(DEBUG_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -42,6 +67,8 @@ USER_AGENTS = [
 
 LINKEDIN_SEARCH_URL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
 LINKEDIN_JOB_API = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting"
+LINKEDIN_PAGE_SIZE = 25
+LINKEDIN_BATCH_SIZE = 50
 
 
 def _parse_location_terms(requested: str) -> list[str]:
@@ -191,27 +218,42 @@ def _get_headers():
     }
 
 
-def _request_with_retry(url, *, params=None, headers=None, timeout=20, max_retries=3):
-    """GET with exponential backoff on 429 (rate limit). Returns the response or None if retries are exhausted."""
+def _request_with_retry(url, *, params=None, headers=None, timeout=20, max_retries=2, circuit=None):
+    """GET with short exponential backoff on 429 (rate limit).
+    Returns the response, or None if retries are exhausted.
+
+    If `circuit` is provided and already tripped, raises LinkedInRateLimited
+    immediately instead of retrying - avoids paying the backoff cost on every
+    request once we know LinkedIn is actively blocking us.
+    """
+    if circuit is not None and circuit.tripped:
+        raise LinkedInRateLimited("circuit open: LinkedIn is rate-limiting us, skipping request")
+
     for attempt in range(max_retries):
         try:
             resp = requests.get(url, params=params, headers=headers, timeout=timeout)
             if resp.status_code != 429:
+                if circuit is not None:
+                    circuit.record_success()
                 return resp
             # _save_debug_response(resp, f"rate_limited_retry_{attempt + 1}")
         except requests.RequestException:
             if attempt == max_retries - 1:
                 raise
-            delay(5 + attempt * 5, 8 + attempt * 5)
+            delay(2 + attempt * 2, 4 + attempt * 2)
             continue
-        delay(5 + attempt * 5, 8 + attempt * 5)
+        if attempt < max_retries - 1:
+            delay(2 + attempt * 2, 4 + attempt * 2)
+
+    if circuit is not None:
+        circuit.record_exhausted()
     return None
 
 
-def _fetch_search_page(keywords: str, location: str, start: int = 0, hours_old: int = 0) -> list[dict]:
+def _fetch_search_page(keywords: str, location: str, start: int = 0, hours_old: int = 0, circuit=None) -> list[dict]:
     params = _build_search_params(keywords, location, start, hours_old)
     try:
-        resp = _request_with_retry(LINKEDIN_SEARCH_URL, params=params, headers=_get_headers(), timeout=20)
+        resp = _request_with_retry(LINKEDIN_SEARCH_URL, params=params, headers=_get_headers(), timeout=20, circuit=circuit)
         if resp is None:
             print(f"[LINKEDIN] Search '{keywords}' still rate-limited after retries")
             return []
@@ -268,12 +310,66 @@ def _fetch_search_page(keywords: str, location: str, start: int = 0, hours_old: 
         return []
 
 
-def _fetch_description(job_id: str) -> tuple:
+def _fetch_linkedin_batch(search_term: str, location: str, start: int, hours_old: int, target_batch_size: int = LINKEDIN_BATCH_SIZE, circuit=None):
+    jobs = []
+    empty_pages = 0  # Track consecutive empty or low-yield pages
+    
+    while len(jobs) < target_batch_size:
+        page_jobs = _fetch_search_page(search_term, location, start, hours_old, circuit=circuit)
+        
+        if not page_jobs:
+            empty_pages += 1
+            if empty_pages >= 3: # Give up only after 3 consecutive empty pages
+                break
+        else:
+            empty_pages = 0
+            jobs.extend(page_jobs)
+            
+        # Remove the strict `< 25` break condition, or lower it significantly
+        if page_jobs and len(page_jobs) < 5 and start > 0: 
+            break
+            
+        # LinkedIn paginates by 25, so always increment by 25 regardless of how many were returned
+        start += LINKEDIN_PAGE_SIZE 
+        
+        if len(jobs) < target_batch_size:
+            delay(1, 2)
+            
+    return jobs, start
+
+
+def _filter_linkedin_jobs(raw_jobs: list[dict], loc_terms: list[str], seen_urls: set) -> list[dict]:
+    filtered = []
+    for job in raw_jobs:
+        url = job.get("url", "")
+        if not url or url in seen_urls:
+            continue
+        if not _matches_location(job.get("location", ""), loc_terms):
+            continue
+        title_lower = (job.get("title", "") or "").lower()
+        if title_lower.startswith("general interest") or title_lower.startswith("internship application"):
+            continue
+        seen_urls.add(url)
+        filtered.append({
+            "title": job.get("title", ""),
+            "company": job.get("company", ""),
+            "company_url": job.get("company_url", ""),
+            "location": job.get("location", ""),
+            "url": url,
+            "description": job.get("description", ""),
+            "tags": ["linkedin"],
+            "salary": job.get("salary"),
+            "posted_at": job.get("posted_at", ""),
+        })
+    return filtered
+
+
+def _fetch_description(job_id: str, circuit=None) -> tuple:
     """Fetch job description and job_level from LinkedIn's guest job API."""
     if not job_id:
         return "", ""
     try:
-        resp = _request_with_retry(f"{LINKEDIN_JOB_API}/{job_id}", headers=_get_headers(), timeout=10)
+        resp = _request_with_retry(f"{LINKEDIN_JOB_API}/{job_id}", headers=_get_headers(), timeout=10, circuit=circuit)
         if resp is None:
             print(f"[LINKEDIN] Description {job_id} still rate-limited after retries")
             return "", ""
@@ -335,101 +431,93 @@ def _scrape_http(roles=None, location="", internship_mode=False, results_wanted=
     loc_terms = _parse_location_terms(location)
     seen_urls = set()
     all_jobs = []
+    circuit = _RateLimitCircuit(trip_after=2)
 
     results_wanted = results_wanted * 2 if internship_mode else results_wanted
     per_role = max(1, results_wanted // len(roles))
 
-    for i, role in enumerate(roles):
-        if i > 0:
-            delay(2, 4)
+    try:
+        for i, role in enumerate(roles):
+            if i > 0:
+                delay(2, 4)
 
-        search_terms = [f"{role} intern", role] if internship_mode else [role]
+            search_terms = [f"{role} intern", role] if internship_mode else [role]
 
-        for search_term in search_terms:
-            start = 0
-            page_jobs = []
-            while True:
-                batch = _fetch_search_page(search_term, location, start, hours_old)
-                if not batch:
+            for search_term in search_terms:
+                start = 0
+                page_jobs = []
+                while len(page_jobs) < per_role:
+                    raw_jobs, start = _fetch_linkedin_batch(
+                        search_term, location, start, hours_old,
+                        target_batch_size=LINKEDIN_BATCH_SIZE, circuit=circuit
+                    )
+                    if not raw_jobs:
+                        print(f"[LINKEDIN] search_term='{search_term}' no raw jobs returned, stopping search")
+                        break
+
+                    filtered = _filter_linkedin_jobs(raw_jobs, loc_terms, seen_urls)
+                    print(f"[LINKEDIN] search_term='{search_term}' raw={len(raw_jobs)} filtered={len(filtered)} total_collected={len(page_jobs) + len(filtered)}")
+                    page_jobs.extend(filtered)
+                    if len(raw_jobs) < LINKEDIN_BATCH_SIZE:
+                        print(f"[LINKEDIN] search_term='{search_term}' reached page limit end")
+                        break
+                    delay(1, 2)
+
+                if page_jobs:
+                    selected_jobs = page_jobs[:per_role]
+                    print(f"[LINKEDIN] search_term='{search_term}' selected {len(selected_jobs)} jobs for role '{role}'")
+                    all_jobs.extend(selected_jobs)
                     break
-                page_jobs.extend(batch)
-                if len(page_jobs) >= per_role:
-                    break
-                start += 25
-                delay(1, 2)
 
-            for job in page_jobs:
-                if not job["url"] or job["url"] in seen_urls:
-                    continue
-                job_location = job.get("location", "")
-                if not _matches_location(job_location, loc_terms):
-                    continue
-
-                title_lower = job["title"].lower()
-                if title_lower.startswith("general interest") or title_lower.startswith("internship application"):
-                    continue
-
-                seen_urls.add(job["url"])
-                all_jobs.append({
-                    "title": job["title"],
-                    "company": job["company"],
-                    "company_url": job.get("company_url", ""),
-                    "location": job_location,
-                    "url": job["url"],
-                    "description": job.get("description", ""),
-                    "tags": ["linkedin"],
-                    "salary": job.get("salary"),
-                    "posted_at": job.get("posted_at", ""),
-                })
-
-            if page_jobs:
-                break
-
-    if internship_mode:
-        role_words = set()
-        for r in roles:
-            for w in r.lower().split():
-                if len(w) > 2:
-                    role_words.add(w)
-        tech_words = role_words | {"software", "developer", "data", "it", "support",
-                                   "infrastructure", "platform", "system", "tech",
-                                   "cyber", "security", "analyst", "devops",
-                                   "backend", "frontend", "full stack", "fullstack",
-                                   "site reliability", "sre", "cloud", "network",
-                                   "database", "linux", "dev", "programmer",
-                                   "quality", "qa", "test", "automation",
-                                   "engineering", "application", "ml", "ai",
-                                   "artificial", "machine learning", "solutions",
-                                   "architecture", "technical"}
-        try:
+        if internship_mode:
+            role_words = set()
+            for r in roles:
+                for w in r.lower().split():
+                    if len(w) > 2:
+                        role_words.add(w)
+            tech_words = role_words | {"software", "developer", "data", "it", "support",
+                                       "infrastructure", "platform", "system", "tech",
+                                       "cyber", "security", "analyst", "devops",
+                                       "backend", "frontend", "full stack", "fullstack",
+                                       "site reliability", "sre", "cloud", "network",
+                                       "database", "linux", "dev", "programmer",
+                                       "quality", "qa", "test", "automation",
+                                       "engineering", "application", "ml", "ai",
+                                       "artificial", "machine learning", "solutions",
+                                       "architecture", "technical"}
             delay(2, 4)
-            fallback_jobs = _fetch_search_page("intern", location, 0, hours_old)
+            fallback_jobs, _ = _fetch_linkedin_batch(
+                "intern", location, 0, hours_old,
+                target_batch_size=LINKEDIN_BATCH_SIZE, circuit=circuit
+            )
             if fallback_jobs:
                 for job in fallback_jobs:
-                    if not job["url"] or job["url"] in seen_urls:
+                    url = job.get("url", "")
+                    if not url or url in seen_urls:
                         continue
                     job_location = job.get("location", "")
                     if not _matches_location(job_location, loc_terms):
                         continue
-                    title_lower = job["title"].lower()
+                    title_lower = job.get("title", "").lower()
                     if title_lower.startswith("general interest"):
                         continue
                     if not any((re.search(rf'\b{re.escape(tw)}\b', title_lower) if len(tw) <= 3 else tw in title_lower) for tw in tech_words):
                         continue
-                    seen_urls.add(job["url"])
+                    seen_urls.add(url)
                     all_jobs.append({
-                        "title": job["title"],
-                        "company": job["company"],
+                        "title": job.get("title", ""),
+                        "company": job.get("company", ""),
                         "company_url": job.get("company_url", ""),
                         "location": job_location,
-                        "url": job["url"],
+                        "url": url,
                         "description": job.get("description", ""),
                         "tags": ["linkedin"],
                         "salary": job.get("salary"),
                         "posted_at": job.get("posted_at", ""),
                     })
-        except Exception:
-            pass
+    except LinkedInRateLimited:
+        print(f"[LINKEDIN] Circuit tripped after repeated 429s — bailing early with {len(all_jobs)} jobs collected, skipping description enrichment")
+        return all_jobs
 
     print(f"[LINKEDIN] {len(all_jobs)} unique jobs from {len(roles)} roles + fallback")
 
@@ -445,11 +533,16 @@ def enrich_descriptions(jobs: list[dict], max_workers: int = 3):
     if not need_fetch:
         return
 
+    circuit = _RateLimitCircuit(trip_after=3)
+
     def _get_desc(job):
         delay(1, 2)
         job_id = _extract_job_id(job["url"])
         if job_id:
-            desc, level = _fetch_description(job_id)
+            try:
+                desc, level = _fetch_description(job_id, circuit=circuit)
+            except LinkedInRateLimited:
+                return
             if desc and not job.get("description"):
                 job["description"] = desc
             if level and not job.get("job_level"):
