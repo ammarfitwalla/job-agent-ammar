@@ -1,5 +1,6 @@
 import os
 import threading
+import types
 from typing import Optional
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Query
@@ -129,10 +130,12 @@ def run_scrape(sid, sites, roles, location, indeed_country,
                     kwargs["fetch_descriptions"] = False
                 if site_key == "indeed":
                     kwargs["country_indeed"] = indeed_country
-                jobs = scraper_fn(**kwargs)
+                
+                # Execute scraper
+                scrape_result = scraper_fn(**kwargs)
             except TypeError:
                 try:
-                    jobs = scraper_fn()
+                    scrape_result = scraper_fn()
                 except Exception as e:
                     log(f"[SCRAPE] {site_key} failed: {e}", sid)
                     continue
@@ -140,84 +143,94 @@ def run_scrape(sid, sites, roles, location, indeed_country,
                 log(f"[SCRAPE] {site_key} failed: {e}", sid)
                 continue
 
-            # Title-filter by this role and tag matching jobs
-            combo_jobs = []
-            for j in jobs:
-                if _role_match(j.get("title", ""), [role]) > 0:
-                    j["_matched_role"] = role
-                    combo_jobs.append(j)
-            log(f"[SCRAPE] {role} @ {site_key}: {len(jobs)} fetched, {len(combo_jobs)} title-matched", sid)
+            # Check if scraper returned a generator (streaming) or a static list
+            if isinstance(scrape_result, types.GeneratorType):
+                batch_iterator = scrape_result
+            else:
+                batch_iterator = [scrape_result]
 
-            if not combo_jobs:
-                _delay(1, 3)
-                continue
+            # Process jobs in streaming batches
+            for jobs_batch in batch_iterator:
+                if _is_cancelled(sid):
+                    log(f"[SCRAPE] Cancelled by user mid-scrape", sid)
+                    break
 
-            # Fetch descriptions only for title-matched jobs (LinkedIn skips them in the scraper)
-            if site_key == "linkedin":
-                from scrapers.linkedin_scraper import enrich_descriptions as _enrich
-                _enrich(combo_jobs)
-
-            # Experience level detection (required for internship filter and display).
-            # Boards like LinkedIn provide their own seniority tag (job_level) — use it
-            # as a fallback when our own detection finds nothing.
-            for j in combo_jobs:
-                j["experience_level"] = (
-                    detect_experience_level(j.get("title", ""), j.get("description", ""))
-                    or level_from_job_level(j.get("job_level"))
-                )
-
-            # In internship mode, drop non-entry-level for this combo
-            if internship_mode:
-                before = len(combo_jobs)
-                combo_jobs = [j for j in combo_jobs if j.get("experience_level") in ("internship", "entry_level")]
-                dropped = before - len(combo_jobs)
-                if dropped:
-                    log(f"[SCRAPE] {role} @ {site_key}: internship filter {before} → {len(combo_jobs)} (dropped {dropped})", sid)
-                if not combo_jobs:
-                    _delay(1, 3)
+                if not jobs_batch:
                     continue
 
-            # In normal mode, drop intern and entry-level jobs
-            if not internship_mode:
-                before = len(combo_jobs)
-                combo_jobs = [j for j in combo_jobs if j.get("experience_level") not in ("internship", "entry_level")]
-                dropped = before - len(combo_jobs)
-                if dropped:
-                    log(f"[SCRAPE] {role} @ {site_key}: normal filter {before} → {len(combo_jobs)} (dropped {dropped} intern/entry-level)", sid)
+                # Title-filter by this role and tag matching jobs
+                combo_jobs = []
+                for j in jobs_batch:
+                    if _role_match(j.get("title", ""), [role]) > 0:
+                        j["_matched_role"] = role
+                        combo_jobs.append(j)
+                
+                log(f"[SCRAPE] BATCH {role} @ {site_key}: {len(jobs_batch)} fetched, {len(combo_jobs)} title-matched", sid)
+
                 if not combo_jobs:
-                    _delay(1, 3)
                     continue
 
-            # Dedup against accumulated jobs
-            new_count = 0
-            for j in combo_jobs:
-                key = j.get("url", "") or f"{j.get('title', '')}|{j.get('company', '')}"
-                if key not in seen_urls:
-                    seen_urls.add(key)
-                    all_jobs.append(j)
-                    new_count += 1
-            log(f"[SCRAPE] {role} @ {site_key}: {new_count} new after dedup", sid)
+                # Fetch descriptions only for title-matched jobs
+                if site_key == "linkedin":
+                    from scrapers.linkedin_scraper import enrich_descriptions as _enrich
+                    _enrich(combo_jobs)
 
-            if not all_jobs:
-                _delay(1, 3)
-                continue
-
-            # Keyword-score all accumulated jobs
-            for j in all_jobs:
-                if "keyword_score" not in j or not isinstance(j["keyword_score"], int):
-                    j["keyword_score"] = _kw_score(
-                        j.get("title", ""),
-                        j.get("description", ""),
-                        j.get("tags", []),
-                        keywords=keywords or [],
+                # Experience level detection
+                for j in combo_jobs:
+                    j["experience_level"] = (
+                        detect_experience_level(j.get("title", ""), j.get("description", ""))
+                        or level_from_job_level(j.get("job_level"))
                     )
-            all_jobs.sort(key=lambda j: j.get("keyword_score", 0), reverse=True)
 
-            # Write partial results — frontend picks these up during polling
-            _set_raw(sid, all_jobs)
-            log(f"[SCRAPE] {role} @ {site_key}: {len(all_jobs)} total jobs stored", sid)
+                # In internship mode, drop non-entry-level for this combo
+                if internship_mode:
+                    before = len(combo_jobs)
+                    combo_jobs = [j for j in combo_jobs if j.get("experience_level") in ("internship", "entry_level")]
+                    dropped = before - len(combo_jobs)
+                    if dropped:
+                        log(f"[SCRAPE] BATCH {role} @ {site_key}: internship filter dropped {dropped}", sid)
 
-            # Staggered delay before next combo
+                # In normal mode, drop intern and entry-level jobs
+                if not internship_mode:
+                    before = len(combo_jobs)
+                    combo_jobs = [j for j in combo_jobs if j.get("experience_level") not in ("internship", "entry_level")]
+                    dropped = before - len(combo_jobs)
+                    if dropped:
+                        log(f"[SCRAPE] BATCH {role} @ {site_key}: normal filter dropped {dropped} intern/entry-level", sid)
+
+                if not combo_jobs:
+                    continue
+
+                # Dedup against accumulated jobs
+                new_count = 0
+                for j in combo_jobs:
+                    key = j.get("url", "") or f"{j.get('title', '')}|{j.get('company', '')}"
+                    if key not in seen_urls:
+                        seen_urls.add(key)
+                        all_jobs.append(j)
+                        new_count += 1
+                
+                log(f"[SCRAPE] BATCH {role} @ {site_key}: {new_count} new after dedup", sid)
+
+                if new_count == 0:
+                    continue
+
+                # Keyword-score all accumulated jobs
+                for j in all_jobs:
+                    if "keyword_score" not in j or not isinstance(j["keyword_score"], int):
+                        j["keyword_score"] = _kw_score(
+                            j.get("title", ""),
+                            j.get("description", ""),
+                            j.get("tags", []),
+                            keywords=keywords or [],
+                        )
+                all_jobs.sort(key=lambda j: j.get("keyword_score", 0), reverse=True)
+
+                # Write partial results — frontend picks these up dynamically
+                _set_raw(sid, all_jobs)
+                log(f"[SCRAPE] {role} @ {site_key}: {len(all_jobs)} total jobs stored so far", sid)
+
+            # Staggered delay before next site/role combo
             _delay(1, 3)
 
     log(f"[SCRAPE] Pipeline complete — {len(all_jobs)} total jobs", sid)

@@ -55,6 +55,7 @@ def _save_debug_response(resp: requests.Response, label: str):
     except Exception as e:
         print(f"[LINKEDIN-DEBUG] Failed to save debug response: {e}")
 
+
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -178,9 +179,7 @@ def _format_salary(min_val, max_val, currency, interval):
 
 
 def _extract_job_id(url: str) -> str:
-    """Extract numeric job ID from LinkedIn job URL.
-    Handles both /jobs/view/123456 and /jobs/view/title-slug-123456 formats.
-    """
+    """Extract numeric job ID from LinkedIn job URL."""
     m = re.search(r'/jobs/view/(?:\S+-)?(\d+)$', url)
     return m.group(1) if m else ""
 
@@ -219,13 +218,6 @@ def _get_headers():
 
 
 def _request_with_retry(url, *, params=None, headers=None, timeout=20, max_retries=2, circuit=None):
-    """GET with short exponential backoff on 429 (rate limit).
-    Returns the response, or None if retries are exhausted.
-
-    If `circuit` is provided and already tripped, raises LinkedInRateLimited
-    immediately instead of retrying - avoids paying the backoff cost on every
-    request once we know LinkedIn is actively blocking us.
-    """
     if circuit is not None and circuit.tripped:
         raise LinkedInRateLimited("circuit open: LinkedIn is rate-limiting us, skipping request")
 
@@ -236,7 +228,6 @@ def _request_with_retry(url, *, params=None, headers=None, timeout=20, max_retri
                 if circuit is not None:
                     circuit.record_success()
                 return resp
-            # _save_debug_response(resp, f"rate_limited_retry_{attempt + 1}")
         except requests.RequestException:
             if attempt == max_retries - 1:
                 raise
@@ -258,12 +249,10 @@ def _fetch_search_page(keywords: str, location: str, start: int = 0, hours_old: 
             print(f"[LINKEDIN] Search '{keywords}' still rate-limited after retries")
             return []
         if resp.status_code != 200:
-            # _save_debug_response(resp, f"search_{resp.status_code}_{keywords}")
             return []
         soup = BeautifulSoup(resp.text, "lxml")
         cards = soup.select("li")
         if not cards:
-            # _save_debug_response(resp, f"search_no_cards_{keywords}")
             return []
         jobs = []
         for card in cards:
@@ -312,24 +301,22 @@ def _fetch_search_page(keywords: str, location: str, start: int = 0, hours_old: 
 
 def _fetch_linkedin_batch(search_term: str, location: str, start: int, hours_old: int, target_batch_size: int = LINKEDIN_BATCH_SIZE, circuit=None):
     jobs = []
-    empty_pages = 0  # Track consecutive empty or low-yield pages
+    empty_pages = 0
     
     while len(jobs) < target_batch_size:
         page_jobs = _fetch_search_page(search_term, location, start, hours_old, circuit=circuit)
         
         if not page_jobs:
             empty_pages += 1
-            if empty_pages >= 3: # Give up only after 3 consecutive empty pages
+            if empty_pages >= 3:
                 break
         else:
             empty_pages = 0
             jobs.extend(page_jobs)
             
-        # Remove the strict `< 25` break condition, or lower it significantly
         if page_jobs and len(page_jobs) < 5 and start > 0: 
             break
             
-        # LinkedIn paginates by 25, so always increment by 25 regardless of how many were returned
         start += LINKEDIN_PAGE_SIZE 
         
         if len(jobs) < target_batch_size:
@@ -371,10 +358,8 @@ def _fetch_description(job_id: str, circuit=None) -> tuple:
     try:
         resp = _request_with_retry(f"{LINKEDIN_JOB_API}/{job_id}", headers=_get_headers(), timeout=10, circuit=circuit)
         if resp is None:
-            print(f"[LINKEDIN] Description {job_id} still rate-limited after retries")
             return "", ""
         if resp.status_code != 200:
-            # _save_debug_response(resp, f"desc_{resp.status_code}_{job_id}")
             return "", ""
         soup = BeautifulSoup(resp.text, "lxml")
         desc_el = soup.select_one(".show-more-less-html__markup")
@@ -387,21 +372,18 @@ def _fetch_description(job_id: str, circuit=None) -> tuple:
                 if value_el:
                     job_level = value_el.get_text(strip=True)
                 break
-        if not description:
-            # _save_debug_response(resp, f"desc_no_markup_{job_id}")
-            pass
         return description, job_level
-    except requests.RequestException as e:
-        print(f"[LINKEDIN] Request failed for description {job_id}: {e}")
+    except requests.RequestException:
         return "", ""
 
 
 def scrape_linkedin(roles=None, location="", internship_mode=False, results_wanted=20, hours_old=72, fetch_descriptions=True):
     """Scrape LinkedIn jobs using HTTP requests (fast).
     Falls back to Playwright-based scraper on failure.
+    Now yields batches of jobs for streaming.
     """
     try:
-        return _scrape_http(roles, location, internship_mode, results_wanted, hours_old, fetch_descriptions)
+        yield from _scrape_http(roles, location, internship_mode, results_wanted, hours_old, fetch_descriptions)
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
@@ -414,26 +396,32 @@ def scrape_linkedin(roles=None, location="", internship_mode=False, results_want
                 f.write(f"Error: {e}\n\nTraceback:\n{tb}\n\n")
                 f.write(f"Roles: {roles}\n")
                 f.write(f"Location: {location}\n")
-                f.write(f"Internship: {internship_mode}\n")
-                f.write(f"Results wanted: {results_wanted}\n")
-                f.write(f"Hours old: {hours_old}\n")
-            print(f"[LINKEDIN-DEBUG] Crash details saved to {path}")
         except Exception:
             pass
+            
         from scrapers.linkedin_scraper_playwright import scrape_linkedin as pw_scrape
-        return pw_scrape(roles, location, internship_mode, results_wanted, hours_old)
+        fallback_jobs = pw_scrape(roles, location, internship_mode, results_wanted, hours_old)
+        
+        # If the Playwright scraper isn't a generator yet, yield its entire result as a single batch
+        if fallback_jobs:
+            import types
+            if isinstance(fallback_jobs, types.GeneratorType):
+                yield from fallback_jobs
+            else:
+                yield fallback_jobs
 
 
 def _scrape_http(roles=None, location="", internship_mode=False, results_wanted=20, hours_old=72, fetch_descriptions=True):
     if not roles:
-        return []
+        yield []
+        return
 
     loc_terms = _parse_location_terms(location)
     seen_urls = set()
-    all_jobs = []
+    total_yielded = 0
     circuit = _RateLimitCircuit(trip_after=2)
 
-    results_wanted = results_wanted * 2 if internship_mode else results_wanted
+    results_wanted = results_wanted * 1.5 if internship_mode else results_wanted
     per_role = max(1, results_wanted // len(roles))
 
     try:
@@ -445,29 +433,45 @@ def _scrape_http(roles=None, location="", internship_mode=False, results_wanted=
 
             for search_term in search_terms:
                 start = 0
-                page_jobs = []
-                while len(page_jobs) < per_role:
+                collected_for_term = 0
+                
+                while collected_for_term < per_role:
                     raw_jobs, start = _fetch_linkedin_batch(
                         search_term, location, start, hours_old,
                         target_batch_size=LINKEDIN_BATCH_SIZE, circuit=circuit
                     )
+                    
                     if not raw_jobs:
                         print(f"[LINKEDIN] search_term='{search_term}' no raw jobs returned, stopping search")
                         break
 
                     filtered = _filter_linkedin_jobs(raw_jobs, loc_terms, seen_urls)
-                    print(f"[LINKEDIN] search_term='{search_term}' raw={len(raw_jobs)} filtered={len(filtered)} total_collected={len(page_jobs) + len(filtered)}")
-                    page_jobs.extend(filtered)
-                    if len(raw_jobs) < LINKEDIN_BATCH_SIZE:
+                    
+                    needed = per_role - collected_for_term
+                    batch_to_process = filtered[:needed]
+                    
+                    if not batch_to_process:
+                        # Even if this batch yielded no usable jobs (e.g., all duplicates), check if we hit the end
+                        if len(raw_jobs) < 5 and start > LINKEDIN_PAGE_SIZE:
+                            break
+                        continue
+                        
+                    print(f"[LINKEDIN] search_term='{search_term}' yielding batch of {len(batch_to_process)} jobs")
+                    
+                    if fetch_descriptions:
+                        enrich_descriptions(batch_to_process)
+                        
+                    collected_for_term += len(batch_to_process)
+                    total_yielded += len(batch_to_process)
+                    
+                    # YIELD the enriched batch back to the router
+                    yield batch_to_process
+
+                    if len(raw_jobs) < 5 and start > 0:
                         print(f"[LINKEDIN] search_term='{search_term}' reached page limit end")
                         break
+                        
                     delay(1, 2)
-
-                if page_jobs:
-                    selected_jobs = page_jobs[:per_role]
-                    print(f"[LINKEDIN] search_term='{search_term}' selected {len(selected_jobs)} jobs for role '{role}'")
-                    all_jobs.extend(selected_jobs)
-                    break
 
         if internship_mode:
             role_words = set()
@@ -490,7 +494,9 @@ def _scrape_http(roles=None, location="", internship_mode=False, results_wanted=
                 "intern", location, 0, hours_old,
                 target_batch_size=LINKEDIN_BATCH_SIZE, circuit=circuit
             )
+            
             if fallback_jobs:
+                fallback_batch = []
                 for job in fallback_jobs:
                     url = job.get("url", "")
                     if not url or url in seen_urls:
@@ -503,8 +509,9 @@ def _scrape_http(roles=None, location="", internship_mode=False, results_wanted=
                         continue
                     if not any((re.search(rf'\b{re.escape(tw)}\b', title_lower) if len(tw) <= 3 else tw in title_lower) for tw in tech_words):
                         continue
+                        
                     seen_urls.add(url)
-                    all_jobs.append({
+                    fallback_batch.append({
                         "title": job.get("title", ""),
                         "company": job.get("company", ""),
                         "company_url": job.get("company_url", ""),
@@ -515,16 +522,17 @@ def _scrape_http(roles=None, location="", internship_mode=False, results_wanted=
                         "salary": job.get("salary"),
                         "posted_at": job.get("posted_at", ""),
                     })
+                    
+                if fallback_batch:
+                    if fetch_descriptions:
+                        enrich_descriptions(fallback_batch)
+                    total_yielded += len(fallback_batch)
+                    yield fallback_batch
+
     except LinkedInRateLimited:
-        print(f"[LINKEDIN] Circuit tripped after repeated 429s — bailing early with {len(all_jobs)} jobs collected, skipping description enrichment")
-        return all_jobs
+        print(f"[LINKEDIN] Circuit tripped after repeated 429s — bailing early with {total_yielded} jobs collected.")
 
-    print(f"[LINKEDIN] {len(all_jobs)} unique jobs from {len(roles)} roles + fallback")
-
-    if all_jobs and fetch_descriptions:
-        enrich_descriptions(all_jobs)
-
-    return all_jobs
+    print(f"[LINKEDIN] {total_yielded} total jobs yielded from {len(roles)} roles + fallback")
 
 
 def enrich_descriptions(jobs: list[dict], max_workers: int = 3):
@@ -554,4 +562,4 @@ def enrich_descriptions(jobs: list[dict], max_workers: int = 3):
             pass
 
     filled = sum(1 for j in need_fetch if j.get("description"))
-    print(f"[LINKEDIN] Fetched {filled}/{len(need_fetch)} descriptions")
+    print(f"[LINKEDIN] Fetched {filled}/{len(need_fetch)} descriptions for current batch")
