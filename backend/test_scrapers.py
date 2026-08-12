@@ -1,9 +1,10 @@
-"""Standalone test for the Indeed and LinkedIn scrapers.
+"""Standalone test for the Indeed, LinkedIn and Naukri scrapers.
 
 Run from the backend directory:
     python test_scrapers.py --site indeed --role "Cloud Engineer" --location "New York, NY"
     python test_scrapers.py --site both --role "DevOps Engineer" --internship
     python test_scrapers.py --site linkedin --role "Software Engineer" --limit 30 --hours 168
+    python test_scrapers.py --site naukri --role "Data Engineer" --location "Pune"
 """
 import argparse
 import os
@@ -13,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from scrapers.indeed_scraper import scrape_indeed
 from scrapers.linkedin_scraper import scrape_linkedin
+from scrapers.naukri_scraper import scrape_naukri
 
 
 def summarize(site: str, role: str, jobs: list):
@@ -33,8 +35,8 @@ def summarize(site: str, role: str, jobs: list):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Test Indeed/LinkedIn scrapers")
-    ap.add_argument("--site", choices=["indeed", "linkedin", "both"], default="both")
+    ap = argparse.ArgumentParser(description="Test Indeed/LinkedIn/Naukri scrapers")
+    ap.add_argument("--site", choices=["indeed", "linkedin", "naukri", "both"], default="both")
     ap.add_argument("--role", action="append", default=[], help="role to search (repeatable)")
     ap.add_argument("--location", default="")
     ap.add_argument("--country", default="USA")
@@ -57,10 +59,17 @@ def main():
             if site == "indeed":
                 kw["location"] = args.location or "United States"
                 kw["country_indeed"] = args.country
-            else:
+            elif site == "linkedin":
                 kw["location"] = args.location or "United States"
+            else:
+                kw["location"] = args.location or "India"
             try:
-                jobs = scrape_indeed(**kw) if site == "indeed" else scrape_linkedin(**kw)
+                if site == "indeed":
+                    jobs = scrape_indeed(**kw)
+                elif site == "linkedin":
+                    jobs = scrape_linkedin(**kw)
+                else:
+                    jobs = scrape_naukri(**kw)
             except Exception as e:
                 print(f"\n=== {site.upper()} FAILED for '{role}': {type(e).__name__}: {e} ===")
                 continue

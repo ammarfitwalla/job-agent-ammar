@@ -29,7 +29,7 @@ class HealthResponse(BaseModel):
 
 class ScrapeRequest(BaseModel):
     search_id: str = ""
-    sites: list[str] = ["indeed", "linkedin"]
+    sites: list[str] = ["indeed", "linkedin", "naukri"]
     keywords: list[str] = []
     roles: list[str] = []
     location: str = ""

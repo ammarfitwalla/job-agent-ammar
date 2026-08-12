@@ -67,6 +67,7 @@ def _harvest_companies(jobs: list):
 SITE_MAP = {
     "indeed": ("indeed_scraper", "scrape_indeed"),
     "linkedin": ("linkedin_scraper", "scrape_linkedin"),
+    "naukri": ("naukri_scraper", "scrape_naukri"),
 }
 
 
@@ -82,7 +83,7 @@ def run_scrape(sid, sites, roles, location, indeed_country,
     from match_engine.relevance_engine import keyword_score as _kw_score, role_match_count as _role_match
     from utils.delay import delay as _delay
     from db import set_raw_jobs as _set_raw
-    from utils.experience_level import detect_experience_level
+    from utils.experience_level import detect_experience_level, level_from_job_level
 
     create_session(sid, sites=sites, keywords=keywords or [], roles=roles or [], user_email=user_email,
                    location=location or "")
@@ -118,8 +119,9 @@ def run_scrape(sid, sites, roles, location, indeed_country,
                 mod = importlib.import_module(f"scrapers.{module_name}")
                 scraper_fn = getattr(mod, func_name)
                 kwargs = {"roles": [role]}
-                if site_key in ("indeed", "linkedin"):
-                    kwargs["location"] = location or "United States"
+                if site_key in ("indeed", "linkedin", "naukri"):
+                    default_loc = "India" if site_key == "naukri" else "United States"
+                    kwargs["location"] = location or default_loc
                     kwargs["results_wanted"] = scrape_limit
                     kwargs["internship_mode"] = internship_mode
                     kwargs["hours_old"] = hours_old
@@ -155,10 +157,13 @@ def run_scrape(sid, sites, roles, location, indeed_country,
                 from scrapers.linkedin_scraper import enrich_descriptions as _enrich
                 _enrich(combo_jobs)
 
-            # Experience level detection (required for internship filter and display)
+            # Experience level detection (required for internship filter and display).
+            # Boards like LinkedIn provide their own seniority tag (job_level) — use it
+            # as a fallback when our own detection finds nothing.
             for j in combo_jobs:
-                j["experience_level"] = detect_experience_level(
-                    j.get("title", ""), j.get("description", "")
+                j["experience_level"] = (
+                    detect_experience_level(j.get("title", ""), j.get("description", ""))
+                    or level_from_job_level(j.get("job_level"))
                 )
 
             # In internship mode, drop non-entry-level for this combo
@@ -172,13 +177,13 @@ def run_scrape(sid, sites, roles, location, indeed_country,
                     _delay(1, 3)
                     continue
 
-            # In normal mode, drop entry-level jobs
+            # In normal mode, drop intern and entry-level jobs
             if not internship_mode:
                 before = len(combo_jobs)
-                combo_jobs = [j for j in combo_jobs if j.get("experience_level") not in ("entry_level",)]
+                combo_jobs = [j for j in combo_jobs if j.get("experience_level") not in ("internship", "entry_level")]
                 dropped = before - len(combo_jobs)
                 if dropped:
-                    log(f"[SCRAPE] {role} @ {site_key}: normal filter {before} → {len(combo_jobs)} (dropped {dropped} entry-level)", sid)
+                    log(f"[SCRAPE] {role} @ {site_key}: normal filter {before} → {len(combo_jobs)} (dropped {dropped} intern/entry-level)", sid)
                 if not combo_jobs:
                     _delay(1, 3)
                     continue

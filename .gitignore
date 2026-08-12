@@ -12,3 +12,5 @@ REFERRAL_MARKETPLACE.md
 backend/config.py
 
 backend/scrapers/linkedin_debug/
+
+_ref/

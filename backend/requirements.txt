@@ -41,6 +41,9 @@ python-multipart
 PyMuPDF
 python-docx
 
+# Naukri (RSA token signing for its internal API)
+pycryptodome
+
 # Twitter marketing
 httpx
 apscheduler

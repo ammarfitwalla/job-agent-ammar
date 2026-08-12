@@ -23,6 +23,21 @@ MID_LEVEL_INDICATORS = [
 ]
 
 
+def level_from_job_level(job_level: str | None) -> str | None:
+    """Map a board-provided seniority tag (e.g. LinkedIn's job_level)
+    onto our experience_level vocabulary. Returns None for anything
+    that isn't clearly entry-level, so senior/mid tags pass through.
+    """
+    if not isinstance(job_level, str):
+        return None
+    jl = job_level.strip().lower()
+    if jl in ("internship", "student"):
+        return "internship"
+    if jl in ("entry level", "associate", "trainee"):
+        return "entry_level"
+    return None
+
+
 def detect_experience_level(title: str, description: str | None = "") -> str | None:
     if not isinstance(title, str):
         title = ""

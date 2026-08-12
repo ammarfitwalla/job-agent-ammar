@@ -891,6 +891,7 @@ function siteFromUrl(url) {
   if (!url) return '';
   if (url.includes('linkedin')) return 'LinkedIn';
   if (url.includes('indeed')) return 'Indeed';
+  if (url.includes('naukri')) return 'Naukri';
   return new URL(url).hostname.replace('www.', '').split('.')[0];
 }
 
@@ -908,9 +909,11 @@ loadRoles();
 })();
 updateSearchBtn();
 setupLocationSearch();
+updateNaukriEligibility();
 (async () => {
   await fetchCountries();
   await loadStates();
+  updateNaukriEligibility();
 })();
 const _hasCachedSearch = (() => {
   try {
@@ -966,7 +969,7 @@ function setStatus(msg, type = "blue") {
 }
 
 function renderTimeline(logs, status) {
-  const siteIcons = { linkedin: "in", indeed: "indeed" };
+  const siteIcons = { linkedin: "in", indeed: "indeed", naukri: "nk" };
 
   let html = "";
   const shown = new Set();
@@ -1205,7 +1208,7 @@ function statusBanner(msg, color = 'blue') {
   return `<div class="flex items-center px-4 py-2.5 mb-4 rounded-xl border text-sm font-medium ${colors[color] || colors.blue}">${msg}</div>`;
 }
 
-const SITE_ICONS = { linkedin: "in", indeed: "indeed" };
+const SITE_ICONS = { linkedin: "in", indeed: "indeed", naukri: "nk" };
 
 function isRoleSimilar(roleA, roleB) {
   const a = roleA.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
@@ -1581,7 +1584,7 @@ function setupLocationSearch() {
 
   input.addEventListener("input", () => {
     const q = input.value.trim();
-    if (selectedLocation) { selectedLocation = null; selected.classList.add("hidden"); }
+    if (selectedLocation) { selectedLocation = null; selected.classList.add("hidden"); updateNaukriEligibility(); }
     if (q.length < 2) { results.classList.add("hidden"); return; }
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => searchState(q), 200);
@@ -1659,7 +1662,26 @@ function selectLocation(loc) {
     selectedLocation = null;
     el.classList.add("hidden");
     document.getElementById("locationInput").value = "";
+    updateNaukriEligibility();
   });
+  updateNaukriEligibility();
+}
+
+function updateNaukriEligibility() {
+  const input = document.querySelector('#sites input[value="naukri"]');
+  if (!input) return;
+  const label = input.closest('label');
+  const eligible = !!(selectedLocation && selectedLocation.country_code === 'in');
+  if (eligible) {
+    input.disabled = false;
+    label.classList.remove('cursor-not-allowed', 'opacity-50');
+    label.title = '';
+  } else {
+    input.checked = false;
+    input.disabled = true;
+    label.classList.add('cursor-not-allowed', 'opacity-50');
+    label.title = 'Naukri is India-only';
+  }
 }
 
 function getIndeedCountry() {
@@ -1903,7 +1925,11 @@ function renderAllJobs(jobs) {
   _relevanceUsed = loadRelevanceUsed();
   let displayJobs = jobs || allJobs;
   if (!internshipMode) {
-    displayJobs = displayJobs.filter(j => j.experience_level !== "entry_level");
+    displayJobs = displayJobs.filter(j => {
+      if (j.experience_level === "entry_level" || j.experience_level === "internship") return false;
+      const jl = (j.job_level || '').toLowerCase();
+      return !(jl === "entry level" || jl === "associate" || jl === "trainee" || jl === "internship");
+    });
   }
   if (_activeLevelFilter !== 'all') {
     displayJobs = displayJobs.filter(j => j.experience_level === _activeLevelFilter);
@@ -1959,7 +1985,11 @@ function renderAllJobs(jobs) {
       <option value="referral" ${currentSort === 'referral' ? 'selected' : ''}>Most Referrals</option>
     </select></span>
   </div>`;
-  const levelScope = internshipMode ? baseScope : baseScope.filter(j => j.experience_level !== 'entry_level');
+  const levelScope = internshipMode ? baseScope : baseScope.filter(j => {
+    if (j.experience_level === 'entry_level' || j.experience_level === 'internship') return false;
+    const jl = (j.job_level || '').toLowerCase();
+    return !(jl === 'entry level' || jl === 'associate' || jl === 'trainee' || jl === 'internship');
+  });
   const baseLevels = [...new Set(levelScope.map(j => j.experience_level).filter(Boolean))];
   if (baseLevels.length > 1) {
     subFilterHtml += `<div class="flex flex-wrap gap-2 mt-2">`;
