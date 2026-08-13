@@ -25,13 +25,7 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434/v1/chat/completions")
 
 # ==============
-# ADZUNA API
-# ==============
-ADZUNA_APP_ID = os.environ.get("ADZUNA_APP_ID", "")
-ADZUNA_KEY = os.environ.get("ADZUNA_KEY", "")
-
-# ==============
-# CURATED COMPANY LIST (used for referral marketplace)
+# REFERRAL MARKETPLACE
 # ==============
 COMPANIES = sorted(set([
     "Google", "Meta", "Apple", "Amazon", "Microsoft", "Netflix", "Tesla", "Nvidia",
@@ -95,81 +89,141 @@ COMPANIES = sorted(set([
     "Etsy", "eBay", "Shopify", "Mercado Libre",     "Rakuten",
 ]))
 
+# ==============
+# ADZUNA API
+# ==============
+ADZUNA_APP_ID = os.environ.get("ADZUNA_APP_ID", "")
+ADZUNA_KEY = os.environ.get("ADZUNA_KEY", "")
 
 # ==============
 # JOB SEARCH SETTINGS
 # ==============
 ROLES_BY_CATEGORY = {
     "tech": [
-        "AI Engineer", "Machine Learning Engineer", "Data Scientist", "Data Analyst", "Business Intelligence Analyst",
-        "Python Developer", "Backend Engineer", "Frontend Engineer",
-        "Full Stack Developer", "Software Engineer", "DevOps Engineer",
-        "Site Reliability Engineer", "Cloud Engineer", "Security Engineer",
-        "Data Engineer", "Mobile Developer", "QA Engineer",
-        "Game Developer", "Embedded Systems Engineer", "Systems Administrator",
-        "Network Engineer", "Blockchain Developer",
-        "Database Administrator", "Technical Writer",
+        "AI Engineer", "Machine Learning Engineer", "MLOps Engineer",
+        "Computer Vision Engineer", "NLP Engineer", "Prompt Engineer",
+        "Data Scientist", "Data Analyst", "Business Intelligence Analyst",
+        "Data Engineer", "Big Data Engineer", "ETL Developer",
+        "Python Developer", "Java Developer", ".NET Developer", "C# Developer",
+        "C++ Developer", "PHP Developer", "Ruby Developer", "Ruby on Rails Developer",
+        "Go Developer", "Rust Developer", "Kotlin Developer", "Swift Developer",
+        "JavaScript Developer", "TypeScript Developer", "Node.js Developer",
+        "React Developer", "Angular Developer", "Vue.js Developer",
+        "WordPress Developer", "Salesforce Developer",
+        "Backend Developer", "Frontend Developer", "Backend Engineer", "Frontend Engineer",
+        "Full Stack Developer", "Full Stack Engineer", "Software Engineer",
+        "Software Developer", "Mobile Developer", "iOS Developer", "Android Developer",
+        "Game Developer", "Embedded Systems Engineer", "DevOps Engineer",
+        "Platform Engineer", "Site Reliability Engineer", "Cloud Engineer",
+        "Cloud Architect", "Solutions Architect", "Software Architect", "Enterprise Architect",
+        "Security Engineer", "Cybersecurity Analyst", "Security Analyst",
+        "Penetration Tester", "Database Administrator", "SQL Developer",
+        "Database Developer", "QA Engineer", "SDET", "Test Automation Engineer",
+        "Automation Engineer", "Performance Engineer", "Systems Administrator",
+        "Network Engineer", "IT Support Specialist", "Technical Support Engineer",
+        "Help Desk Technician", "Systems Analyst", "Blockchain Developer",
+        "Technical Writer", "Salesforce Administrator", "SAP Consultant", "IT Project Manager",
     ],
     "sales": [
-        "Sales Representative", "Account Executive", "Sales Manager",
-        "Business Development Manager", "Customer Success Manager",
-        "Account Manager", "Sales Operations Analyst",
-        "Sales Engineer",
+        "Sales Representative", "Inside Sales Representative", "Outside Sales Representative",
+        "Account Executive", "Key Account Manager", "Sales Manager",
+        "Regional Sales Manager", "Sales Director",
+        "Business Development Manager", "Business Development Representative",
+        "Sales Development Representative", "Customer Success Manager",
+        "Account Manager", "Sales Operations Analyst", "Presales Consultant", "Sales Engineer",
     ],
     "media": [
-        "Content Writer", "Copywriter", "Editor", "Social Media Manager",
-        "Digital Marketing Specialist", "SEO Specialist", "Graphic Designer",
-        "Video Editor", "Photographer", "Art Director",
-        "Brand Manager", "PR Specialist",
+        "Content Writer", "Copywriter", "Editor", "Content Strategist",
+        "Social Media Manager", "Digital Marketing Specialist", "SEO Specialist",
+        "Performance Marketing Manager", "Email Marketing Specialist", "Media Buyer",
+        "Marketing Analyst", "Marketing Manager", "Product Marketing Manager",
+        "Brand Manager", "Brand Strategist", "PR Specialist",
+        "Graphic Designer", "Video Editor", "Photographer", "Art Director",
+        "Motion Designer", "Illustrator", "3D Artist",
     ],
     "healthcare": [
-        "Doctor", "Nurse", "Pharmacist", "Medical Assistant",
-        "Healthcare Administrator", "Physical Therapist", "Dentist",
-        "Lab Technician", "Veterinarian", "Dental Hygienist",
-        "Radiologist", "Speech Therapist",
+        "Doctor", "Physician Assistant", "Nurse", "Registered Nurse",
+        "Pharmacist", "Pharmacy Technician", "Medical Assistant",
+        "Healthcare Administrator", "Physical Therapist", "Occupational Therapist",
+        "Dentist", "Dental Hygienist", "Lab Technician", "Veterinarian",
+        "Radiologist", "Speech Therapist", "Dietitian", "Nutritionist",
+        "Optometrist", "Chiropractor", "Medical Coder", "Medical Biller",
+        "Clinical Research Coordinator", "Health Informatics Specialist", "Emergency Medical Technician",
     ],
     "finance": [
-        "Accountant", "Financial Analyst", "Auditor", "Tax Specialist",
-        "Financial Advisor", "Risk Analyst",
-        "Investment Analyst", "Underwriter", "Credit Analyst",
+        "Accountant", "Bookkeeper", "Accounting Manager",
+        "Financial Analyst", "FP&A Analyst", "Finance Manager",
+        "Auditor", "Internal Auditor", "Tax Specialist",
+        "Financial Advisor", "Wealth Manager", "Risk Analyst",
+        "Investment Analyst", "Equity Research Analyst", "Underwriter", "Credit Analyst",
+        "Treasury Analyst", "Actuary", "Quantitative Analyst",
+        "Accounts Payable Specialist", "Accounts Receivable Specialist",
     ],
     "admin": [
-        "Administrative Assistant", "Office Manager", "Executive Assistant",
-        "Human Resources Manager", "Recruiter", "Operations Manager",
-        "Project Manager",
-        "Receptionist", "Payroll Specialist", "Data Entry Clerk", "HR Generalist",
+        "Administrative Assistant", "Administrative Coordinator", "Office Manager",
+        "Office Coordinator", "Virtual Assistant", "Executive Assistant",
+        "Human Resources Manager", "Human Resources Specialist", "HR Generalist",
+        "Recruiter", "Talent Acquisition Specialist",
+        "Learning and Development Specialist", "Training Coordinator",
+        "Compensation and Benefits Analyst", "Operations Manager", "Operations Coordinator",
+        "Project Manager", "Receptionist", "Payroll Specialist", "Data Entry Clerk",
+        "Customer Service Representative", "Call Center Agent", "Client Services Manager",
+        "Technical Support Specialist",
     ],
     "legal": [
-        "Lawyer", "Paralegal", "Legal Assistant", "Compliance Officer",
-        "Corporate Counsel", "Contract Manager", "Patent Attorney",
+        "Lawyer", "Paralegal", "Legal Assistant", "Legal Secretary",
+        "Compliance Officer", "Corporate Counsel", "Contract Manager",
+        "Contract Administrator", "Patent Attorney", "Corporate Lawyer",
+        "Intellectual Property Lawyer", "Immigration Lawyer", "Legal Operations Manager",
     ],
     "education": [
-        "Teacher", "Professor", "Tutor", "Instructional Designer",
-        "Curriculum Designer", "Education Administrator",
+        "Teacher", "Elementary School Teacher", "Middle School Teacher", "High School Teacher",
+        "Professor", "University Lecturer", "Tutor", "Instructional Designer",
+        "Curriculum Designer", "Education Administrator", "Education Consultant",
         "Special Education Teacher", "Academic Advisor", "ESL Teacher", "School Counselor",
+        "Online Instructor", "E-learning Developer", "Training Specialist",
     ],
     "civil": [
         "Civil Engineer", "Structural Engineer", "Construction Manager",
+        "Construction Superintendent", "Construction Estimator", "Construction Project Manager",
         "Site Engineer", "Quantity Surveyor", "Infrastructure Engineer",
         "Urban Planner", "Surveyor", "Civil Engineering Technician",
-        "Construction Project Manager",
+        "Geotechnical Engineer", "Transportation Engineer", "Water Resources Engineer",
+        "Building Inspector", "Real Estate Agent", "Property Manager", "Facilities Manager",
     ],
     "engineering": [
         "Electrical Engineer", "Mechanical Engineer", "Chemical Engineer",
-        "Biomedical Engineer", "Industrial Engineer",
+        "Biomedical Engineer", "Industrial Engineer", "Aerospace Engineer",
+        "Automotive Engineer", "Robotics Engineer", "Materials Engineer",
+        "Environmental Engineer", "Petroleum Engineer", "Mining Engineer",
+        "Marine Engineer", "Power Engineer", "HVAC Engineer",
+        "Manufacturing Engineer", "Process Engineer", "Quality Engineer",
+        "Electronics Engineer", "Instrumentation Engineer", "Control Systems Engineer", "CAD Designer",
     ],
     "design": [
-        "UI/UX Designer", "Product Designer",
+        "UI/UX Designer", "UX Designer", "UI Designer", "UX Researcher",
+        "Product Designer", "Interaction Designer", "Visual Designer",
+        "Web Designer", "Brand Designer", "Interior Designer",
+        "Fashion Designer", "Industrial Designer",
     ],
     "product": [
-        "Product Manager", "Business Analyst", "Scrum Master",
+        "Product Manager", "Product Owner", "Technical Product Manager",
+        "Growth Product Manager", "Product Analyst", "Product Operations Manager",
+        "Business Analyst", "Scrum Master", "Agile Coach",
+        "Program Manager", "Delivery Manager",
     ],
     "supply_chain": [
-        "Supply Chain Manager", "Logistics Coordinator",
-        "Procurement Specialist", "Warehouse Manager",
+        "Supply Chain Manager", "Supply Chain Analyst", "Demand Planner",
+        "Logistics Coordinator", "Logistics Analyst", "Procurement Specialist",
+        "Purchasing Manager", "Inventory Manager", "Warehouse Manager",
+        "Warehouse Supervisor", "Distribution Manager", "Freight Forwarder", "Customs Broker",
     ],
     "hospitality": [
-        "Chef", "Restaurant Manager", "Hotel Manager",
+        "Chef", "Executive Chef", "Sous Chef", "Pastry Chef",
+        "Restaurant Manager", "Hotel Manager", "Front Desk Agent",
+        "Front Office Manager", "Guest Services Manager", "Housekeeping Manager",
+        "Event Coordinator", "Event Manager", "Banquet Manager",
+        "Bartender", "Barista", "Concierge", "Travel Consultant", "Tour Guide",
     ],
 }
 
@@ -223,36 +277,3 @@ EMAIL_PORT=int(os.environ.get("EMAIL_PORT", "587"))
 EMAIL_USER=os.environ.get("EMAIL_USER", "")
 EMAIL_PASSWORD=os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_TO=os.environ.get("EMAIL_TO", "")
-
-X_ENABLED = True
-X_CLIENT_ID = os.environ.get("X_CLIENT_ID", "")
-X_CLIENT_SECRET = os.environ.get("X_CLIENT_SECRET", "")
-X_BEARER_TOKEN = os.environ.get("X_BEARER_TOKEN", "")
-X_ACCESS_TOKEN = os.environ.get("X_ACCESS_TOKEN", "")
-X_REFRESH_TOKEN = os.environ.get("X_REFRESH_TOKEN", "")
-
-X_SCHEDULE = [
-    {"day": "mon", "window": "08:00-10:00", "template": "promo_1"},
-    {"day": "mon", "window": "15:00-17:00", "template": "feature_2"},
-    {"day": "tue", "window": "10:00-12:00", "template": "feature_1"},
-    {"day": "tue", "window": "17:00-19:00", "template": "tip_1"},
-    {"day": "wed", "window": "08:00-10:00", "template": "feature_3"},
-    {"day": "wed", "window": "14:00-16:00", "template": "social_proof"},
-    {"day": "thu", "window": "10:00-12:00", "template": "feature_4"},
-    {"day": "thu", "window": "16:00-18:00", "template": "promo_1"},
-    {"day": "fri", "window": "08:00-10:00", "template": "tip_2"},
-    {"day": "fri", "window": "13:00-15:00", "template": "feature_1"},
-    {"day": "sat", "window": "10:00-12:00", "template": "social_proof"},
-    {"day": "sun", "window": "11:00-13:00", "template": "feature_3"},
-]
-
-X_TEMPLATES = {
-    "promo_1": "Stop scrolling through irrelevant jobs. AI Job Agent matches your resume to roles on LinkedIn & Indeed — scored by AI, ranked by fit. Try it free https://ammarfitwalla-job-agent.hf.space",
-    "feature_1": "Looking for an internship or entry-level role? Internship mode filters out senior roles and finds what's actually meant for you. https://ammarfitwalla-job-agent.hf.space #internship",
-    "feature_2": "Every job gets an AI score out of 100 — based on your actual resume, not keywords alone. See what fits before you apply. https://ammarfitwalla-job-agent.hf.space",
-    "feature_3": "Upload your resume once. AI extracts your skills and suggests the right roles automatically. No more guessing what to search for. https://ammarfitwalla-job-agent.hf.space",
-    "feature_4": "Pick from 120+ job titles or search any role. AI scans LinkedIn & Indeed for listings that match your profile. https://ammarfitwalla-job-agent.hf.space",
-    "social_proof": "5000+ jobs scored and counting. AI matches real people to real roles. Your next opportunity is one search away. https://ammarfitwalla-job-agent.hf.space",
-    "tip_1": "Tip: Always upload your resume before searching. Without it, AI scoring can't compare jobs against your actual skills and experience. https://ammarfitwalla-job-agent.hf.space",
-    "tip_2": "Tip: Be specific with your target roles. The more focused your search, the better the AI matches. Try adding 2-3 related titles. https://ammarfitwalla-job-agent.hf.space",
-}
