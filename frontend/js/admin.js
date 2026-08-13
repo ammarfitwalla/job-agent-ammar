@@ -218,29 +218,8 @@ async function toggleDetail(sid) {
     if (d.error) { panel.innerHTML += `<div class="empty">${d.error}</div>`; return; }
 
     const s = d.session || {};
-    const saved = d.saved_jobs || [];
     const refs = d.referral_requests || [];
-    const email = s.user_email || "";
     let html = "";
-
-    if (email) {
-      html += `<div class="section"><div class="section-title">User</div><div>${email}</div></div>`;
-    }
-
-    if (saved.length) {
-      html += `<div class="section"><div class="section-title">Saved Jobs (${saved.length})</div>`;
-      html += `<table style="width:100%"><tr><th>Title</th><th>Company</th><th>Score</th><th>Status</th><th>Saved</th></tr>`;
-      html += saved.map(j => `<tr>
-        <td style="max-width:300px"><span class="truncate" title="${j.title}">${j.title}</span></td>
-        <td>${j.company || "\u2014"}</td>
-        <td class="score-cell">${j.total_score ?? 0}
-          <div class="score-bar"><div class="score-fill" style="width:${Math.min(j.total_score || 0, 100)}%"></div></div>
-        </td>
-        <td>${statusPill(j.application_status)}</td>
-        <td style="white-space:nowrap">${formatDate(j.saved_at)}</td>
-      </tr>`).join("");
-      html += `</table></div>`;
-    }
 
     if (refs.length) {
       html += `<div class="section"><div class="section-title">Referral Requests (${refs.length})</div>`;
@@ -258,10 +237,9 @@ async function toggleDetail(sid) {
       html += `</table></div>`;
     }
 
-    if (!saved.length && !refs.length) {
-      html += `<div class="empty">${email ? "No saved jobs or referral requests from this user yet" : "No user recorded for this session (sessions before this change are not linked to a user)"}</div>`;
+    if (!refs.length) {
+      html += `<div class="empty">${s.user_email ? "No referral requests from this user yet" : "No user recorded for this session (sessions before this change are not linked to a user)"}</div>`;
     }
-    if (d.resume_available) html = `<div class="section"><a href="/api/admin/sessions/${sid}/resume" target="_blank" style="font-size:12px;color:#3b82f6;font-weight:500">View Resume &#8599;</a></div>` + html;
     panel.innerHTML = renderBasicDetail(sid, sd) + html;
   } catch (e) { panel.innerHTML += `<div class="empty">${e.message}</div>`; }
 }

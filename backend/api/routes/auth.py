@@ -18,17 +18,25 @@ _RESUMES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.p
 
 def _copy_search_resume(search_id: str, email: str):
     local_part = email.split("@")[0]
+    sources = []
+    from db import get_session
+    s = get_session(search_id)
+    if s and s.get("resume_filename"):
+        sources.append(os.path.join(_RESUMES_DIR, s["resume_filename"]))
     for ext in (".pdf", ".docx", ".txt"):
-        src = os.path.join(_RESUMES_DIR, f"{search_id}{ext}")
-        if os.path.isfile(src):
-            dst = os.path.join(_RESUMES_DIR, f"{local_part}{ext}")
-            try:
-                shutil.copy2(src, dst)
-                from db import update_user_profile
-                update_user_profile(email, resume_filename=f"{local_part}{ext}")
-            except Exception:
-                pass
-            return
+        sources.append(os.path.join(_RESUMES_DIR, f"{search_id}{ext}"))
+    for src in sources:
+        if not os.path.isfile(src):
+            continue
+        ext = os.path.splitext(src)[1]
+        dst = os.path.join(_RESUMES_DIR, f"{local_part}{ext}")
+        try:
+            shutil.copy2(src, dst)
+            from db import update_user_profile
+            update_user_profile(email, resume_filename=f"{local_part}{ext}")
+        except Exception:
+            pass
+        return
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 

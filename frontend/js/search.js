@@ -868,6 +868,7 @@ function logEvent(event, data = {}, elapsed = 0) {
 }
 
 function cancelActiveSearch() {
+  if (_searchComplete) return;
   const allIds = searchIds.length > 0 ? searchIds : (_searchId ? [_searchId] : []);
   for (const sid of allIds) {
     try { navigator.sendBeacon(`/scrape/stop?search_id=${sid}`); } catch {}
@@ -1795,6 +1796,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
         indeed_country: getIndeedCountry(),
         user_email: (window.getProfile() || {}).email || "",
         resume_filename: _uploadedFilename || "",
+        resume_text: document.getElementById("resume")?.value.trim() || "",
         scrape_limit: 200,
       })
     });

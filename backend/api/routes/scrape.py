@@ -77,8 +77,21 @@ def _is_cancelled(sid: str) -> bool:
     return bool(s and s.get("cancel"))
 
 
+def _resumes_dir() -> str:
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
+
+
+def _save_resume_text(sid: str, resume_text: str):
+    text = (resume_text or "").strip()
+    if not text:
+        return
+    os.makedirs(_resumes_dir(), exist_ok=True)
+    with open(os.path.join(_resumes_dir(), f"{sid}.txt"), "w", encoding="utf-8") as f:
+        f.write(text)
+
+
 def run_scrape(sid, sites, roles, location, indeed_country,
-               keywords=None, internship_mode=False, user_email="", resume_filename="", scrape_limit=200,
+               keywords=None, internship_mode=False, user_email="", resume_filename="", resume_text="", scrape_limit=200,
                hours_old=168):
     import importlib
     from match_engine.relevance_engine import keyword_score as _kw_score, role_match_count as _role_match
@@ -87,13 +100,14 @@ def run_scrape(sid, sites, roles, location, indeed_country,
     from utils.experience_level import detect_experience_level, level_from_job_level
 
     create_session(sid, sites=sites, keywords=keywords or [], roles=roles or [], user_email=user_email,
-                   location=location or "")
+                   location=location or "", internship_mode=internship_mode)
     from db import get_user as _get_user
     session_resume = resume_filename or ""
     if not session_resume and user_email:
         u = _get_user(user_email)
         session_resume = (u or {}).get("resume_filename") or ""
     update_session(sid, status="running", cancel=False, resume_filename=session_resume)
+    _save_resume_text(sid, resume_text)
 
     all_jobs = []
     seen_urls = set()
@@ -272,6 +286,7 @@ async def trigger_scrape(req: ScrapeRequest):
         "internship_mode": req.internship_mode,
         "user_email": req.user_email,
         "resume_filename": req.resume_filename,
+        "resume_text": req.resume_text,
         "scrape_limit": req.scrape_limit,
         "hours_old": req.hours_old,
     }, daemon=True)
@@ -283,6 +298,11 @@ async def trigger_scrape(req: ScrapeRequest):
 async def stop_scrape(search_id: str = Query("")):
     if not search_id:
         return {"message": "Missing search_id", "status": "error"}
+    s = get_session(search_id)
+    if not s:
+        return {"message": "Session not found", "status": "idle"}
+    if s.get("status") != "running":
+        return {"message": "Session already finished", "status": s.get("status", "idle")}
     log(f"[STOP] Stop requested for session {search_id}", search_id)
     update_session(search_id, cancel=True, status="done")
     return {"message": "Scrape cancelled", "status": "done"}
