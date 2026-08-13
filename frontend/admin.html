@@ -305,78 +305,86 @@ tr td:first-child { border-radius: 0; }
 
   <div id="realContent" style="display:none">
 
-    <div class="cards" id="cards"></div>
-
-    <div class="charts">
-      <div class="chart-box"><h3>Daily Sessions (14 days)</h3><canvas id="dailyChart" height="160"></canvas></div>
-      <div class="chart-box"><h3>Sessions by Status</h3><canvas id="statusChart" height="160"></canvas></div>
+    <div class="tabs" data-group="main">
+      <span class="tab active" data-tab="charts" onclick="switchTab('charts','main')">Charts</span>
+      <span class="tab" data-tab="uploads" onclick="switchTab('uploads','main')">Uploads</span>
+      <span class="tab" data-tab="sessions" onclick="switchTab('sessions','main')">Sessions</span>
     </div>
 
-    <div class="chart-box db-card">
-      <h3>Database</h3>
-      <div class="db-info" id="dbInfo">—</div>
-      <div class="db-actions">
-        <div class="file-input-wrap" id="fileInputWrap">
-          <input type="file" id="dbFileInput" accept=".db" onchange="document.getElementById('fileLabelText').textContent = this.files[0] ? this.files[0].name : 'Choose .db file'; this.parentElement.classList.toggle('has-file', !!this.files[0])">
-          <span class="file-label">
-            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0 0-3-3m3 3 3-3M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-            <span id="fileLabelText">Choose .db file</span>
-          </span>
+    <div class="tab-content active" data-group="main" data-tab="charts">
+      <div class="cards" id="cards"></div>
+
+      <div class="charts">
+        <div class="chart-box"><h3>Daily Sessions (14 days)</h3><canvas id="dailyChart" height="160"></canvas></div>
+        <div class="chart-box"><h3>Sessions by Status</h3><canvas id="statusChart" height="160"></canvas></div>
+      </div>
+
+    </div>
+
+    <div class="tab-content" data-group="main" data-tab="uploads">
+      <div class="chart-box db-card">
+        <h3>Database</h3>
+        <div class="db-info" id="dbInfo">—</div>
+        <div class="db-actions">
+          <div class="file-input-wrap" id="fileInputWrap">
+            <input type="file" id="dbFileInput" accept=".db" onchange="document.getElementById('fileLabelText').textContent = this.files[0] ? this.files[0].name : 'Choose .db file'; this.parentElement.classList.toggle('has-file', !!this.files[0])">
+            <span class="file-label">
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0 0-3-3m3 3 3-3M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+              <span id="fileLabelText">Choose .db file</span>
+            </span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="restoreDB()">
+              <svg class="btn-icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
+              Upload &amp; Restore
+            </button>
+            <button class="btn btn-secondary" id="mergeBtn" onclick="mergeDB()">
+              <svg class="btn-icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 0 0 4.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 0 1-15.357-2m15.357 2H15"/></svg>
+              Merge
+            </button>
+          </div>
+          <span class="db-result" id="dbRestoreResult"></span>
+          <span class="db-result" id="dbMergeResult"></span>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="restoreDB()">
-            <svg class="btn-icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
-            Upload &amp; Restore
+      </div>
+
+      <div class="chart-box db-card" style="margin-top:20px">
+        <h3>Resume Upload</h3>
+        <div class="db-info" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Restore resume files from backup. Original filenames preserved.</div>
+        <div class="db-actions">
+          <input type="file" id="resumeFileInput" multiple accept=".pdf,.docx,.txt" style="display:none" onchange="handleResumeFiles(this.files)">
+          <button class="btn btn-secondary" onclick="document.getElementById('resumeFileInput').click()">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/></svg>
+            Choose Files
           </button>
-          <button class="btn btn-secondary" id="mergeBtn" onclick="mergeDB()">
-            <svg class="btn-icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 0 0 4.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 0 1-15.357-2m15.357 2H15"/></svg>
-            Merge
-          </button>
+          <span id="resumeFileCount" style="font-size:13px;color:#64748b">No files selected</span>
+          <button class="btn btn-primary" id="resumeUploadBtn" onclick="uploadResumes()">Upload</button>
+          <span class="db-result" id="resumeUploadResult"></span>
         </div>
-        <span class="db-result" id="dbRestoreResult"></span>
-        <span class="db-result" id="dbMergeResult"></span>
+        <div id="resumeFileList" style="margin-top:8px;font-size:12px;color:#64748b"></div>
       </div>
     </div>
 
-    <div class="chart-box db-card" style="margin-top:20px">
-      <h3>Resume Upload</h3>
-      <div class="db-info" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Restore resume files from backup. Original filenames preserved.</div>
-      <div class="db-actions">
-        <input type="file" id="resumeFileInput" multiple accept=".pdf,.docx,.txt" style="display:none" onchange="handleResumeFiles(this.files)">
-        <button class="btn btn-secondary" onclick="document.getElementById('resumeFileInput').click()">
-          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/></svg>
-          Choose Files
-        </button>
-        <span id="resumeFileCount" style="font-size:13px;color:#64748b">No files selected</span>
-        <button class="btn btn-primary" id="resumeUploadBtn" onclick="uploadResumes()">Upload</button>
-        <span class="db-result" id="resumeUploadResult"></span>
+    <div class="tab-content" data-group="main" data-tab="sessions">
+      <div class="tabs" data-group="inner">
+        <span class="tab active" data-tab="sessions" onclick="switchTab('sessions','inner')">Sessions</span>
+        <span class="tab" data-tab="registrations" onclick="switchTab('registrations','inner')">Registrations</span>
+        <span class="tab" data-tab="visits" onclick="switchTab('visits','inner')">Visits</span>
       </div>
-      <div id="resumeFileList" style="margin-top:8px;font-size:12px;color:#64748b"></div>
-    </div>
 
-    <div class="tabs">
-      <span class="tab active" data-tab="sessions" onclick="switchTab('sessions')">Sessions</span>
-      <span class="tab" data-tab="scores" onclick="switchTab('scores')">Score Distribution</span>
-      <span class="tab" data-tab="registrations" onclick="switchTab('registrations')">Registrations</span>
-      <span class="tab" data-tab="visits" onclick="switchTab('visits')">Visits</span>
-    </div>
+      <div class="tab-content active" data-group="inner" data-tab="sessions">
+        <input class="search-input" id="sessionSearch" placeholder="Search keywords, roles, status, or ID..." oninput="filterSessions()">
+        <div class="table-wrap"><table><thead id="sessionHead"></thead><tbody id="sessionBody"></tbody></table></div>
+      </div>
 
-    <div id="tab-sessions" class="tab-content active">
-      <input class="search-input" id="sessionSearch" placeholder="Search keywords, roles, status, or ID..." oninput="filterSessions()">
-      <div class="table-wrap"><table><thead id="sessionHead"></thead><tbody id="sessionBody"></tbody></table></div>
-    </div>
+      <div class="tab-content" data-group="inner" data-tab="registrations">
+        <div class="table-wrap"><table><thead><tr><th></th><th>Date</th><th>Name</th><th>Email</th><th>Status</th><th>Company</th><th>Position</th><th>Jobs</th><th>Last Updated</th></tr></thead><tbody id="registrationBody"></tbody></table></div>
+      </div>
 
-    <div id="tab-scores" class="tab-content">
-      <div class="chart-box" style="max-width:580px"><h3>Total Score Distribution</h3><canvas id="scoreHistogram" height="200"></canvas></div>
-    </div>
-
-    <div id="tab-registrations" class="tab-content">
-      <div class="table-wrap"><table><thead><tr><th></th><th>Date</th><th>Name</th><th>Email</th><th>Status</th><th>Company</th><th>Position</th><th>Jobs</th><th>Last Updated</th></tr></thead><tbody id="registrationBody"></tbody></table></div>
-    </div>
-
-    <div id="tab-visits" class="tab-content">
-      <div class="cards" id="visitCards" style="margin:0 0 16px 0"></div>
-      <div class="table-wrap"><table><thead><tr><th>Date</th><th>IP</th><th>Location</th><th>Device</th><th>Page</th><th>Duration</th></tr></thead><tbody id="visitBody"></tbody></table></div>
+      <div class="tab-content" data-group="inner" data-tab="visits">
+        <div class="cards" id="visitCards" style="margin:0 0 16px 0"></div>
+        <div class="table-wrap"><table><thead><tr><th>Date</th><th>IP</th><th>Location</th><th>Device</th><th>Page</th><th>Duration</th></tr></thead><tbody id="visitBody"></tbody></table></div>
+      </div>
     </div>
 
   </div>

@@ -4,7 +4,7 @@ const _email = localStorage.getItem("jobagent_profile_email");
 if (!_email || _email.toLowerCase() !== _adminEmail.toLowerCase()) { window.location.href = "/"; }
 
 // ── State ──
-let dailyChart, statusChart, scoreChart;
+let dailyChart, statusChart;
 let allSessions = [];
 let _refreshInterval = null;
 let _refreshActive = true;
@@ -60,7 +60,7 @@ function startRefresh() {
   stopRefresh();
   _refreshInterval = setInterval(() => {
     setRefreshing(true);
-    loadStats(); loadSessions(); loadScores(); loadRegistrations(); loadVisits();
+    loadStats(); loadSessions(); loadRegistrations(); loadVisits();
   }, 300000);
 }
 
@@ -85,7 +85,6 @@ async function loadStats() {
       { n: formatDuration(d.avg_duration_seconds), l: "Avg Duration", c: "blue" },
       { n: Math.round(d.completed / total * 100) + "%", l: "Completion Rate", c: "green" },
       { n: d.total_scraped_jobs ? Math.round(d.total_scraped_jobs / total) : "\u2014", l: "Avg Jobs/Session", c: "sky" },
-      { n: d.total_users && d.total_sessions ? Math.round(d.total_sessions / d.total_users) : "\u2014", l: "Sessions/User", c: "purple" },
       { n: d.total_visits || 0, l: "Total Visits", c: "teal" },
       { n: d.unique_visitors || 0, l: "Unique Visitors", c: "teal" },
       { n: d.visit_avg_duration_seconds ? Math.round(d.visit_avg_duration_seconds) + "s" : "\u2014", l: "Avg Visit Duration", c: "teal" },
@@ -260,29 +259,6 @@ function renderBasicDetail(sid, s) {
   return h ? `<div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:12px">${h}</div>` : "";
 }
 
-// ── Scores ──
-async function loadScores() {
-  try {
-    const r = await fetch("/api/admin/scores", { cache: "no-cache" });
-    const d = await r.json();
-    const dist = d.distribution || [];
-    if (scoreChart) scoreChart.destroy();
-    const grad = document.createElement("canvas").getContext("2d").createLinearGradient(0, 0, 0, 200);
-    grad.addColorStop(0, "rgba(16,185,129,.5)");
-    grad.addColorStop(1, "rgba(16,185,129,.05)");
-    scoreChart = new Chart(document.getElementById("scoreHistogram"), {
-      type: "bar",
-      data: { labels: dist.map(b => b.range), datasets: [{
-        label: "Jobs", data: dist.map(b => b.count), backgroundColor: grad,
-        borderColor: "#10b981", borderWidth: 1, borderRadius: 3, borderSkipped: false,
-      }] },
-      options: { responsive: true, plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0, font: { size: 10 } }, grid: { color: "#f1f5f9" } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } },
-      }
-    });
-  } catch {}
-}
-
 // ── Visits ──
 async function loadVisits() {
   try {
@@ -421,9 +397,9 @@ async function loadRegistrations() {
 }
 
 // ── Tabs ──
-function switchTab(name) {
-  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
-  document.querySelectorAll(".tab-content").forEach(c => c.classList.toggle("active", c.id === `tab-${name}`));
+function switchTab(name, group = "main") {
+  document.querySelectorAll(`.tabs[data-group="${group}"] .tab`).forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+  document.querySelectorAll(`.tab-content[data-group="${group}"]`).forEach(c => c.classList.toggle("active", c.dataset.tab === name));
 }
 
 // ── Database ──
@@ -571,7 +547,6 @@ window.renderSessions = renderSessions;
 window.sortSessions = sortSessions;
 window.filterSessions = filterSessions;
 window.toggleDetail = toggleDetail;
-window.loadScores = loadScores;
 window.loadVisits = loadVisits;
 window.loadRegistrations = loadRegistrations;
 window.switchTab = switchTab;
@@ -580,5 +555,5 @@ window.restoreDB = restoreDB;
 window.mergeDB = mergeDB;
 
 // ── Init ──
-loadStats(); loadSessions(); loadScores(); loadRegistrations(); loadVisits(); loadDbInfo();
+loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadDbInfo();
 startRefresh();
