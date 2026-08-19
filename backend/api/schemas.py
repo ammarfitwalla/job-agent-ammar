@@ -33,6 +33,9 @@ class ScrapeRequest(BaseModel):
     keywords: list[str] = []
     roles: list[str] = []
     location: str = ""
+    city: str = ""
+    state: str = ""
+    country: str = ""
     indeed_country: str = "USA"
     internship_mode: bool = False
     user_email: str = ""

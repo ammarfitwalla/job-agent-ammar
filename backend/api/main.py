@@ -1,6 +1,7 @@
 # FastAPI entry point
 import sys
 import os
+from contextlib import asynccontextmanager
 
 # Ensure project root is on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,6 +16,24 @@ from db import init_db
 
 VOTE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "votes.json")
 VOTE_THRESHOLD = 100
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    try:
+        from scheduler import start_scheduler
+        start_scheduler()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+    yield
+    try:
+        from scheduler import shutdown_scheduler
+        shutdown_scheduler()
+    except Exception:
+        pass
+
 
 def _load_votes() -> int:
     if os.path.isfile(VOTE_FILE):
@@ -32,6 +51,7 @@ app = FastAPI(
     title="Job Agent API",
     description="Scrape, score, and manage job applications",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -63,11 +83,6 @@ app.include_router(visits.router)
 app.include_router(users.router)
 app.include_router(referrals.router)
 app.include_router(stats.router)
-
-
-@app.on_event("startup")
-async def startup():
-    init_db()
 
 
 @app.get("/votes")

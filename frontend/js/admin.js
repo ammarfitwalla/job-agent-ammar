@@ -4,7 +4,7 @@ const _email = localStorage.getItem("jobagent_profile_email");
 if (!_email || _email.toLowerCase() !== _adminEmail.toLowerCase()) { window.location.href = "/"; }
 
 // ── State ──
-let dailyChart, statusChart;
+let dailyChart, statusChart, comboChart;
 let allSessions = [];
 let _refreshInterval = null;
 let _refreshActive = true;
@@ -60,7 +60,7 @@ function startRefresh() {
   stopRefresh();
   _refreshInterval = setInterval(() => {
     setRefreshing(true);
-    loadStats(); loadSessions(); loadRegistrations(); loadVisits();
+    loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage();
   }, 300000);
 }
 
@@ -133,6 +133,47 @@ async function loadStats() {
     showRealContent();
   } catch { showRealContent(); }
   setRefreshing(false);
+}
+
+// ── Combo Usage ──
+async function loadComboUsage() {
+  try {
+    const r = await fetch("/api/admin/prewarm/usage?limit=20", { cache: "no-cache" });
+    const d = await r.json();
+    const combos = (d.combos || []).filter(c => c.usage_count > 0);
+    if (!combos.length) {
+      document.getElementById("comboChart").parentElement.querySelector("h3").textContent = "Top Combo Usage (No data yet)";
+      return;
+    }
+    const labels = combos.map(c => `${c.role} · ${c.site}${c.city ? " · " + c.city : ""}${c.state ? " · " + c.state : ""}${c.country ? " · " + c.country.toUpperCase() : ""}${c.internship_mode ? " · internship" : ""}`);
+    const data = combos.map(c => c.usage_count);
+
+    if (comboChart) comboChart.destroy();
+    comboChart = new Chart(document.getElementById("comboChart"), {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "Searches",
+          data,
+          backgroundColor: "rgba(99,102,241,.6)",
+          borderColor: "#6366f1",
+          borderWidth: 1,
+          borderRadius: 3,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true, ticks: { stepSize: 1, precision: 0, font: { size: 10 } }, grid: { color: "#f1f5f9" } },
+          y: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        },
+      },
+    });
+  } catch {}
 }
 
 // ── Sessions ──
@@ -555,5 +596,5 @@ window.restoreDB = restoreDB;
 window.mergeDB = mergeDB;
 
 // ── Init ──
-loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadDbInfo();
+loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage(); loadDbInfo();
 startRefresh();

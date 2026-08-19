@@ -24,7 +24,6 @@ const RESUME_CACHE_KEY = "jobagent_resume_text";
 let pollTimer = null;
 let hasRawJobs = false;
 let allJobs = [];
-let customRoles = [];
 let selectedRoles = new Set();
 let customKeywords = [];
 let scrapeAttempts = 0;
@@ -1145,7 +1144,6 @@ function updateSearchBtn() {}
 
 function clearTargetRoles() {
   selectedRoles.clear();
-  customRoles = [];
   document.querySelectorAll(".role-cb").forEach(cb => { cb.checked = false; });
   renderSelectedRoles();
   updateRoleCount();
@@ -1153,6 +1151,7 @@ function clearTargetRoles() {
   if (sr) { sr.innerHTML = ""; sr.classList.add("hidden"); }
   const rsi = document.getElementById("roleSearchInput");
   if (rsi) rsi.value = "";
+  if (roleCategories) renderRoles(roleCategories);
 }
 
 function clearSearchState() {
@@ -1367,7 +1366,7 @@ function renderSuggestedRoles(roles) {
     c.innerHTML = '<span class="text-xs font-medium text-indigo-500 mr-1 self-center">✨ Recommended</span>' +
     roles.map(r => {
       const exists = allRoles.includes(r);
-      const isSelected = selectedRoles.has(r) || customRoles.includes(r);
+      const isSelected = selectedRoles.has(r);
       return `<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border cursor-pointer transition-colors ${isSelected ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100'}" onclick="selectSuggestedRole('${r.replace(/'/g, "\\'")}')">
         ${r} <span class="text-indigo-400">+</span>
       </span>`;
@@ -1422,16 +1421,36 @@ function renderCustomKeywords() {
 let roleCategories = null;
 let roleSearchQuery = "";
 
-async function loadRoles() {
-  try { const r = await fetch("/roles"); const d = await r.json(); roleCategories = d.categories; renderRoles(roleCategories); } catch {}
+function titleCase(s) {
+  return s.replace(/\S+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 }
 
-function addRoleFromSearch(val) {
-  if (!val || customRoles.includes(val)) return;
-  customRoles.push(val);
+async function loadRoles() {
+  try {
+    const r = await fetch("/roles");
+    const d = await r.json();
+    roleCategories = d.categories;
+    renderRoles(roleCategories);
+  } catch {}
+}
+
+async function addRoleFromSearch(val) {
+  if (!val) return;
+  val = titleCase(val);
+  const allRoles = Object.values(roleCategories || {}).flat();
+  if (allRoles.some(r => r.toLowerCase() === val.toLowerCase())) return;
+  try {
+    const r = await fetch("/roles/custom", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: val }),
+    });
+    const d = await r.json();
+    if (d.categories) roleCategories = d.categories;
+  } catch {}
+  selectedRoles.add(val);
   document.getElementById("roleSearchInput").value = "";
   roleSearchQuery = "";
-  renderCustomRoles();
   updateRoleCount();
   if (roleCategories) renderRoles(roleCategories);
 }
@@ -1445,8 +1464,8 @@ function renderRoles(categories) {
     allRoles = allRoles.filter(r => words.every(w => r.toLowerCase().includes(w)));
   }
   if (!allRoles.length && q) {
-    const alreadyAdded = customRoles.includes(q);
-    if (alreadyAdded) {
+    const exists = Object.values(roleCategories || {}).flat().some(r => r.toLowerCase() === q);
+    if (exists) {
       c.innerHTML = '<span class="text-sm text-slate-400 italic px-2">Role already added</span>';
     } else {
       c.innerHTML = `<button class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-emerald-50 cursor-pointer text-sm text-emerald-700 font-medium transition-colors" onclick="addRoleFromSearch('${q.replace(/'/g, "\\'")}')">
@@ -1510,15 +1529,7 @@ document.getElementById("roleSearchInput").addEventListener("keydown", (e) => {
 });
 
 function renderCustomRoles() {
-  const c = document.getElementById("customRoles");
-  c.innerHTML = customRoles.map(r => `
-    <span class="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-100 text-emerald-700 text-sm px-3 py-1.5 rounded-lg font-medium">
-      <span>${r}</span>
-      <button class="remove-role hover:text-emerald-900 ml-1 opacity-70 hover:opacity-100" data-role="${r}">
-        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-      </button>
-    </span>`).join("");
-  c.querySelectorAll(".remove-role").forEach(b => b.addEventListener("click", () => { customRoles = customRoles.filter(r => r !== b.dataset.role); renderCustomRoles(); updateRoleCount(); }));
+  document.getElementById("customRoles").innerHTML = "";
 }
 
 function onRoleToggle(cb) {
@@ -1548,12 +1559,12 @@ function renderSelectedRoles() {
 }
 
 function updateRoleCount() {
-  document.getElementById("roleCount").textContent = selectedRoles.size + customRoles.length;
+  document.getElementById("roleCount").textContent = selectedRoles.size;
   renderSelectedRoles();
   updateSearchBtn();
 }
 
-function getSelectedRoles() { return [...selectedRoles, ...customRoles]; }
+function getSelectedRoles() { return [...selectedRoles]; }
 function getSelectedSites() { return Array.from(document.querySelectorAll("#sites input:checked:not(:disabled)")).map(e => e.value); }
 function getSelectedKeywords() { return [...Array.from(document.querySelectorAll("#keywords input:checked")).map(e => e.value), ...customKeywords]; }
 
@@ -1585,7 +1596,8 @@ function setupLocationSearch() {
 
   input.addEventListener("input", () => {
     const q = input.value.trim();
-    if (selectedLocation) { selectedLocation = null; selected.classList.add("hidden"); updateNaukriEligibility(); }
+    if (selectedLocation) { selectedLocation = null; selected.classList.add("hidden"); }
+    updateNaukriEligibility();
     if (q.length < 2) { results.classList.add("hidden"); return; }
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => searchState(q), 200);
@@ -1668,11 +1680,31 @@ function selectLocation(loc) {
   updateNaukriEligibility();
 }
 
+function resolveLocation() {
+  const text = (document.getElementById("locationInput").value || "").trim();
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  let best = null;
+  for (const s of allStates) {
+    const sl = s.state.toLowerCase();
+    if (sl === lower) return s;
+    if (!best && lower.includes(sl)) best = s;
+  }
+  if (best) return best;
+  for (const [code, name] of Object.entries(countriesMap)) {
+    if (name.toLowerCase() === lower || code === lower) {
+      return { state: "", country: name, country_code: code };
+    }
+  }
+  return null;
+}
+
 function updateNaukriEligibility() {
   const input = document.querySelector('#sites input[value="naukri"]');
   if (!input) return;
   const label = input.closest('label');
-  const eligible = !!(selectedLocation && selectedLocation.country_code === 'in');
+  const loc = selectedLocation || resolveLocation();
+  const eligible = !!(loc && loc.country_code === 'in');
   if (eligible) {
     input.disabled = false;
     label.classList.remove('cursor-not-allowed', 'opacity-50');
@@ -1685,14 +1717,16 @@ function updateNaukriEligibility() {
   }
 }
 
-function getIndeedCountry() {
-  if (!selectedLocation) return "USA";
-  const cc = selectedLocation.country_code;
+function getIndeedCountry(loc) {
+  const l = loc || selectedLocation;
+  if (!l) return "USA";
+  const cc = l.country_code;
   return LOCATION_OVERRIDE[cc] || countriesMap[cc] || "usa";
 }
-function getLocation() {
-  if (!selectedLocation) return "";
-  return [selectedLocation.state, selectedLocation.country].filter(Boolean).join(", ");
+function getLocation(loc) {
+  const l = loc || selectedLocation;
+  if (!l) return "";
+  return [l.state, l.country].filter(Boolean).join(", ");
 }
 
 // ===== INTERNSHIP MODE TOGGLE =====
@@ -1786,14 +1820,18 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
 
   try {
     searchIds = [_searchId];
+    const loc = selectedLocation || resolveLocation();
     await fetch("/scrape", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         sites, keywords, roles: rolesToScrape, search_id: _searchId,
-        location: getLocation() || document.getElementById("locationInput").value,
+        location: getLocation(loc) || document.getElementById("locationInput").value,
+        city: (loc && loc.city) || "",
+        state: (loc && loc.state) || "",
+        country: (loc && loc.country_code) || "",
         internship_mode: internshipMode,
-        indeed_country: getIndeedCountry(),
+        indeed_country: getIndeedCountry(loc),
         user_email: (window.getProfile() || {}).email || "",
         resume_filename: _uploadedFilename || "",
         resume_text: document.getElementById("resume")?.value.trim() || "",
@@ -1823,7 +1861,8 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
 function pollAllScrapes() {
   if (pollTimer) clearInterval(pollTimer);
   let consecutiveErrors = 0;
-  pollTimer = setInterval(async () => {
+  let sawNonIdle = false;
+  const tick = async () => {
     const sid = searchIds[0];
     if (!sid) { clearInterval(pollTimer); pollTimer = null; return; }
 
@@ -1831,7 +1870,13 @@ function pollAllScrapes() {
     try {
       const r = await fetch(`/scrape/status?search_id=${sid}`);
       const d = await r.json();
-      if (d.status === 'running') allDone = false;
+      if (d.status === 'running' || d.status === 'idle') {
+        allDone = false;
+        if (d.status === 'running') sawNonIdle = true;
+      } else if (d.status === 'done') {
+        // Complete when the session is seen (or a cache hit already has jobs).
+        allDone = sawNonIdle || (d.last_scrape_relevant > 0);
+      }
       consecutiveErrors = 0;
     } catch {
       consecutiveErrors++;
@@ -1918,7 +1963,9 @@ function pollAllScrapes() {
         },
       }));
     }
-  }, 3000);
+  };
+  tick();
+  pollTimer = setInterval(tick, 3000);
 }
 // ===== RENDER JOBS =====
 // ===== RENDER ALL JOBS =====

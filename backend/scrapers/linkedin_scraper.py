@@ -421,7 +421,7 @@ def _scrape_http(roles=None, location="", internship_mode=False, results_wanted=
     total_yielded = 0
     circuit = _RateLimitCircuit(trip_after=2)
 
-    results_wanted = results_wanted * 1.5 if internship_mode else results_wanted
+    results_wanted = int(results_wanted * 1.5) if internship_mode else int(results_wanted)
     per_role = max(1, results_wanted // len(roles))
 
     try:

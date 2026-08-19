@@ -38,7 +38,7 @@ Available roles: {available_roles}
 Resume:
 {resume}
 
-Return ONLY this JSON (no markdown, no explanation):
+Do NOT include <think> tags or any reasoning. Return ONLY the raw JSON object, no markdown fences:
 {{"keywords": ["keyword1", "keyword2", ...], "suggested_roles": ["Role 1", "Role 2"]}}
 """
 
@@ -48,7 +48,8 @@ def _extract_text(filepath: str) -> str:
     if ext == ".pdf":
         import fitz
         doc = fitz.open(filepath)
-        return "\n".join(doc[i].get_text() or "" for i in range(len(doc)))
+        doc.select(list(range(min(len(doc), 2))))
+        return "\n".join(page.get_text() or "" for page in doc)
     elif ext == ".docx":
         import docx
         doc = docx.Document(filepath)
@@ -112,7 +113,7 @@ async def extract_keywords(req: ResumeKeywordsRequest):
         try:
             prompt = EXTRACT_PROMPT.format(available_roles=json.dumps(TARGET_ROLES), resume=req.resume_text)
             print(f"[KEYWORDS] Calling LLM attempt {attempt+1}/2 (prompt_len={len(prompt)})")
-            response = LLMClient.chat(prompt, max_tokens=2000)
+            response = LLMClient.keyword_chat(prompt, max_tokens=4000)
             print(f"[KEYWORDS] LLM response received ({len(response)} chars)")
             if response:
                 print(f"[KEYWORDS] First 200 chars: {response[:200]}")

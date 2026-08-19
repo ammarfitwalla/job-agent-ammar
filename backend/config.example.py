@@ -4,21 +4,12 @@ import os
 # ==============
 # LLM SETTINGS
 # ==============
-LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "cerebras")  # "cerebras", "groq", or "ollama"
-
-# Cerebras (primary)
-CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY", "")
-CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "gpt-oss-120b")
-CEREBRAS_API_URL = os.environ.get("CEREBRAS_API_URL", "https://api.cerebras.ai/v1")
-
-# Internship Cerebras (separate key for internship mode)
-INTERNSHIP_CEREBRAS_API_KEY = os.environ.get("INTERNSHIP_CEREBRAS_API_KEY", "")
-INTERNSHIP_CEREBRAS_MODEL = os.environ.get("INTERNSHIP_CEREBRAS_MODEL", CEREBRAS_MODEL)
-INTERNSHIP_CEREBRAS_RATE = int(os.environ.get("INTERNSHIP_CEREBRAS_RATE", "4"))
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq")  # "groq" or "ollama"
 
 # Groq (fallback)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "qwen/qwen3.6-27b")
+GROQ_KEYWORDS_MODEL = os.environ.get("GROQ_KEYWORDS_MODEL", "openai/gpt-oss-20b")
 
 # Ollama (local fallback)
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
@@ -28,7 +19,7 @@ OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434/v1/cha
 # REFERRAL MARKETPLACE
 # ==============
 COMPANIES = sorted(set([
-    "Google", "Meta", "Apple", "Amazon", "Microsoft", "Netflix", "Tesla", "Nvidia",
+    "Google", "Meta", "Apple", "Amazon", "0.Microsoft", "Netflix", "Tesla", "Nvidia",
     "Adobe", "Salesforce", "Oracle", "IBM", "Intel", "Cisco", "Uber", "Airbnb",
     "Stripe", "Square", "PayPal", "Shopify", "Spotify", "Twitter/X", "LinkedIn",
     "Snap", "Pinterest", "Reddit", "Zoom", "Slack", "Notion", "Figma",
@@ -253,6 +244,95 @@ INTERNSHIP_KEYWORDS = [
 
 # Scrape limits per site
 SCRAPE_LIMIT = 1000
+
+# ==============
+# JOB CACHE + PREWARM SCHEDULER
+# ==============
+CACHE_ENABLED = True
+CACHE_TTL_HOURS = 12.0                                    # fresh until 12h old
+CACHE_MIN_VOLUME = 10                                     # min jobs for an entry to be "fresh"
+CACHE_HOURS_OLD = 168                                     # posting window used by scrapers
+CACHE_PREWARM_LIMIT = 30                                  # prewarm fetch/store per combo
+CACHE_MAX_JOBS_PER_ENTRY = 500                            # live-search cache write cap
+CACHE_MAX_AGE_HOURS = 336                                 # delete cache rows older than 14 days
+CACHE_MAX_ENTRIES = 50000                                 # row-count safety cap
+
+CACHE_ROLES = ["Full Stack Developer", "Backend Developer", "Frontend Developer",
+    "Data Scientist", "Data Analyst", "AI Engineer", "Machine Learning Engineer",
+    "Data Engineer", "DevOps Engineer", "Cloud Engineer", "Python Developer",
+    "QA Engineer", "Site Reliability Engineer", "Database Developer",
+    "iOS Developer", "Android Developer", "Network Engineer",
+    "Sales Development Representative"
+]
+
+# Countries to prewarm (countrystatecity ISO2 codes). CACHE_INCLUDE_ALL_STATES expands every state/region.
+CACHE_COUNTRIES = ["in", "us", "ie", "ae"]
+CACHE_INCLUDE_ALL_STATES = True
+# Optional curated states per country (used when CACHE_INCLUDE_ALL_STATES is false)
+CACHE_STATES_OVERRIDE = {}  # e.g. {"us": ["California", "Texas"]}
+# State names excluded from the prewarm grid (military/territory codes with no job market)
+CACHE_STATES_EXCLUDE = [
+    "Armed Forces Europe",
+    "Armed Forces of the Americas",
+    "Armed Forces Pacific",
+    "United States Minor Outlying Islands",
+]
+
+# Naukri matches location tokens by city, not state, so each state combo loops
+# the state's major cities and merges results under the state cache key.
+CACHE_CITIES_PER_STATE = 5
+CACHE_CITY_RESULTS_WANTED = 30  # per-city fetch cap inside the city loop
+CACHE_CITY_INCLUDE_STATE_TERM = True  # also run the plain state-name search
+CACHE_STATE_CITIES = {
+    "Andaman and Nicobar Islands": ["Port Blair", "Bamboo Flat", "Diglipur", "Rangat", "Mayabunder"],
+    "Andhra Pradesh": ["Visakhapatnam", "Vijayawada", "Guntur", "Nellore", "Tirupati"],
+    "Arunachal Pradesh": ["Itanagar", "Pasighat", "Naharlagun", "Tawang", "Bomdila"],
+    "Assam": ["Guwahati", "Silchar", "Dibrugarh", "Jorhat", "Tezpur"],
+    "Bihar": ["Patna", "Gaya", "Bhagalpur", "Muzaffarpur", "Darbhanga"],
+    "Chandigarh": ["Chandigarh"],
+    "Chhattisgarh": ["Raipur", "Bhilai", "Bilaspur", "Korba", "Durg"],
+    "Dadra and Nagar Haveli and Daman and Diu": ["Silvassa", "Daman", "Diu"],
+    "Delhi": ["New Delhi", "Delhi", "Gurugram", "Noida", "Faridabad"],
+    "Goa": ["Panaji", "Vasco da Gama", "Madgaon", "Mapusa", "Ponda"],
+    "Gujarat": ["Ahmedabad", "Surat", "Vadodara", "Rajkot", "Gandhinagar"],
+    "Haryana": ["Gurugram", "Faridabad", "Rohtak", "Karnal", "Panipat"],
+    "Himachal Pradesh": ["Shimla", "Solan", "Dharamshala", "Mandi", "Baddi"],
+    "Jammu and Kashmir": ["Srinagar", "Jammu", "Anantnag", "Baramula", "Kathua"],
+    "Jharkhand": ["Ranchi", "Jamshedpur", "Dhanbad", "Bokaro", "Deoghar"],
+    "Karnataka": ["Bengaluru", "Mysuru", "Hubballi", "Mangaluru", "Belagavi"],
+    "Kerala": ["Kochi", "Thiruvananthapuram", "Kozhikode", "Thrissur", "Kollam"],
+    "Ladakh": ["Leh", "Kargil"],
+    "Lakshadweep": ["Kavaratti"],
+    "Madhya Pradesh": ["Indore", "Bhopal", "Jabalpur", "Gwalior", "Ujjain"],
+    "Maharashtra": ["Mumbai", "Pune", "Nagpur", "Nashik", "Thane"],
+    "Manipur": ["Imphal", "Thoubal", "Churachandpur", "Kakching", "Bishnupur"],
+    "Meghalaya": ["Shillong", "Tura", "Cherrapunji", "Nongstoin", "Mairang"],
+    "Mizoram": ["Aizawl", "Lunglei", "Champhai", "Kolasib", "Serchhip"],
+    "Nagaland": ["Kohima", "Dimapur", "Mokokchung", "Wokha", "Tuensang"],
+    "Odisha": ["Bhubaneswar", "Cuttack", "Rourkela", "Berhampur", "Sambalpur"],
+    "Puducherry": ["Puducherry", "Karaikal", "Mahe", "Yanam"],
+    "Punjab": ["Ludhiana", "Amritsar", "Jalandhar", "Patiala", "Mohali"],
+    "Rajasthan": ["Jaipur", "Udaipur", "Jodhpur", "Kota", "Bikaner"],
+    "Sikkim": ["Gangtok", "Namchi", "Singtam", "Rangpo", "Jorethang"],
+    "Tamil Nadu": ["Chennai", "Coimbatore", "Madurai", "Tiruchirappalli", "Salem"],
+    "Telangana": ["Hyderabad", "Warangal", "Nizamabad", "Karimnagar", "Khammam"],
+    "Tripura": ["Agartala", "Udaipur", "Dharmanagar", "Kailashahar", "Sonamura"],
+    "Uttar Pradesh": ["Noida", "Lucknow", "Kanpur", "Varanasi", "Ghaziabad"],
+    "Uttarakhand": ["Dehradun", "Haridwar", "Haldwani", "Rudrapur", "Roorkee"],
+    "West Bengal": ["Kolkata", "Howrah", "Siliguri", "Durgapur", "Asansol"],
+}
+
+# Boards: naukri is India-only; other countries default to indeed + linkedin
+CACHE_SITES_INDIA = ["indeed", "linkedin", "naukri"]
+CACHE_SITES_DEFAULT = ["indeed", "linkedin"]
+
+PREWARM_WORKERS = 7
+MAX_CONCURRENT_PER_BOARD = {"linkedin": 1, "indeed": 3, "naukri": 3}   # prewarm-only concurrency caps
+PREWARM_DELAY_SECONDS = 5.0
+PREWARM_MAX_COMBOS_PER_RUN = 500
+
+SCHEDULER_ENABLED = False
+SCHEDULER_INTERVAL_MINUTES = 180
 
 # ==============
 # GOOGLE SHEETS 

@@ -6,18 +6,11 @@ from typing import Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from llm.llm_client import LLMClient
 from llm.prompts import relevance_prompt, internship_relevance_prompt, batch_relevance_prompt
-from llm.providers import CerebrasProvider
-from config import INTERNSHIP_CEREBRAS_API_KEY, INTERNSHIP_CEREBRAS_MODEL, INTERNSHIP_CEREBRAS_RATE, CEREBRAS_API_URL, KEYWORDS_INCLUDE
+from config import KEYWORDS_INCLUDE
 from utils.logger import log
 from utils.json_parser import extract_json
 
 BATCH_SIZE_RATIO = {True: 2, False: 5}  # internship vs normal
-_internship_provider = CerebrasProvider(
-    api_key=INTERNSHIP_CEREBRAS_API_KEY,
-    model=INTERNSHIP_CEREBRAS_MODEL,
-    base_url=CEREBRAS_API_URL,
-    rate_limit=INTERNSHIP_CEREBRAS_RATE,
-)
 
 SENIORITY_WORDS = {"senior", "lead", "staff", "junior", "mid", "founding", "associate", "principal"}
 
@@ -183,13 +176,7 @@ def _score_one(
     prompt = (internship_relevance_prompt if internship_mode else relevance_prompt)(
         job["title"], job["description"], job.get("tags"), resume=resume)
     # print(f"[DBG RE] _score_one: prompt built, len={len(prompt)}, mode={'internship' if internship_mode else 'normal'}")
-    response = ""
-    if internship_mode:
-        response = _internship_provider.chat(prompt, cancel_check=cancel_check)
-        # print(f"[DBG RE] _score_one: internship_provider.chat() returned {'SUCCESS' if response else 'EMPTY'} (len={len(response)})")
-    if not response and not (cancel_check and cancel_check()):
-        response = LLMClient.chat(prompt, cancel_check=cancel_check)
-        # print(f"[DBG RE] _score_one: LLMClient.chat() returned {'SUCCESS' if response else 'EMPTY'} (len={len(response)})")
+    response = LLMClient.chat(prompt, cancel_check=cancel_check)
 
     ai_result = extract_json(response)
     # print(f"[DBG RE] _score_one: extract_json type={type(ai_result).__name__}, is_dict={isinstance(ai_result, dict)}")
@@ -221,13 +208,7 @@ def _score_batch(
         internship_mode=internship_mode,
     )
     # print(f"[DBG RE] _score_batch: prompt built, len={len(prompt)}, mode={'internship' if internship_mode else 'normal'}")
-    response = ""
-    if internship_mode:
-        response = _internship_provider.chat(prompt, max_tokens=3000, cancel_check=cancel_check)
-        # print(f"[DBG RE] _score_batch: internship_provider.chat() returned {'SUCCESS' if response else 'EMPTY'} (len={len(response)})")
-    if not response and not (cancel_check and cancel_check()):
-        response = LLMClient.batch_chat(prompt, cancel_check=cancel_check)
-        # print(f"[DBG RE] _score_batch: LLMClient.batch_chat() returned {'SUCCESS' if response else 'EMPTY'} (len={len(response)})")
+    response = LLMClient.batch_chat(prompt, max_tokens=3000, cancel_check=cancel_check)
 
     parsed = extract_json(response)
     # print(f"[DBG RE] _score_batch: extract_json type={type(parsed).__name__}, is_list={isinstance(parsed, list)}, len={len(parsed) if isinstance(parsed, list) else 'N/A'}")

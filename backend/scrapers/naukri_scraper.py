@@ -16,6 +16,7 @@ from utils.delay import delay
 JOB_SEARCH_URL = "https://www.naukri.com/jobapi/v3/search"
 MAX_PAGES = 5
 PAGE_SIZE = 20
+NAUKRI_MAX_406_RETRIES = 2
 
 PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
 MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBALrlQ+djR0RjJwBF1xuisHmdFv334MIm
@@ -150,11 +151,26 @@ def _search_term(session, term, location, job_age, term_wanted, tls, seen):
         params = {k: v for k, v in params.items() if v not in (None, "")}
 
         try:
-            resp = _get(session, JOB_SEARCH_URL, _search_headers(), params, tls)
+            resp = None
+            for attempt in range(NAUKRI_MAX_406_RETRIES + 1):
+                if attempt > 0:
+                    print(f"[NAUKRI] '{term}' page {page} 406 — retry {attempt}/{NAUKRI_MAX_406_RETRIES} with backoff...")
+                    delay(8, 12)
+                try:
+                    resp = _get(session, JOB_SEARCH_URL, _search_headers(), params, tls)
+                except Exception as e:
+                    print(f"[NAUKRI] Search '{term}' page {page} failed: {e}")
+                    resp = None
+                    break
+                if resp is not None and resp.status_code == 406 and attempt < NAUKRI_MAX_406_RETRIES:
+                    continue
+                break
         except Exception as e:
             print(f"[NAUKRI] Search '{term}' page {page} failed: {e}")
             break
 
+        if resp is None:
+            break
         if resp.status_code == 406:
             print(f"[NAUKRI] Search '{term}' rate-limited (406): {resp.text[:120]}")
             break

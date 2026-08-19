@@ -1,0 +1,1948 @@
+{
+ "Andaman and Nicobar Islands:::Port Blair": {
+  "state": "Andaman and Nicobar Islands",
+  "city": "Port Blair",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Andaman and Nicobar Islands:::Bamboo Flat": {
+  "state": "Andaman and Nicobar Islands",
+  "city": "Bamboo Flat",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Andaman and Nicobar Islands:::Diglipur": {
+  "state": "Andaman and Nicobar Islands",
+  "city": "Diglipur",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Andaman and Nicobar Islands:::Rangat": {
+  "state": "Andaman and Nicobar Islands",
+  "city": "Rangat",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Andaman and Nicobar Islands:::Mayabunder": {
+  "state": "Andaman and Nicobar Islands",
+  "city": "Mayabunder",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Andhra Pradesh:::Visakhapatnam": {
+  "state": "Andhra Pradesh",
+  "city": "Visakhapatnam",
+  "status": "FOUND",
+  "jobs": 11,
+  "rate_limited": false,
+  "sample": [
+   "Visakhapatnam, Pune(Balewadi), Bengaluru",
+   "Visakhapatnam",
+   "Visakhapatnam"
+  ]
+ },
+ "Andhra Pradesh:::Vijayawada": {
+  "state": "Andhra Pradesh",
+  "city": "Vijayawada",
+  "status": "FOUND",
+  "jobs": 7,
+  "rate_limited": false,
+  "sample": [
+   "Vijayawada",
+   "Vijayawada, Hyderabad, Vadodara",
+   "Vijayawada"
+  ]
+ },
+ "Andhra Pradesh:::Guntur": {
+  "state": "Andhra Pradesh",
+  "city": "Guntur",
+  "status": "FOUND",
+  "jobs": 3,
+  "rate_limited": false,
+  "sample": [
+   "Guntur, Piduguralla",
+   "Guntur, Hyderabad, Kakinada",
+   "Guntur, Vijayawada, Visakhapatnam, Nello"
+  ]
+ },
+ "Andhra Pradesh:::Nellore": {
+  "state": "Andhra Pradesh",
+  "city": "Nellore",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Nellore, Vijayawada, Visakhapatnam, Gunt"
+  ]
+ },
+ "Andhra Pradesh:::Tirupati": {
+  "state": "Andhra Pradesh",
+  "city": "Tirupati",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Gurugram, Bengaluru",
+   "Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Arunachal Pradesh:::Itanagar": {
+  "state": "Arunachal Pradesh",
+  "city": "Itanagar",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Arunachal Pradesh:::Pasighat": {
+  "state": "Arunachal Pradesh",
+  "city": "Pasighat",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Arunachal Pradesh:::Naharlagun": {
+  "state": "Arunachal Pradesh",
+  "city": "Naharlagun",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Arunachal Pradesh:::Tawang": {
+  "state": "Arunachal Pradesh",
+  "city": "Tawang",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Arunachal Pradesh:::Bomdila": {
+  "state": "Arunachal Pradesh",
+  "city": "Bomdila",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Gurugram, Bengaluru",
+   "Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Assam:::Guwahati": {
+  "state": "Assam",
+  "city": "Guwahati",
+  "status": "FOUND",
+  "jobs": 4,
+  "rate_limited": false,
+  "sample": [
+   "Guwahati",
+   "Guwahati",
+   "Hybrid - Guwahati(Azara)"
+  ]
+ },
+ "Assam:::Silchar": {
+  "state": "Assam",
+  "city": "Silchar",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Assam:::Dibrugarh": {
+  "state": "Assam",
+  "city": "Dibrugarh",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Assam:::Jorhat": {
+  "state": "Assam",
+  "city": "Jorhat",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Jorhat"
+  ]
+ },
+ "Assam:::Tezpur": {
+  "state": "Assam",
+  "city": "Tezpur",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Bihar:::Patna": {
+  "state": "Bihar",
+  "city": "Patna",
+  "status": "FOUND",
+  "jobs": 11,
+  "rate_limited": false,
+  "sample": [
+   "Patna",
+   "Patna",
+   "Patna"
+  ]
+ },
+ "Bihar:::Gaya": {
+  "state": "Bihar",
+  "city": "Gaya",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Gaya, Bhagalpur, Muzaffarpur, Patna"
+  ]
+ },
+ "Bihar:::Bhagalpur": {
+  "state": "Bihar",
+  "city": "Bhagalpur",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Bhagalpur, Pirpainti"
+  ]
+ },
+ "Bihar:::Muzaffarpur": {
+  "state": "Bihar",
+  "city": "Muzaffarpur",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Muzaffarpur, Bhagalpur, Patna, Gaya"
+  ]
+ },
+ "Bihar:::Darbhanga": {
+  "state": "Bihar",
+  "city": "Darbhanga",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Darbhanga"
+  ]
+ },
+ "Chandigarh:::Chandigarh": {
+  "state": "Chandigarh",
+  "city": "Chandigarh",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Chandigarh",
+   "Remote",
+   "Chandigarh"
+  ]
+ },
+ "Chhattisgarh:::Raipur": {
+  "state": "Chhattisgarh",
+  "city": "Raipur",
+  "status": "FOUND",
+  "jobs": 4,
+  "rate_limited": false,
+  "sample": [
+   "Raipur",
+   "Raipur",
+   "Raipur, Kolkata, Korba"
+  ]
+ },
+ "Chhattisgarh:::Bhilai": {
+  "state": "Chhattisgarh",
+  "city": "Bhilai",
+  "status": "FOUND",
+  "jobs": 2,
+  "rate_limited": false,
+  "sample": [
+   "Bhilai",
+   "Bhilai, Korba, Raigarh, Bilaspur, Raipur"
+  ]
+ },
+ "Chhattisgarh:::Bilaspur": {
+  "state": "Chhattisgarh",
+  "city": "Bilaspur",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Bilaspur, Korba, Raigarh, Bhilai, Raipur"
+  ]
+ },
+ "Chhattisgarh:::Korba": {
+  "state": "Chhattisgarh",
+  "city": "Korba",
+  "status": "FOUND",
+  "jobs": 4,
+  "rate_limited": false,
+  "sample": [
+   "Korba",
+   "Korba, Kolkata, Raipur",
+   "Korba"
+  ]
+ },
+ "Chhattisgarh:::Durg": {
+  "state": "Chhattisgarh",
+  "city": "Durg",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Dadra and Nagar Haveli and Daman and Diu:::Silvassa": {
+  "state": "Dadra and Nagar Haveli and Daman and Diu",
+  "city": "Silvassa",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Gurugram, Bengaluru",
+   "Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Dadra and Nagar Haveli and Daman and Diu:::Daman": {
+  "state": "Dadra and Nagar Haveli and Daman and Diu",
+  "city": "Daman",
+  "status": "FOUND",
+  "jobs": 4,
+  "rate_limited": false,
+  "sample": [
+   "Daman & Diu",
+   "Daman & Diu",
+   "Daman & Diu, Valsad(Sarigam +1), Vapi(Bh"
+  ]
+ },
+ "Dadra and Nagar Haveli and Daman and Diu:::Diu": {
+  "state": "Dadra and Nagar Haveli and Daman and Diu",
+  "city": "Diu",
+  "status": "FOUND",
+  "jobs": 4,
+  "rate_limited": false,
+  "sample": [
+   "Daman & Diu",
+   "Daman & Diu",
+   "Daman & Diu, Valsad(Sarigam +1), Vapi(Bh"
+  ]
+ },
+ "Delhi:::New Delhi": {
+  "state": "Delhi",
+  "city": "New Delhi",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Gurugram",
+   "Hyderabad, Bengaluru, Delhi / NCR"
+  ]
+ },
+ "Delhi:::Delhi": {
+  "state": "Delhi",
+  "city": "Delhi",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Gurugram",
+   "Delhi / NCR, Hyderabad, Bengaluru"
+  ]
+ },
+ "Delhi:::Gurugram": {
+  "state": "Delhi",
+  "city": "Gurugram",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Gurugram",
+   "Gurugram"
+  ]
+ },
+ "Delhi:::Noida": {
+  "state": "Delhi",
+  "city": "Noida",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Noida(Sector 63)",
+   "Noida",
+   "Noida"
+  ]
+ },
+ "Delhi:::Faridabad": {
+  "state": "Delhi",
+  "city": "Faridabad",
+  "status": "FOUND",
+  "jobs": 14,
+  "rate_limited": false,
+  "sample": [
+   "Faridabad",
+   "Faridabad, Noida, Ghaziabad, Gurugram, D",
+   "Faridabad"
+  ]
+ },
+ "Goa:::Panaji": {
+  "state": "Goa",
+  "city": "Panaji",
+  "status": "FOUND",
+  "jobs": 7,
+  "rate_limited": false,
+  "sample": [
+   "Panaji",
+   "Panaji",
+   "Panaji(Patto Plaza)"
+  ]
+ },
+ "Goa:::Vasco da Gama": {
+  "state": "Goa",
+  "city": "Vasco da Gama",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Goa:::Madgaon": {
+  "state": "Goa",
+  "city": "Madgaon",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Goa:::Mapusa": {
+  "state": "Goa",
+  "city": "Mapusa",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Goa:::Ponda": {
+  "state": "Goa",
+  "city": "Ponda",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Gujarat:::Ahmedabad": {
+  "state": "Gujarat",
+  "city": "Ahmedabad",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Ahmedabad",
+   "Ahmedabad",
+   "Ahmedabad(Shivranjani)"
+  ]
+ },
+ "Gujarat:::Surat": {
+  "state": "Gujarat",
+  "city": "Surat",
+  "status": "FOUND",
+  "jobs": 11,
+  "rate_limited": false,
+  "sample": [
+   "Surat(Majura Gate)",
+   "Surat",
+   "Surat(Udhana +2)"
+  ]
+ },
+ "Gujarat:::Vadodara": {
+  "state": "Gujarat",
+  "city": "Vadodara",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Vadodara",
+   "Vadodara",
+   "Vadodara"
+  ]
+ },
+ "Gujarat:::Rajkot": {
+  "state": "Gujarat",
+  "city": "Rajkot",
+  "status": "FOUND",
+  "jobs": 3,
+  "rate_limited": false,
+  "sample": [
+   "Rajkot",
+   "Rajkot, Jamnagar, Ahmedabad, Surat, Vado",
+   "Rajkot, Jamnagar, Ahmedabad, Surat, Vado"
+  ]
+ },
+ "Gujarat:::Gandhinagar": {
+  "state": "Gujarat",
+  "city": "Gandhinagar",
+  "status": "FOUND",
+  "jobs": 11,
+  "rate_limited": false,
+  "sample": [
+   "Gandhinagar",
+   "Gandhinagar",
+   "Gandhinagar, New Delhi, Jaipur"
+  ]
+ },
+ "Haryana:::Gurugram": {
+  "state": "Haryana",
+  "city": "Gurugram",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Gurugram",
+   "Gurugram"
+  ]
+ },
+ "Haryana:::Faridabad": {
+  "state": "Haryana",
+  "city": "Faridabad",
+  "status": "FOUND",
+  "jobs": 14,
+  "rate_limited": false,
+  "sample": [
+   "Faridabad",
+   "Faridabad, Noida, Ghaziabad, Gurugram, D",
+   "Faridabad"
+  ]
+ },
+ "Haryana:::Rohtak": {
+  "state": "Haryana",
+  "city": "Rohtak",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Haryana:::Karnal": {
+  "state": "Haryana",
+  "city": "Karnal",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Remote"
+  ]
+ },
+ "Haryana:::Panipat": {
+  "state": "Haryana",
+  "city": "Panipat",
+  "status": "FOUND",
+  "jobs": 2,
+  "rate_limited": false,
+  "sample": [
+   "Panipat",
+   "Panipat, Yamunanagar, Faridabad, Sonipat"
+  ]
+ },
+ "Himachal Pradesh:::Shimla": {
+  "state": "Himachal Pradesh",
+  "city": "Shimla",
+  "status": "FOUND",
+  "jobs": 2,
+  "rate_limited": false,
+  "sample": [
+   "Shimla, Srinagar, Chandigarh",
+   "Shimla"
+  ]
+ },
+ "Himachal Pradesh:::Solan": {
+  "state": "Himachal Pradesh",
+  "city": "Solan",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Himachal Pradesh:::Dharamshala": {
+  "state": "Himachal Pradesh",
+  "city": "Dharamshala",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Himachal Pradesh:::Mandi": {
+  "state": "Himachal Pradesh",
+  "city": "Mandi",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Himachal Pradesh:::Baddi": {
+  "state": "Himachal Pradesh",
+  "city": "Baddi",
+  "status": "FOUND",
+  "jobs": 3,
+  "rate_limited": false,
+  "sample": [
+   "Baddi, Ghaziabad(Sahibabad), Sri City",
+   "Baddi",
+   "Baddi"
+  ]
+ },
+ "Jammu and Kashmir:::Srinagar": {
+  "state": "Jammu and Kashmir",
+  "city": "Srinagar",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Srinagar, Chandigarh, Shimla"
+  ]
+ },
+ "Jammu and Kashmir:::Jammu": {
+  "state": "Jammu and Kashmir",
+  "city": "Jammu",
+  "status": "FOUND",
+  "jobs": 9,
+  "rate_limited": false,
+  "sample": [
+   "Jammu, Rajauri",
+   "Jammu, Samba",
+   "Jammu, Dehradun"
+  ]
+ },
+ "Jammu and Kashmir:::Anantnag": {
+  "state": "Jammu and Kashmir",
+  "city": "Anantnag",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Jammu and Kashmir:::Baramula": {
+  "state": "Jammu and Kashmir",
+  "city": "Baramula",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Jammu and Kashmir:::Kathua": {
+  "state": "Jammu and Kashmir",
+  "city": "Kathua",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Jharkhand:::Ranchi": {
+  "state": "Jharkhand",
+  "city": "Ranchi",
+  "status": "FOUND",
+  "jobs": 3,
+  "rate_limited": false,
+  "sample": [
+   "Ranchi, Dehradun(Haridwar Dehradun Road ",
+   "Ranchi",
+   "Ranchi(Lower Chutia +1)"
+  ]
+ },
+ "Jharkhand:::Jamshedpur": {
+  "state": "Jharkhand",
+  "city": "Jamshedpur",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Jharkhand:::Dhanbad": {
+  "state": "Jharkhand",
+  "city": "Dhanbad",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Jharkhand:::Bokaro": {
+  "state": "Jharkhand",
+  "city": "Bokaro",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Jharkhand:::Deoghar": {
+  "state": "Jharkhand",
+  "city": "Deoghar",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Karnataka:::Bengaluru": {
+  "state": "Karnataka",
+  "city": "Bengaluru",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Bengaluru, Gurugram",
+   "Bengaluru, Kolkata, Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Karnataka:::Mysuru": {
+  "state": "Karnataka",
+  "city": "Mysuru",
+  "status": "FOUND",
+  "jobs": 14,
+  "rate_limited": false,
+  "sample": [
+   "Mysuru",
+   "Mysuru",
+   "Mysuru"
+  ]
+ },
+ "Karnataka:::Hubballi": {
+  "state": "Karnataka",
+  "city": "Hubballi",
+  "status": "FOUND",
+  "jobs": 2,
+  "rate_limited": false,
+  "sample": [
+   "Hubballi",
+   "Hubballi, Mangaluru, Mysuru, Bengaluru, "
+  ]
+ },
+ "Karnataka:::Mangaluru": {
+  "state": "Karnataka",
+  "city": "Mangaluru",
+  "status": "FOUND",
+  "jobs": 3,
+  "rate_limited": false,
+  "sample": [
+   "Mangaluru",
+   "Mangaluru, Hosur, Madurai",
+   "Mangaluru, Hubballi, Mysuru, Bengaluru, "
+  ]
+ },
+ "Karnataka:::Belagavi": {
+  "state": "Karnataka",
+  "city": "Belagavi",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Belagavi, Hubballi, Mangaluru, Mysuru, B"
+  ]
+ },
+ "Kerala:::Kochi": {
+  "state": "Kerala",
+  "city": "Kochi",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Kochi",
+   "Kochi",
+   "Kochi"
+  ]
+ },
+ "Kerala:::Thiruvananthapuram": {
+  "state": "Kerala",
+  "city": "Thiruvananthapuram",
+  "status": "FOUND",
+  "jobs": 19,
+  "rate_limited": false,
+  "sample": [
+   "Thiruvananthapuram",
+   "Thiruvananthapuram, Kochi",
+   "Thiruvananthapuram"
+  ]
+ },
+ "Kerala:::Kozhikode": {
+  "state": "Kerala",
+  "city": "Kozhikode",
+  "status": "FOUND",
+  "jobs": 6,
+  "rate_limited": false,
+  "sample": [
+   "Kozhikode",
+   "Kozhikode, Kochi, Thrissur, Thiruvananth",
+   "Calicut"
+  ]
+ },
+ "Kerala:::Thrissur": {
+  "state": "Kerala",
+  "city": "Thrissur",
+  "status": "FOUND",
+  "jobs": 16,
+  "rate_limited": false,
+  "sample": [
+   "Thrissur",
+   "Thrissur",
+   "Thrissur(Patturaickal)"
+  ]
+ },
+ "Kerala:::Kollam": {
+  "state": "Kerala",
+  "city": "Kollam",
+  "status": "FOUND",
+  "jobs": 3,
+  "rate_limited": false,
+  "sample": [
+   "Kollam, Idukki",
+   "Kollam",
+   "Kollam"
+  ]
+ },
+ "Ladakh:::Leh": {
+  "state": "Ladakh",
+  "city": "Leh",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Ladakh:::Kargil": {
+  "state": "Ladakh",
+  "city": "Kargil",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Lakshadweep:::Kavaratti": {
+  "state": "Lakshadweep",
+  "city": "Kavaratti",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Madhya Pradesh:::Indore": {
+  "state": "Madhya Pradesh",
+  "city": "Indore",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Indore, Chennai",
+   "Indore",
+   "Indore, Bhopal, Gwalior, Jabalpur, Ujjai"
+  ]
+ },
+ "Madhya Pradesh:::Bhopal": {
+  "state": "Madhya Pradesh",
+  "city": "Bhopal",
+  "status": "FOUND",
+  "jobs": 8,
+  "rate_limited": false,
+  "sample": [
+   "Bhopal, Jaipur, Delhi / NCR",
+   "Bhopal, Gwalior, Indore, Jabalpur, Ujjai",
+   "Hybrid - Bhopal(MP Nagar)"
+  ]
+ },
+ "Madhya Pradesh:::Jabalpur": {
+  "state": "Madhya Pradesh",
+  "city": "Jabalpur",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Jabalpur, Bhopal, Gwalior, Indore, Ujjai"
+  ]
+ },
+ "Madhya Pradesh:::Gwalior": {
+  "state": "Madhya Pradesh",
+  "city": "Gwalior",
+  "status": "FOUND",
+  "jobs": 3,
+  "rate_limited": false,
+  "sample": [
+   "Gwalior",
+   "Gwalior, Bhopal, Indore, Jabalpur, Ujjai",
+   "Gwalior"
+  ]
+ },
+ "Madhya Pradesh:::Ujjain": {
+  "state": "Madhya Pradesh",
+  "city": "Ujjain",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": true,
+  "sample": [
+   "Ujjain, Bhopal, Gwalior, Indore, Jabalpu"
+  ]
+ },
+ "Maharashtra:::Mumbai": {
+  "state": "Maharashtra",
+  "city": "Mumbai",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Navi Mumbai",
+   "Mumbai (All Areas)",
+   "Mumbai"
+  ]
+ },
+ "Maharashtra:::Pune": {
+  "state": "Maharashtra",
+  "city": "Pune",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Pune",
+   "Pune",
+   "Pune"
+  ]
+ },
+ "Maharashtra:::Nagpur": {
+  "state": "Maharashtra",
+  "city": "Nagpur",
+  "status": "FOUND",
+  "jobs": 15,
+  "rate_limited": false,
+  "sample": [
+   "Nagpur(Bhagwan Nagar +9)",
+   "Nagpur, Indore, Chennai",
+   "Nagpur, Mumbai, Thane, Nashik, Pune, Chh"
+  ]
+ },
+ "Maharashtra:::Nashik": {
+  "state": "Maharashtra",
+  "city": "Nashik",
+  "status": "FOUND",
+  "jobs": 9,
+  "rate_limited": false,
+  "sample": [
+   "Nashik",
+   "Nashik, Mumbai, Nagpur, Thane, Pune, Chh",
+   "Nashik"
+  ]
+ },
+ "Maharashtra:::Thane": {
+  "state": "Maharashtra",
+  "city": "Thane",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Thane, Bhiwandi, Navi Mumbai",
+   "Thane",
+   "Thane"
+  ]
+ },
+ "Manipur:::Imphal": {
+  "state": "Manipur",
+  "city": "Imphal",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Manipur:::Thoubal": {
+  "state": "Manipur",
+  "city": "Thoubal",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Gurugram, Bengaluru",
+   "Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Manipur:::Churachandpur": {
+  "state": "Manipur",
+  "city": "Churachandpur",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Manipur:::Kakching": {
+  "state": "Manipur",
+  "city": "Kakching",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Manipur:::Bishnupur": {
+  "state": "Manipur",
+  "city": "Bishnupur",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Meghalaya:::Shillong": {
+  "state": "Meghalaya",
+  "city": "Shillong",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Meghalaya:::Tura": {
+  "state": "Meghalaya",
+  "city": "Tura",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Tura, West Garo Hills"
+  ]
+ },
+ "Meghalaya:::Cherrapunji": {
+  "state": "Meghalaya",
+  "city": "Cherrapunji",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Meghalaya:::Nongstoin": {
+  "state": "Meghalaya",
+  "city": "Nongstoin",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Meghalaya:::Mairang": {
+  "state": "Meghalaya",
+  "city": "Mairang",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Mizoram:::Aizawl": {
+  "state": "Mizoram",
+  "city": "Aizawl",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Aizawl"
+  ]
+ },
+ "Mizoram:::Lunglei": {
+  "state": "Mizoram",
+  "city": "Lunglei",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Mizoram:::Champhai": {
+  "state": "Mizoram",
+  "city": "Champhai",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Mizoram:::Kolasib": {
+  "state": "Mizoram",
+  "city": "Kolasib",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Mizoram:::Serchhip": {
+  "state": "Mizoram",
+  "city": "Serchhip",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Nagaland:::Kohima": {
+  "state": "Nagaland",
+  "city": "Kohima",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Nagaland:::Dimapur": {
+  "state": "Nagaland",
+  "city": "Dimapur",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Nagaland:::Mokokchung": {
+  "state": "Nagaland",
+  "city": "Mokokchung",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Nagaland:::Wokha": {
+  "state": "Nagaland",
+  "city": "Wokha",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Nagaland:::Tuensang": {
+  "state": "Nagaland",
+  "city": "Tuensang",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Odisha:::Bhubaneswar": {
+  "state": "Odisha",
+  "city": "Bhubaneswar",
+  "status": "FOUND",
+  "jobs": 17,
+  "rate_limited": false,
+  "sample": [
+   "Bhubaneswar",
+   "Bhubaneswar",
+   "Bhubaneswar"
+  ]
+ },
+ "Odisha:::Cuttack": {
+  "state": "Odisha",
+  "city": "Cuttack",
+  "status": "FOUND",
+  "jobs": 2,
+  "rate_limited": false,
+  "sample": [
+   "Cuttack",
+   "Cuttack, Bhubaneswar, Jatni"
+  ]
+ },
+ "Odisha:::Rourkela": {
+  "state": "Odisha",
+  "city": "Rourkela",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Odisha:::Berhampur": {
+  "state": "Odisha",
+  "city": "Berhampur",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Odisha:::Sambalpur": {
+  "state": "Odisha",
+  "city": "Sambalpur",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Puducherry:::Puducherry": {
+  "state": "Puducherry",
+  "city": "Puducherry",
+  "status": "FOUND",
+  "jobs": 3,
+  "rate_limited": false,
+  "sample": [
+   "Puducherry",
+   "Hybrid - Puducherry, Chennai",
+   "Puducherry"
+  ]
+ },
+ "Puducherry:::Karaikal": {
+  "state": "Puducherry",
+  "city": "Karaikal",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Puducherry:::Mahe": {
+  "state": "Puducherry",
+  "city": "Mahe",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Puducherry:::Yanam": {
+  "state": "Puducherry",
+  "city": "Yanam",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Gurugram, Bengaluru",
+   "Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Punjab:::Ludhiana": {
+  "state": "Punjab",
+  "city": "Ludhiana",
+  "status": "FOUND",
+  "jobs": 4,
+  "rate_limited": false,
+  "sample": [
+   "Ludhiana",
+   "Ludhiana(Gill Road)",
+   "Ludhiana, Jalandhar, Patiala, Amritsar"
+  ]
+ },
+ "Punjab:::Amritsar": {
+  "state": "Punjab",
+  "city": "Amritsar",
+  "status": "FOUND",
+  "jobs": 3,
+  "rate_limited": false,
+  "sample": [
+   "Amritsar",
+   "Amritsar, Jalandhar, Ludhiana, Patiala",
+   "Amritsar, Jalandhar, Ludhiana, Patiala"
+  ]
+ },
+ "Punjab:::Jalandhar": {
+  "state": "Punjab",
+  "city": "Jalandhar",
+  "status": "FOUND",
+  "jobs": 2,
+  "rate_limited": false,
+  "sample": [
+   "Jalandhar, Ludhiana, Patiala, Amritsar",
+   "Jalandhar, Ludhiana, Patiala, Amritsar"
+  ]
+ },
+ "Punjab:::Patiala": {
+  "state": "Punjab",
+  "city": "Patiala",
+  "status": "FOUND",
+  "jobs": 3,
+  "rate_limited": false,
+  "sample": [
+   "Patiala",
+   "Patiala, Jalandhar, Ludhiana, Amritsar",
+   "Patiala, Jalandhar, Ludhiana, Amritsar"
+  ]
+ },
+ "Punjab:::Mohali": {
+  "state": "Punjab",
+  "city": "Mohali",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Mohali(Phase 8 Industrial Area)",
+   "Mohali",
+   "Mohali"
+  ]
+ },
+ "Rajasthan:::Jaipur": {
+  "state": "Rajasthan",
+  "city": "Jaipur",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Jaipur, Bhopal, Delhi / NCR",
+   "Jaipur, Chennai, Bengaluru",
+   "Jaipur(Bhankrota)"
+  ]
+ },
+ "Rajasthan:::Udaipur": {
+  "state": "Rajasthan",
+  "city": "Udaipur",
+  "status": "FOUND",
+  "jobs": 2,
+  "rate_limited": false,
+  "sample": [
+   "Udaipur",
+   "Udaipur"
+  ]
+ },
+ "Rajasthan:::Jodhpur": {
+  "state": "Rajasthan",
+  "city": "Jodhpur",
+  "status": "FOUND",
+  "jobs": 5,
+  "rate_limited": false,
+  "sample": [
+   "Jodhpur, Kota, Jaipur, Bikaner",
+   "Jodhpur",
+   "Jodhpur"
+  ]
+ },
+ "Rajasthan:::Kota": {
+  "state": "Rajasthan",
+  "city": "Kota",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Kota, Jaipur, Bikaner, Jodhpur"
+  ]
+ },
+ "Rajasthan:::Bikaner": {
+  "state": "Rajasthan",
+  "city": "Bikaner",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Bikaner, Kota, Jaipur, Jodhpur"
+  ]
+ },
+ "Sikkim:::Gangtok": {
+  "state": "Sikkim",
+  "city": "Gangtok",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Sikkim:::Namchi": {
+  "state": "Sikkim",
+  "city": "Namchi",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Sikkim:::Singtam": {
+  "state": "Sikkim",
+  "city": "Singtam",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Sikkim:::Rangpo": {
+  "state": "Sikkim",
+  "city": "Rangpo",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Sikkim:::Jorethang": {
+  "state": "Sikkim",
+  "city": "Jorethang",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Tamil Nadu:::Chennai": {
+  "state": "Tamil Nadu",
+  "city": "Chennai",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Chennai",
+   "Chennai",
+   "Chennai"
+  ]
+ },
+ "Tamil Nadu:::Coimbatore": {
+  "state": "Tamil Nadu",
+  "city": "Coimbatore",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Coimbatore",
+   "Coimbatore, Karur",
+   "Coimbatore"
+  ]
+ },
+ "Tamil Nadu:::Madurai": {
+  "state": "Tamil Nadu",
+  "city": "Madurai",
+  "status": "FOUND",
+  "jobs": 9,
+  "rate_limited": false,
+  "sample": [
+   "Madurai",
+   "Madurai, Thirumangalam",
+   "Madurai"
+  ]
+ },
+ "Tamil Nadu:::Tiruchirappalli": {
+  "state": "Tamil Nadu",
+  "city": "Tiruchirappalli",
+  "status": "FOUND",
+  "jobs": 11,
+  "rate_limited": false,
+  "sample": [
+   "Tiruchirappalli",
+   "Tiruchirappalli, Madurai, Tiruppur, Sale",
+   "Tiruchirappalli, Madurai, Coimbatore"
+  ]
+ },
+ "Tamil Nadu:::Salem": {
+  "state": "Tamil Nadu",
+  "city": "Salem",
+  "status": "FOUND",
+  "jobs": 13,
+  "rate_limited": false,
+  "sample": [
+   "Salem, Madurai, Tiruppur, Chennai, Tiruc",
+   "Salem",
+   "Salem, Thanjavur, Chennai"
+  ]
+ },
+ "Telangana:::Hyderabad": {
+  "state": "Telangana",
+  "city": "Hyderabad",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hyderabad, Kolkata, India",
+   "Hyderabad, Kolkata, Bengaluru",
+   "Hybrid - Hyderabad"
+  ]
+ },
+ "Telangana:::Warangal": {
+  "state": "Telangana",
+  "city": "Warangal",
+  "status": "FOUND",
+  "jobs": 2,
+  "rate_limited": false,
+  "sample": [
+   "Warangal",
+   "Warangal, Hyderabad, Nizamabad"
+  ]
+ },
+ "Telangana:::Nizamabad": {
+  "state": "Telangana",
+  "city": "Nizamabad",
+  "status": "FOUND",
+  "jobs": 3,
+  "rate_limited": false,
+  "sample": [
+   "Nizamabad",
+   "Nizamabad",
+   "Nizamabad, Warangal, Hyderabad"
+  ]
+ },
+ "Telangana:::Karimnagar": {
+  "state": "Telangana",
+  "city": "Karimnagar",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Telangana:::Khammam": {
+  "state": "Telangana",
+  "city": "Khammam",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Tripura:::Agartala": {
+  "state": "Tripura",
+  "city": "Agartala",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Tripura:::Udaipur": {
+  "state": "Tripura",
+  "city": "Udaipur",
+  "status": "FOUND",
+  "jobs": 2,
+  "rate_limited": false,
+  "sample": [
+   "Udaipur",
+   "Udaipur"
+  ]
+ },
+ "Tripura:::Dharmanagar": {
+  "state": "Tripura",
+  "city": "Dharmanagar",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Tripura:::Kailashahar": {
+  "state": "Tripura",
+  "city": "Kailashahar",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Tripura:::Sonamura": {
+  "state": "Tripura",
+  "city": "Sonamura",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Uttar Pradesh:::Noida": {
+  "state": "Uttar Pradesh",
+  "city": "Noida",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Noida(Sector 63)",
+   "Noida",
+   "Noida"
+  ]
+ },
+ "Uttar Pradesh:::Lucknow": {
+  "state": "Uttar Pradesh",
+  "city": "Lucknow",
+  "status": "FOUND",
+  "jobs": 14,
+  "rate_limited": false,
+  "sample": [
+   "Lucknow(Vrindavan Yojna)",
+   "Lucknow",
+   "Lucknow"
+  ]
+ },
+ "Uttar Pradesh:::Kanpur": {
+  "state": "Uttar Pradesh",
+  "city": "Kanpur",
+  "status": "FOUND",
+  "jobs": 9,
+  "rate_limited": false,
+  "sample": [
+   "Kanpur",
+   "Kanpur",
+   "Kanpur"
+  ]
+ },
+ "Uttar Pradesh:::Varanasi": {
+  "state": "Uttar Pradesh",
+  "city": "Varanasi",
+  "status": "FOUND",
+  "jobs": 7,
+  "rate_limited": false,
+  "sample": [
+   "Varanasi",
+   "Varanasi",
+   "Varanasi"
+  ]
+ },
+ "Uttar Pradesh:::Ghaziabad": {
+  "state": "Uttar Pradesh",
+  "city": "Ghaziabad",
+  "status": "FOUND",
+  "jobs": 10,
+  "rate_limited": false,
+  "sample": [
+   "Ghaziabad, Noida, Faridabad, Gurugram, D",
+   "Ghaziabad(Sahibabad), Sri City, Baddi",
+   "Ghaziabad(Sahibabad)"
+  ]
+ },
+ "Uttarakhand:::Dehradun": {
+  "state": "Uttarakhand",
+  "city": "Dehradun",
+  "status": "FOUND",
+  "jobs": 14,
+  "rate_limited": false,
+  "sample": [
+   "Dehradun(Haridwar Dehradun Road ), Hyder",
+   "Dehradun",
+   "Dehradun"
+  ]
+ },
+ "Uttarakhand:::Haridwar": {
+  "state": "Uttarakhand",
+  "city": "Haridwar",
+  "status": "FOUND",
+  "jobs": 2,
+  "rate_limited": false,
+  "sample": [
+   "Haridwar, Dehradun",
+   "Haridwar"
+  ]
+ },
+ "Uttarakhand:::Haldwani": {
+  "state": "Uttarakhand",
+  "city": "Haldwani",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Bengaluru",
+   "Gurugram, Bengaluru",
+   "Chennai"
+  ]
+ },
+ "Uttarakhand:::Rudrapur": {
+  "state": "Uttarakhand",
+  "city": "Rudrapur",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ },
+ "Uttarakhand:::Roorkee": {
+  "state": "Uttarakhand",
+  "city": "Roorkee",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Roorkee"
+  ]
+ },
+ "West Bengal:::Kolkata": {
+  "state": "West Bengal",
+  "city": "Kolkata",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Kolkata, Hyderabad, India",
+   "Kolkata, Hyderabad, Bengaluru",
+   "Kolkata, Pune, Chennai"
+  ]
+ },
+ "West Bengal:::Howrah": {
+  "state": "West Bengal",
+  "city": "Howrah",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Gurugram, Bengaluru",
+   "Bengaluru",
+   "Chennai"
+  ]
+ },
+ "West Bengal:::Siliguri": {
+  "state": "West Bengal",
+  "city": "Siliguri",
+  "status": "FOUND",
+  "jobs": 1,
+  "rate_limited": false,
+  "sample": [
+   "Siliguri"
+  ]
+ },
+ "West Bengal:::Durgapur": {
+  "state": "West Bengal",
+  "city": "Durgapur",
+  "status": "FOUND",
+  "jobs": 4,
+  "rate_limited": false,
+  "sample": [
+   "Durgapur(Benachity)",
+   "Durgapur",
+   "Durgapur"
+  ]
+ },
+ "West Bengal:::Asansol": {
+  "state": "West Bengal",
+  "city": "Asansol",
+  "status": "FOUND",
+  "jobs": 20,
+  "rate_limited": false,
+  "sample": [
+   "Hybrid - Gurugram, Bengaluru",
+   "Hybrid - Hyderabad",
+   "Bengaluru"
+  ]
+ }
+}

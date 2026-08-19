@@ -44,7 +44,7 @@ def _check_relevance_score(job: dict, keywords: list, resume_text: str, internsh
     ai_score = None
     reason = ""
     for attempt in range(3):
-        response = LLMClient.chat(prompt, max_tokens=800, cancel_check=None)
+        response = LLMClient.chat(prompt, max_tokens=3000, cancel_check=None)
         parsed = extract_json(response)
         if isinstance(parsed, dict) and isinstance(parsed.get("score"), int):
             ai_score = max(0, min(100, parsed["score"]))

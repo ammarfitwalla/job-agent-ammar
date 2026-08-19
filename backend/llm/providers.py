@@ -5,7 +5,6 @@ import time
 from abc import ABC, abstractmethod
 from typing import Optional, Callable
 
-from openai import OpenAI
 from groq import Groq, RateLimitError
 import requests
 
@@ -51,74 +50,6 @@ class BaseProvider(ABC):
         sleep = min(base * (2 ** attempt), max_wait)
         jitter = random.uniform(0, sleep * 0.25)
         return sleep + jitter
-
-
-# ── Cerebras ────────────────────────────────────────────────────────────────
-
-class CerebrasProvider(BaseProvider):
-    name = "cerebras"
-
-    def __init__(self, api_key, model, base_url, rate_limit=4):
-        self._model = model
-        self._bucket = TokenBucket(capacity=rate_limit, refill_rate=rate_limit / 60)
-        if api_key:
-            # print(f"[DBG CEREBRAS] __init__: key=SET (len={len(api_key)}), model={model}, rate={rate_limit}")
-            self._client = OpenAI(
-                api_key=api_key,
-                base_url=base_url,
-                timeout=60,
-            )
-        else:
-            # print(f"[DBG CEREBRAS] __init__: key=NONE/EMPTY — client will be None")
-            self._client = None
-
-    def chat(self, prompt: str, max_tokens: int = 3000, cancel_check: Optional[Callable[[], bool]] = None) -> str:
-        # print(f"[DBG CEREBRAS] chat entry: model={self._model}, prompt_len={len(prompt)}, max_tokens={max_tokens}, client={'SET' if self._client else 'NONE'}")
-        if self._client is None:
-            # print(f"[DBG CEREBRAS] chat: client is None, returning EMPTY immediately")
-            return ""
-        for attempt in range(3):
-            if cancel_check and cancel_check():
-                log(f"[CEREBRAS] Cancelled during retry — aborting")
-                return ""
-            # print(f"[DBG CEREBRAS] chat: attempt {attempt+1}/3, waiting for bucket...")
-            self._bucket.acquire()
-            # print(f"[DBG CEREBRAS] chat: bucket acquired, calling API...")
-            try:
-                completion = self._client.chat.completions.create(
-                    model=self._model,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.1,
-                    max_tokens=max_tokens,
-                    top_p=0.95,
-                    stream=False,
-                )
-                content = completion.choices[0].message.content or ""
-                print(f"[DBG CEREBRAS] SUCCESS: {len(content)} chars, finish={completion.choices[0].finish_reason}")
-                return content
-            except Exception as e:
-                err = str(e)
-                # print(f"[DBG CEREBRAS] chat: attempt {attempt+1}/3 ERROR: {err[:150]}")
-                log(f"[CEREBRAS ERROR] attempt {attempt+1}/3 — {err[:200]}")
-                is_retryable = (
-                    "timeout" in err.lower()
-                    or "503" in err
-                    or "queue_exceeded" in err
-                    or "429" in err
-                )
-                # print(f"[DBG CEREBRAS] chat: is_retryable={is_retryable}")
-                if is_retryable:
-                    wait = self._backoff(attempt, base=10.0, max_wait=60.0)
-                    log(f"[CEREBRAS] Retrying in {wait:.1f}s (attempt {attempt+1}/3)")
-                    # print(f"[DBG CEREBRAS] chat: backing off {wait:.1f}s")
-                    for _ in range(int(wait / 0.5)):
-                        if cancel_check and cancel_check():
-                            log(f"[CEREBRAS] Cancelled during backoff — aborting")
-                            return ""
-                        time.sleep(0.5)
-                else:
-                    return ""
-        return ""
 
 
 # ── Groq ────────────────────────────────────────────────────────────────────

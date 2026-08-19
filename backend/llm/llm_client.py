@@ -1,19 +1,19 @@
 # Unified LLM client — routes to provider, falls back gracefully
 from typing import Optional, Callable
-from config import LLM_PROVIDER, CEREBRAS_API_KEY, CEREBRAS_MODEL, CEREBRAS_API_URL, \
-    GROQ_API_KEY, GROQ_MODEL, OLLAMA_MODEL, OLLAMA_API_URL
-from llm.providers import CerebrasProvider, GroqProvider, OllamaProvider
+from config import LLM_PROVIDER, \
+    GROQ_API_KEY, GROQ_MODEL, GROQ_KEYWORDS_MODEL, OLLAMA_MODEL, OLLAMA_API_URL
+from llm.providers import GroqProvider, OllamaProvider
 from utils.logger import log
 
 
 _providers = {
-    "cerebras": CerebrasProvider(api_key=CEREBRAS_API_KEY, model=CEREBRAS_MODEL, base_url=CEREBRAS_API_URL),
     "groq": GroqProvider(api_key=GROQ_API_KEY, model=GROQ_MODEL),
+    "groq_keywords": GroqProvider(api_key=GROQ_API_KEY, model=GROQ_KEYWORDS_MODEL),
     "ollama": OllamaProvider(model=OLLAMA_MODEL, api_url=OLLAMA_API_URL),
 }
 
-# Fallback order when primary provider fails (cerbras → groq)
-_FALLBACK_CHAIN = ["cerebras", "groq"]
+# Fallback order when primary provider fails
+_FALLBACK_CHAIN = ["groq"]
 
 
 class LLMClient:
@@ -26,6 +26,14 @@ class LLMClient:
     def batch_chat(prompt: str, max_tokens: int = 3000, cancel_check: Optional[Callable[[], bool]] = None) -> str:
         """Batch variant — same routing, higher token ceiling."""
         return LLMClient._route(prompt, max_tokens, cancel_check)
+
+    @staticmethod
+    def keyword_chat(prompt: str, max_tokens: int = 4000, cancel_check: Optional[Callable[[], bool]] = None) -> str:
+        """Use the smaller/faster keyword-extraction model."""
+        provider = _providers.get("groq_keywords")
+        if provider is None:
+            return LLMClient._route(prompt, max_tokens, cancel_check)
+        return provider.chat(prompt, max_tokens, cancel_check=cancel_check)
 
     @staticmethod
     def _route(prompt: str, max_tokens: int, cancel_check: Optional[Callable[[], bool]] = None) -> str:

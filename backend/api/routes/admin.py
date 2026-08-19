@@ -3,7 +3,7 @@ import os
 import tempfile
 from datetime import datetime, timedelta
 from fastapi import APIRouter, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -454,3 +454,28 @@ async def admin_resume_upload(files: list[UploadFile] = File(...), email: str = 
         except Exception as e:
             results.append({"filename": f.filename, "ok": False, "error": str(e)})
     return {"ok": True, "files": results}
+
+
+@router.get("/prewarm/custom")
+async def get_custom_prewarm():
+    from db import get_custom_prewarm
+    return {"combos": get_custom_prewarm()}
+
+
+@router.get("/prewarm/usage")
+async def get_combo_usage(limit: int = 50):
+    from db import get_custom_prewarm
+    combos = get_custom_prewarm()
+    combos.sort(key=lambda c: c.get("usage_count", 0), reverse=True)
+    return {"combos": combos[:limit]}
+
+
+@router.delete("/prewarm/custom")
+async def delete_custom_prewarm(
+    role: str = "", site: str = "", city: str = "",
+    state: str = "", country: str = "",
+    internship_mode: bool = False, hours_old: int = 168,
+):
+    from db import remove_custom_prewarm
+    removed = remove_custom_prewarm(role, site, city, state, country, internship_mode, hours_old)
+    return {"ok": removed}
