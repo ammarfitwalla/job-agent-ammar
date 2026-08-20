@@ -6,6 +6,7 @@ jobspy's built-in Naukri scraper ships a stale static token and is currently
 broken upstream, so this module signs the token itself via tls-client.
 """
 import base64
+import random
 import threading
 import time
 
@@ -22,12 +23,99 @@ MAX_PAGES = 5
 PAGE_SIZE = 20
 NAUKRI_MAX_406_RETRIES = 2
 
+_PROXY_CACHE = []
+_PROXY_CACHE_TIME = 0.0
+_PROXY_REFRESH_SECONDS = 300  # re-fetch proxy list every 5 min
+
 PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
 MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBALrlQ+djR0RjJwBF1xuisHmdFv334MIm
 K6LgzJhmLhN7B5yuEyaKoasgXQk3+OQglsOaBxEJ0j5PcTL3nbOvt80CAwEAAQ==
 -----END PUBLIC KEY-----"""
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+
+
+# ── Proxy support ──────────────────────────────────────────────────
+_PROXY_LIST_URL = (
+    "https://api.proxyscrape.com/v4/free-proxy-list/get"
+    "?request=display_proxies&proxy_format=protocolipport"
+    "&format=text&protocol=http&timeout=5000"
+)
+_PROXY_TEST_PARAMS = {
+    "noOfResults": 1, "urlType": "search_by_keyword", "searchType": "adv",
+    "keyword": "test", "pageNo": 1,
+}
+
+
+def _fetch_free_proxies():
+    """Fetch HTTP proxies from ProxyScrape (updated every minute)."""
+    try:
+        import requests as _req
+        resp = _req.get(_PROXY_LIST_URL, timeout=15)
+        return [l.strip() for l in resp.text.splitlines() if l.strip()]
+    except Exception as e:
+        print(f"[NAUKRI] Proxy fetch failed: {e}")
+        return []
+
+
+def _proxy_test_naukri(proxy_url):
+    """Return True if proxy can reach the Naukri search API."""
+    session, tls = _build_session(proxy_url)
+    try:
+        if tls:
+            r = session.get(JOB_SEARCH_URL, headers=_search_headers(),
+                            params=_PROXY_TEST_PARAMS, timeout_seconds=10)
+        else:
+            r = session.get(JOB_SEARCH_URL, headers=_search_headers(),
+                            params=_PROXY_TEST_PARAMS, timeout=10)
+        return r is not None and r.status_code == 200
+    except Exception:
+        return False
+
+
+def _get_working_proxy():
+    """Fetch proxies from ProxyScrape, test against Naukri, cache working ones.
+
+    Returns a proxy URL string or empty string (direct connection)."""
+    global _PROXY_CACHE, _PROXY_CACHE_TIME
+
+    try:
+        from config import NAUKRI_USE_PROXY
+        if not NAUKRI_USE_PROXY:
+            return ""
+    except ImportError:
+        return ""
+
+    now = time.time()
+    if _PROXY_CACHE and (now - _PROXY_CACHE_TIME) < _PROXY_REFRESH_SECONDS:
+        return random.choice(_PROXY_CACHE)
+
+    # Refresh proxy list
+    all_proxies = _fetch_free_proxies()
+    if not all_proxies:
+        print("[NAUKRI] No proxies fetched, using direct connection")
+        _PROXY_CACHE = []
+        _PROXY_CACHE_TIME = now
+        return ""
+
+    tested = 0
+    working = []
+    for p in all_proxies:
+        if tested >= 25 or len(working) >= 5:
+            break
+        proxy_url = p if p.startswith("http") else f"http://{p}"
+        tested += 1
+        if _proxy_test_naukri(proxy_url):
+            working.append(proxy_url)
+            print(f"[NAUKRI] Proxy OK: {proxy_url}")
+
+    _PROXY_CACHE = working
+    _PROXY_CACHE_TIME = now
+    print(f"[NAUKRI] Proxy refresh: {len(working)}/{tested} working")
+    return random.choice(working) if working else ""
+
+
+# ── End proxy support ──────────────────────────────────────────────
 
 
 def _generate_nkparam(page_type: str = "srp") -> str:
@@ -37,16 +125,20 @@ def _generate_nkparam(page_type: str = "srp") -> str:
     return base64.b64encode(cipher.encrypt(plaintext)).decode("utf-8")
 
 
-def _build_session():
+def _build_session(proxy_url=""):
     try:
         import tls_client
         s = tls_client.Session(client_identifier="chrome_146")
         s.headers.update({"user-agent": UA, "accept-language": "en-US,en;q=0.9"})
+        if proxy_url:
+            s.proxies = {"http": proxy_url, "https": proxy_url}
         return s, True
     except ImportError:
         import requests
         s = requests.Session()
         s.headers.update({"user-agent": UA, "accept-language": "en-US,en;q=0.9"})
+        if proxy_url:
+            s.proxies = {"http": proxy_url, "https": proxy_url}
         return s, False
 
 
@@ -64,16 +156,16 @@ def _naukri_location(location: str) -> str:
 def _warm_up(session, location: str):
     """Hit the Naukri homepage + a search page to obtain session cookies."""
     try:
-        session.get("https://www.naukri.com/", timeout_seconds=25)
+        session.get("https://www.naukri.com/", timeout_seconds=10)
     except Exception:
         try:
-            session.get("https://www.naukri.com/", timeout=25)
+            session.get("https://www.naukri.com/", timeout=10)
         except Exception:
             pass
     if location.strip():
         slug = location.strip().lower().replace(" ", "-")
         try:
-            session.get(f"https://www.naukri.com/cloud-engineer-jobs?l={slug}", timeout_seconds=25)
+            session.get(f"https://www.naukri.com/cloud-engineer-jobs?l={slug}", timeout_seconds=10)
         except Exception:
             pass
 
@@ -165,7 +257,8 @@ def _search_term(session, term, location, job_age, term_wanted, tls, seen):
                     backoff = 60 * attempt
                     print(f"[NAUKRI] '{term}' page {page} 406 — retry {attempt}/{NAUKRI_MAX_406_RETRIES}, backoff {backoff}s...")
                     delay(backoff, backoff)
-                    session, tls = _build_session()
+                    proxy = _get_working_proxy()
+                    session, tls = _build_session(proxy)
                     _warm_up(session, location)
                 try:
                     resp = _get(session, JOB_SEARCH_URL, _search_headers(), params, tls)
@@ -214,7 +307,8 @@ def scrape_naukri(roles=None, location="", internship_mode=False, results_wanted
         if not roles:
             return []
 
-        session, tls = _build_session()
+        proxy = _get_working_proxy()
+        session, tls = _build_session(proxy)
         loc = _naukri_location(location)
         _warm_up(session, loc)
 
