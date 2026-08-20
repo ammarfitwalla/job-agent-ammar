@@ -193,7 +193,7 @@ def _run_workers(combos, config):
     for c in combos:
         q.put(c)
     semaphores = {board: threading.BoundedSemaphore(config.MAX_CONCURRENT_PER_BOARD.get(board, 1))
-                  for board in SITE_MAP if board != "naukri"}
+                  for board in SITE_MAP}
     fallback_sema = threading.Lock()
     workers = max(1, int(config.PREWARM_WORKERS))
 
@@ -229,11 +229,8 @@ def _run_workers(combos, config):
             except Exception as e:
                 log(f"[PREWARM] Failed {combo.get('role')}@{combo.get('site')}: {e}")
             finally:
-                delay_secs = (config.NAUKRI_PREWARM_DELAY_SECONDS
-                              if combo.get("site") == "naukri"
-                              else config.PREWARM_DELAY_SECONDS)
-                if delay_secs:
-                    threading.Event().wait(delay_secs)
+                if config.PREWARM_DELAY_SECONDS:
+                    threading.Event().wait(config.PREWARM_DELAY_SECONDS)
                 q.task_done()
 
     threads = [threading.Thread(target=worker, daemon=True) for _ in range(workers)]

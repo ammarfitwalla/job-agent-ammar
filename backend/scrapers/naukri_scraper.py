@@ -7,16 +7,12 @@ broken upstream, so this module signs the token itself via tls-client.
 """
 import base64
 import random
-import threading
 import time
 
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5
 
 from utils.delay import delay
-
-# Shared lock: max 1 concurrent Naukri scrape across scheduler + live search
-NaukriLock = threading.Semaphore(1)
 
 JOB_SEARCH_URL = "https://www.naukri.com/jobapi/v3/search"
 MAX_PAGES = 5
@@ -254,9 +250,9 @@ def _search_term(session, term, location, job_age, term_wanted, tls, seen):
             resp = None
             for attempt in range(NAUKRI_MAX_406_RETRIES + 1):
                 if attempt > 0:
-                    backoff = 60 * attempt
+                    backoff = 28 * attempt
                     print(f"[NAUKRI] '{term}' page {page} 406 — retry {attempt}/{NAUKRI_MAX_406_RETRIES}, backoff {backoff}s...")
-                    delay(backoff, backoff)
+                    delay(backoff, backoff + 20)
                     proxy = _get_working_proxy()
                     session, tls = _build_session(proxy)
                     _warm_up(session, location)
@@ -296,13 +292,12 @@ def _search_term(session, term, location, job_age, term_wanted, tls, seen):
             got += 1
         if got >= term_wanted:
             break
-        delay(10, 15)
+        delay(3, 8)
     return jobs
 
 
 def scrape_naukri(roles=None, location="", internship_mode=False, results_wanted=20, hours_old=72):
     """Scrape Naukri jobs via its internal search API."""
-    NaukriLock.acquire()
     try:
         if not roles:
             return []
@@ -322,7 +317,7 @@ def scrape_naukri(roles=None, location="", internship_mode=False, results_wanted
 
         for i, role in enumerate(roles):
             if i > 0:
-                delay(60, 60)
+                delay(8, 13)
             role_lower = role.lower()
             if "intern" in role_lower:
                 search_terms = [role]
@@ -341,5 +336,3 @@ def scrape_naukri(roles=None, location="", internship_mode=False, results_wanted
     except Exception as e:
         print(f"[NAUKRI] Error: {e}")
         return []
-    finally:
-        NaukriLock.release()
