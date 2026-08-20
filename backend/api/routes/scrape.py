@@ -297,8 +297,8 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
 
             # Pause between city runs to avoid Naukri rate-limiting
             if site_key == "naukri" and run_i < len(runs):
-                log(f"[SCRAPE] {role} @ {site_key} — pausing before next city...", sid)
-                _delay(6, 10)
+                log(f"[SCRAPE] {role} @ {site_key} — pausing 60s before next city...", sid)
+                _delay(60, 60)
 
         # Persist this combo's full snapshot to the job cache (pre-dedup,
         # post-filter). keep_larger preserves richer entries from live searches.
