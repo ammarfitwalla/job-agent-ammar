@@ -130,7 +130,11 @@ def _parse_search_response(data: dict) -> list[dict]:
 def _search_term(session, term, location, job_age, term_wanted, tls, seen):
     jobs = []
     got = 0
+    consecutive_406 = 0
     for page in range(1, MAX_PAGES + 1):
+        if consecutive_406 >= 2:
+            print(f"[NAUKRI] '{term}' — {consecutive_406} consecutive 406s, stopping early")
+            break
         seo_slug = term.strip().lower().replace(".", "-dot-").replace(" ", "-").strip("-")
         loc_slug = location.strip().lower().replace(" ", "-") if location.strip() else ""
         seo_key = f"{seo_slug}-jobs-in-{loc_slug}-{page}" if loc_slug else f"{seo_slug}-jobs-{page}"
@@ -154,8 +158,11 @@ def _search_term(session, term, location, job_age, term_wanted, tls, seen):
             resp = None
             for attempt in range(NAUKRI_MAX_406_RETRIES + 1):
                 if attempt > 0:
-                    print(f"[NAUKRI] '{term}' page {page} 406 — retry {attempt}/{NAUKRI_MAX_406_RETRIES} with backoff...")
-                    delay(8, 12)
+                    backoff = 28 * attempt
+                    print(f"[NAUKRI] '{term}' page {page} 406 — retry {attempt}/{NAUKRI_MAX_406_RETRIES}, backoff {backoff}s...")
+                    delay(backoff, backoff + 20)
+                    session, tls = _build_session()
+                    _warm_up(session, location)
                 try:
                     resp = _get(session, JOB_SEARCH_URL, _search_headers(), params, tls)
                 except Exception as e:
@@ -172,12 +179,14 @@ def _search_term(session, term, location, job_age, term_wanted, tls, seen):
         if resp is None:
             break
         if resp.status_code == 406:
+            consecutive_406 += 1
             print(f"[NAUKRI] Search '{term}' rate-limited (406): {resp.text[:120]}")
             break
         if resp.status_code != 200:
             print(f"[NAUKRI] Search '{term}' page {page}: HTTP {resp.status_code}")
             break
 
+        consecutive_406 = 0
         batch = _parse_search_response(resp.json())
         if not batch:
             break
@@ -190,7 +199,7 @@ def _search_term(session, term, location, job_age, term_wanted, tls, seen):
             got += 1
         if got >= term_wanted:
             break
-        delay(1, 2)
+        delay(3, 8)
     return jobs
 
 
@@ -214,7 +223,7 @@ def scrape_naukri(roles=None, location="", internship_mode=False, results_wanted
 
         for i, role in enumerate(roles):
             if i > 0:
-                delay(2, 4)
+                delay(8, 13)
             role_lower = role.lower()
             if "intern" in role_lower:
                 search_terms = [role]
