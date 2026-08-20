@@ -103,24 +103,23 @@ ROLES_BY_CATEGORY = {
         "WordPress Developer", "Salesforce Developer",
         "Backend Developer", "Frontend Developer", "Backend Engineer", "Frontend Engineer",
         "Full Stack Developer", "Full Stack Engineer", "Software Engineer",
-        "Software Developer", "Mobile Developer", "iOS Developer", "Android Developer",
+        "Software Developer", "iOS Developer", "Android Developer",
         "Game Developer", "Embedded Systems Engineer", "DevOps Engineer",
-        "Platform Engineer", "Site Reliability Engineer", "Cloud Engineer",
-        "Cloud Architect", "Solutions Architect", "Software Architect", "Enterprise Architect",
+        "Site Reliability Engineer", "Cloud Engineer",
+        "Cloud Architect", "Solutions Architect", "Software Architect",
         "Security Engineer", "Cybersecurity Analyst", "Security Analyst",
-        "Penetration Tester", "Database Administrator", "SQL Developer",
-        "Database Developer", "QA Engineer", "SDET", "Test Automation Engineer",
-        "Automation Engineer", "Performance Engineer", "Systems Administrator",
-        "Network Engineer", "IT Support Specialist", "Technical Support Engineer",
-        "Help Desk Technician", "Systems Analyst", "Blockchain Developer",
-        "Technical Writer", "Salesforce Administrator", "SAP Consultant", "IT Project Manager",
+        "Database Administrator", "SQL Developer",
+        "Database Developer", "QA Engineer", "Test Automation Engineer",
+        "Automation Engineer", "Systems Administrator",
+        "Network Engineer", "IT Support Specialist",
+        "Blockchain Developer",
+        "Technical Writer", "SAP Consultant", "IT Project Manager",
     ],
     "sales": [
-        "Sales Representative", "Inside Sales Representative", "Outside Sales Representative",
+        "Sales Representative", "Sales Development Representative",
         "Account Executive", "Key Account Manager", "Sales Manager",
         "Regional Sales Manager", "Sales Director",
         "Business Development Manager", "Business Development Representative",
-        "Sales Development Representative", "Customer Success Manager",
         "Account Manager", "Sales Operations Analyst", "Presales Consultant", "Sales Engineer",
     ],
     "media": [
@@ -135,11 +134,11 @@ ROLES_BY_CATEGORY = {
     "healthcare": [
         "Doctor", "Physician Assistant", "Nurse", "Registered Nurse",
         "Pharmacist", "Pharmacy Technician", "Medical Assistant",
-        "Healthcare Administrator", "Physical Therapist", "Occupational Therapist",
-        "Dentist", "Dental Hygienist", "Lab Technician", "Veterinarian",
+        "Healthcare Administrator", "Physical Therapist",
+        "Dentist", "Lab Technician", "Veterinarian",
         "Radiologist", "Speech Therapist", "Dietitian", "Nutritionist",
-        "Optometrist", "Chiropractor", "Medical Coder", "Medical Biller",
-        "Clinical Research Coordinator", "Health Informatics Specialist", "Emergency Medical Technician",
+        "Optometrist", "Chiropractor",
+        "Clinical Research Coordinator", "Emergency Medical Technician",
     ],
     "finance": [
         "Accountant", "Bookkeeper", "Accounting Manager",
@@ -151,70 +150,51 @@ ROLES_BY_CATEGORY = {
         "Accounts Payable Specialist", "Accounts Receivable Specialist",
     ],
     "admin": [
-        "Administrative Assistant", "Administrative Coordinator", "Office Manager",
+        "Administrative Assistant", "Administrative Coordinator",
         "Office Coordinator", "Virtual Assistant", "Executive Assistant",
         "Human Resources Manager", "Human Resources Specialist", "HR Generalist",
         "Recruiter", "Talent Acquisition Specialist",
         "Learning and Development Specialist", "Training Coordinator",
         "Compensation and Benefits Analyst", "Operations Manager", "Operations Coordinator",
-        "Project Manager", "Receptionist", "Payroll Specialist", "Data Entry Clerk",
-        "Customer Service Representative", "Call Center Agent", "Client Services Manager",
+        "Receptionist", "Payroll Specialist", "Data Entry Clerk",
+        "Customer Service Representative", "Call Center Agent",
         "Technical Support Specialist",
     ],
     "legal": [
-        "Lawyer", "Paralegal", "Legal Assistant", "Legal Secretary",
-        "Compliance Officer", "Corporate Counsel", "Contract Manager",
-        "Contract Administrator", "Patent Attorney", "Corporate Lawyer",
-        "Intellectual Property Lawyer", "Immigration Lawyer", "Legal Operations Manager",
+        "Lawyer", "Paralegal", "Legal Assistant", "Legal Secretary"
     ],
     "education": [
         "Teacher", "Elementary School Teacher", "Middle School Teacher", "High School Teacher",
         "Professor", "University Lecturer", "Tutor", "Instructional Designer",
         "Curriculum Designer", "Education Administrator", "Education Consultant",
-        "Special Education Teacher", "Academic Advisor", "ESL Teacher", "School Counselor",
-        "Online Instructor", "E-learning Developer", "Training Specialist",
     ],
     "civil": [
         "Civil Engineer", "Structural Engineer", "Construction Manager",
         "Construction Superintendent", "Construction Estimator", "Construction Project Manager",
         "Site Engineer", "Quantity Surveyor", "Infrastructure Engineer",
-        "Urban Planner", "Surveyor", "Civil Engineering Technician",
+        "Urban Planner", "Surveyor",
         "Geotechnical Engineer", "Transportation Engineer", "Water Resources Engineer",
-        "Building Inspector", "Real Estate Agent", "Property Manager", "Facilities Manager",
+        "Building Inspector", "Real Estate Agent", "Facilities Manager",
     ],
     "engineering": [
         "Electrical Engineer", "Mechanical Engineer", "Chemical Engineer",
         "Biomedical Engineer", "Industrial Engineer", "Aerospace Engineer",
         "Automotive Engineer", "Robotics Engineer", "Materials Engineer",
-        "Environmental Engineer", "Petroleum Engineer", "Mining Engineer",
-        "Marine Engineer", "Power Engineer", "HVAC Engineer",
-        "Manufacturing Engineer", "Process Engineer", "Quality Engineer",
-        "Electronics Engineer", "Instrumentation Engineer", "Control Systems Engineer", "CAD Designer",
+        "Petroleum Engineer", "Mining Engineer", "Marine Engineer",
+        "Electronics Engineer", "Instrumentation Engineer",
+        "CAD Designer",
     ],
     "design": [
         "UI/UX Designer", "UX Designer", "UI Designer", "UX Researcher",
         "Product Designer", "Interaction Designer", "Visual Designer",
         "Web Designer", "Brand Designer", "Interior Designer",
-        "Fashion Designer", "Industrial Designer",
+        "Fashion Designer"
     ],
     "product": [
         "Product Manager", "Product Owner", "Technical Product Manager",
         "Growth Product Manager", "Product Analyst", "Product Operations Manager",
         "Business Analyst", "Scrum Master", "Agile Coach",
-        "Program Manager", "Delivery Manager",
-    ],
-    "supply_chain": [
-        "Supply Chain Manager", "Supply Chain Analyst", "Demand Planner",
-        "Logistics Coordinator", "Logistics Analyst", "Procurement Specialist",
-        "Purchasing Manager", "Inventory Manager", "Warehouse Manager",
-        "Warehouse Supervisor", "Distribution Manager", "Freight Forwarder", "Customs Broker",
-    ],
-    "hospitality": [
-        "Chef", "Executive Chef", "Sous Chef", "Pastry Chef",
-        "Restaurant Manager", "Hotel Manager", "Front Desk Agent",
-        "Front Office Manager", "Guest Services Manager", "Housekeeping Manager",
-        "Event Coordinator", "Event Manager", "Banquet Manager",
-        "Bartender", "Barista", "Concierge", "Travel Consultant", "Tour Guide",
+        "Program Manager",
     ],
 }
 
@@ -260,8 +240,7 @@ CACHE_MAX_ENTRIES = 50000                                 # row-count safety cap
 CACHE_ROLES = ["Full Stack Developer", "Backend Developer", "Frontend Developer",
     "Data Scientist", "Data Analyst", "AI Engineer", "Machine Learning Engineer",
     "Data Engineer", "DevOps Engineer", "Cloud Engineer", "Python Developer",
-    "QA Engineer", "Site Reliability Engineer", "Database Developer",
-    "iOS Developer", "Android Developer", "Network Engineer",
+    "QA Engineer", "iOS Developer", "Android Developer", "Network Engineer",
     "Sales Development Representative"
 ]
 
@@ -331,7 +310,7 @@ MAX_CONCURRENT_PER_BOARD = {"linkedin": 1, "indeed": 3, "naukri": 3}   # prewarm
 PREWARM_DELAY_SECONDS = 5.0
 PREWARM_MAX_COMBOS_PER_RUN = 500
 
-SCHEDULER_ENABLED = False
+SCHEDULER_ENABLED = True
 SCHEDULER_INTERVAL_MINUTES = 180
 
 # ==============

@@ -18,8 +18,12 @@ async def public_stats():
         cur.execute("SELECT COALESCE(SUM(scraped), 0) FROM sessions")
         total_raw_jobs = cur.fetchone()[0]
 
+        cur.execute("SELECT COALESCE(SUM(job_count), 0) FROM job_cache")
+        total_cached_jobs = cur.fetchone()[0]
+
         return {
             "total_users": total_users,
             "total_searches": total_searches,
             "total_raw_jobs": total_raw_jobs,
+            "total_cached_jobs": total_cached_jobs,
         }

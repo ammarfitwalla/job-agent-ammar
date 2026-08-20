@@ -427,7 +427,7 @@ def _cache_lookup(req):
 
     Returns (combos_to_scrape, initial_jobs, served_cache)."""
     from config import CACHE_ENABLED, CACHE_TTL_HOURS, CACHE_MIN_VOLUME
-    from db import get_cache_entry, get_cached_jobs, upsert_prewarm_combo, upsert_custom_prewarm, increment_custom_prewarm_usage
+    from db import get_cache_entry, upsert_prewarm_combo, upsert_custom_prewarm, increment_combo_usage
 
     combos_to_scrape = []
     initial_jobs = []
@@ -452,6 +452,11 @@ def _cache_lookup(req):
                 req.internship_mode, req.hours_old,
                 ttl_hours=CACHE_TTL_HOURS, min_volume=CACHE_MIN_VOLUME,
             )
+            # Track usage for all combos (config grid + user-discovered)
+            increment_combo_usage(
+                role, site, req.city or "", req.state or "", req.country or "",
+                req.internship_mode, req.hours_old,
+            )
             if status in ("fresh", "stale"):
                 for j in (entry.get("jobs") or []):
                     initial_jobs.append(j)
@@ -460,22 +465,9 @@ def _cache_lookup(req):
                     combos_to_scrape.append(dict(combo))  # serve + top-up
                 continue
 
-            # Exact combo missing — try broader (state,country / country) fallback
-            fb_status, fb_entry = get_cached_jobs(
-                role, site, req.city or "", req.state or "", req.country or "",
-                req.internship_mode, req.hours_old,
-                ttl_hours=CACHE_TTL_HOURS, min_volume=CACHE_MIN_VOLUME,
-            )
-            if fb_entry is not None and fb_status in ("fresh", "stale"):
-                for j in (fb_entry.get("jobs") or []):
-                    initial_jobs.append(j)
-                served_cache += 1
-                if fb_status == "stale":
-                    combos_to_scrape.append(dict(combo))
-            else:
-                combos_to_scrape.append(dict(combo))
+            combos_to_scrape.append(dict(combo))
 
-            # Exact combo still cold — schedule it for prewarming
+            # Schedule it for prewarming
             upsert_prewarm_combo(
                 role, site, req.city or "", req.state or "", req.country or "",
                 req.internship_mode, req.hours_old,
@@ -487,12 +479,6 @@ def _cache_lookup(req):
                     role, site, req.city or "", req.state or "", req.country or "",
                     req.internship_mode, req.hours_old,
                 )
-
-            # Track usage for user-discovered combos
-            increment_custom_prewarm_usage(
-                role, site, req.city or "", req.state or "", req.country or "",
-                req.internship_mode, req.hours_old,
-            )
 
     return combos_to_scrape, initial_jobs, served_cache
 

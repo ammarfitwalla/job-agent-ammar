@@ -272,6 +272,12 @@ def init_db():
                 cur.execute(f"ALTER TABLE custom_prewarm ADD COLUMN {col}")
             except Exception:
                 pass
+        # Migrate job_cache — add usage columns if missing
+        for col in ("usage_count INTEGER DEFAULT 0", "last_used_at TEXT DEFAULT ''"):
+            try:
+                cur.execute(f"ALTER TABLE job_cache ADD COLUMN {col}")
+            except Exception:
+                pass
         # Migrate existing visits table — add location columns if missing
         for col in ("country", "city", "region"):
             try:
@@ -648,6 +654,23 @@ def increment_custom_prewarm_usage(role: str, site: str, city: str, state: str, 
         with _get_conn() as (conn, cur):
             cur.execute(
                 """UPDATE custom_prewarm
+                   SET usage_count = usage_count + 1, last_used_at = ?
+                   WHERE role=? AND site=? AND city=? AND state=? AND country=?
+                   AND internship_mode=? AND hours_old=?""",
+                (now,) + key,
+            )
+            conn.commit()
+
+
+def increment_combo_usage(role: str, site: str, city: str, state: str, country: str,
+                           internship_mode: int, hours_old: int = 168) -> None:
+    """Bump usage_count for any combo in job_cache (config grid + user-discovered)."""
+    key = _cache_key(role, site, city, state, country, internship_mode, hours_old)
+    now = _now()
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute(
+                """UPDATE job_cache
                    SET usage_count = usage_count + 1, last_used_at = ?
                    WHERE role=? AND site=? AND city=? AND state=? AND country=?
                    AND internship_mode=? AND hours_old=?""",

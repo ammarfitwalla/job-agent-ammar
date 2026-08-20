@@ -496,6 +496,7 @@ async function loadStatsBar() {
     content.innerHTML = [
       { label: "searches", value: d.total_searches },
       { label: "jobs scraped", value: d.total_raw_jobs },
+      { label: "jobs cached", value: d.total_cached_jobs },
     ].map(s => `<span class="inline-flex items-center gap-1"><span class="font-semibold text-slate-700">${s.value.toLocaleString()}</span> <span class="text-slate-400">${s.label}</span></span>`).join('<span class="text-slate-200">·</span>');
     bar.classList.remove("hidden");
   } catch {}
@@ -1525,6 +1526,27 @@ document.getElementById("roleSearchInput").addEventListener("keydown", (e) => {
       addRoleFromSearch(val);
       toggleRoleClearBtn();
     }
+  }
+});
+
+document.getElementById("addRoleBtn").addEventListener("click", () => {
+  const val = document.getElementById("roleSearchInput").value.trim();
+  if (!val) return;
+  const allRoles = Object.values(roleCategories || {}).flat();
+  const exactMatch = allRoles.find(r => r.toLowerCase() === val.toLowerCase());
+  if (exactMatch) {
+    const cb = document.querySelector(`.role-cb[value="${exactMatch}"]`);
+    if (cb) {
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event("change"));
+    }
+    document.getElementById("roleSearchInput").value = "";
+    roleSearchQuery = "";
+    toggleRoleClearBtn();
+    if (roleCategories) renderRoles(roleCategories);
+  } else {
+    addRoleFromSearch(val);
+    toggleRoleClearBtn();
   }
 });
 

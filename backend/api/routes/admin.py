@@ -464,10 +464,18 @@ async def get_custom_prewarm():
 
 @router.get("/prewarm/usage")
 async def get_combo_usage(limit: int = 50):
-    from db import get_custom_prewarm
-    combos = get_custom_prewarm()
-    combos.sort(key=lambda c: c.get("usage_count", 0), reverse=True)
-    return {"combos": combos[:limit]}
+    from db import _get_conn
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            "SELECT role, site, city, state, country, internship_mode, hours_old, "
+            "usage_count, last_used_at FROM job_cache WHERE usage_count > 0 "
+            "ORDER BY usage_count DESC LIMIT ?",
+            (limit,),
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+    for r in rows:
+        r["internship_mode"] = bool(r["internship_mode"])
+    return {"combos": rows}
 
 
 @router.delete("/prewarm/custom")
