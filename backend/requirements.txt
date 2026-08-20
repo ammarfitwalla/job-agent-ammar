@@ -43,6 +43,7 @@ python-docx
 
 # Naukri (RSA token signing for its internal API)
 pycryptodome
+tls_client
 
 # Twitter marketing
 httpx
