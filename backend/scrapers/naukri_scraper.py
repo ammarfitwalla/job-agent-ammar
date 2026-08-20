@@ -36,7 +36,7 @@ def _generate_nkparam(page_type: str = "srp") -> str:
 def _build_session():
     try:
         import tls_client
-        s = tls_client.Session(client_identifier="chrome_125")
+        s = tls_client.Session(client_identifier="chrome_146")
         s.headers.update({"user-agent": UA, "accept-language": "en-US,en;q=0.9"})
         return s, True
     except ImportError:
