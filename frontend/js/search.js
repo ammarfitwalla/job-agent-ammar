@@ -37,7 +37,7 @@ let allStates = [];
 let internshipMode = false;
 let activeFilters = { site: '', experience_level: '' };
 let currentSort = 'relevant';
-let _searchId = crypto.randomUUID();
+let _searchId = (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16); }));
 let _relevanceUsed = 0;
 let _relevanceScoring = new Set();
 
