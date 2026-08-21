@@ -306,8 +306,9 @@ CACHE_SITES_INDIA = ["indeed", "linkedin", "naukri"]
 CACHE_SITES_DEFAULT = ["indeed", "linkedin"]
 
 PREWARM_WORKERS = 7
-MAX_CONCURRENT_PER_BOARD = {"linkedin": 1, "indeed": 3, "naukri": 3}   # prewarm-only concurrency caps
+MAX_CONCURRENT_PER_BOARD = {"linkedin": 1, "indeed": 2, "naukri": 2}   # prewarm-only concurrency caps
 PREWARM_DELAY_SECONDS = 5.0
+NAUKRI_USE_PROXY = True                  # route Naukri through free proxies (ProxyScrape)
 PREWARM_MAX_COMBOS_PER_RUN = 500
 
 SCHEDULER_ENABLED = True
