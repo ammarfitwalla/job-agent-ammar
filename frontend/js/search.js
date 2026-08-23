@@ -990,7 +990,7 @@ function renderTimeline(logs, status) {
     const elapsed = log.elapsed_seconds || 0;
     const ts = elapsed ? `${elapsed}s` : "";
 
-    let m = msg.match(/\[(?:SCRAPE|DIRECT)\] (Pass \d+\/\d+ — )?(\w+)\.\.\.$/);
+    let m = msg.match(/\[(?:SCRAPE|DIRECT)\] (Pass \d+\/\d+ -- )?(\w+)\.\.\.$/);
     if (m) {
       const site = m[2];
       const key = `site-start-${site}`;
