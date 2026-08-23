@@ -59,6 +59,23 @@ def _grid_combos():
         for state in states:
             for role in roles:
                 for site in sites:
+                    # For Naukri, expand state combos into per-city combos
+                    # so each city gets its own cache entry.
+                    if site == "naukri":
+                        cities = config.CACHE_STATE_CITIES.get(state) or []
+                        if cities:
+                            for city in cities:
+                                for mode in (False, True):
+                                    combos.append({
+                                        "role": role, "site": site, "city": city,
+                                        "state": state, "country": country,
+                                        "internship_mode": mode,
+                                        "hours_old": config.CACHE_HOURS_OLD,
+                                        "source": "config",
+                                        "location": city,
+                                        "indeed_country": _INDEED_COUNTRY.get(country, "USA"),
+                                    })
+                            continue
                     for mode in (False, True):
                         combos.append({
                             "role": role, "site": site, "city": "",
@@ -275,7 +292,7 @@ def run_prewarm() -> int:
         if status == "fresh":
             continue
         combo = dict(combo)
-        combo["location"] = combo.get("state") or combo.get("country") or ""
+        combo["location"] = combo.get("city") or combo.get("state") or combo.get("country") or ""
         combo["indeed_country"] = _INDEED_COUNTRY.get((combo.get("country") or "").lower(), "USA")
         todo.append(combo)
 

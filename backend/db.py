@@ -184,12 +184,13 @@ def init_db():
                 country TEXT NOT NULL DEFAULT '',
                 internship_mode INTEGER NOT NULL DEFAULT 0,
                 hours_old INTEGER NOT NULL DEFAULT 168,
+                is_remote INTEGER NOT NULL DEFAULT 0,
                 job_count INTEGER NOT NULL DEFAULT 0,
                 jobs_json TEXT NOT NULL DEFAULT '[]',
                 scraped_at TEXT NOT NULL,
-                UNIQUE(role, site, city, state, country, internship_mode, hours_old)
+                UNIQUE(role, site, city, state, country, internship_mode, hours_old, is_remote)
             );
-            CREATE INDEX IF NOT EXISTS idx_job_cache_key ON job_cache(role, site, city, state, country, internship_mode, hours_old);
+            CREATE INDEX IF NOT EXISTS idx_job_cache_key ON job_cache(role, site, city, state, country, internship_mode, hours_old, is_remote);
             CREATE INDEX IF NOT EXISTS idx_job_cache_age ON job_cache(scraped_at);
             CREATE TABLE IF NOT EXISTS prewarm_queue (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -278,6 +279,52 @@ def init_db():
                 cur.execute(f"ALTER TABLE job_cache ADD COLUMN {col}")
             except Exception:
                 pass
+        # Migrate job_cache — add is_remote column if missing
+        try:
+            cur.execute("ALTER TABLE job_cache ADD COLUMN is_remote INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        # Migrate job_cache — recreate table if UNIQUE constraint doesn't include is_remote.
+        # ALTER TABLE ADD COLUMN cannot update UNIQUE constraints, so we must rebuild.
+        try:
+            cur.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='job_cache'")
+            _row = cur.fetchone()
+            if _row:
+                _sql = _row["sql"] or ""
+                # Check if is_remote is in the UNIQUE constraint specifically,
+                # not just as a column definition
+                _needs_rebuild = True
+                _un_idx = _sql.upper().find("UNIQUE(")
+                if _un_idx >= 0:
+                    _un_part = _sql[_un_idx:]
+                    if "is_remote" in _un_part.lower():
+                        _needs_rebuild = False
+                if _needs_rebuild:
+                    cur.execute("ALTER TABLE job_cache RENAME TO job_cache_old")
+                    cur.execute("""
+                        CREATE TABLE job_cache (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            role TEXT NOT NULL,
+                            site TEXT NOT NULL,
+                            city TEXT NOT NULL DEFAULT '',
+                            state TEXT NOT NULL DEFAULT '',
+                            country TEXT NOT NULL DEFAULT '',
+                            internship_mode INTEGER NOT NULL DEFAULT 0,
+                            hours_old INTEGER NOT NULL DEFAULT 168,
+                            is_remote INTEGER NOT NULL DEFAULT 0,
+                            job_count INTEGER NOT NULL DEFAULT 0,
+                            jobs_json TEXT NOT NULL DEFAULT '[]',
+                            scraped_at TEXT NOT NULL,
+                            UNIQUE(role, site, city, state, country, internship_mode, hours_old, is_remote)
+                        )
+                    """)
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_job_cache_key ON job_cache(role, site, city, state, country, internship_mode, hours_old, is_remote)")
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_job_cache_age ON job_cache(scraped_at)")
+                    cur.execute("INSERT OR IGNORE INTO job_cache SELECT * FROM job_cache_old")
+                    cur.execute("DROP TABLE job_cache_old")
+                    conn.commit()
+        except Exception:
+            pass
         # Migrate existing visits table — add location columns if missing
         for col in ("country", "city", "region"):
             try:
@@ -368,10 +415,11 @@ def init_db():
                     country TEXT NOT NULL DEFAULT '',
                     internship_mode INTEGER NOT NULL DEFAULT 0,
                     hours_old INTEGER NOT NULL DEFAULT 168,
+                    is_remote INTEGER NOT NULL DEFAULT 0,
                     job_count INTEGER NOT NULL DEFAULT 0,
                     jobs_json TEXT NOT NULL DEFAULT '[]',
                     scraped_at TEXT NOT NULL,
-                    UNIQUE(role, site, city, state, country, internship_mode, hours_old)
+                    UNIQUE(role, site, city, state, country, internship_mode, hours_old, is_remote)
                 )""")
         except Exception:
             pass
@@ -428,13 +476,18 @@ def delete_custom_role(name: str) -> bool:
 _CACHE_STRIP_FIELDS = ("_cache_role", "_cache_site", "keyword_score", "total_score", "ai_score", "reason")
 
 
-def _cache_key(role, site, city, state, country, internship_mode, hours_old):
+def _cache_key(role, site, city, state, country, internship_mode, hours_old, is_remote=0):
+    return (role, site, city or "", state or "", country or "", 1 if internship_mode else 0, hours_old, 1 if is_remote else 0)
+
+
+def _prewarm_key(role, site, city, state, country, internship_mode, hours_old):
+    """Key for prewarm_queue/custom_prewarm tables (no is_remote column)."""
     return (role, site, city or "", state or "", country or "", 1 if internship_mode else 0, hours_old)
 
 
 def save_cache_entry(role: str, site: str, city: str, state: str, country: str,
                      internship_mode: int, hours_old: int, jobs: list, max_jobs: int = 200,
-                     keep_larger: bool = False) -> None:
+                     keep_larger: bool = False, is_remote: int = 0) -> None:
     """Upsert a (role, site, city, state, country, internship_mode, hours_old)
     cache key with the scraped jobs. Session-specific score fields are stripped;
     job url, description, and job_board are kept so cached results can be
@@ -445,7 +498,7 @@ def save_cache_entry(role: str, site: str, city: str, state: str, country: str,
     clean = []
     for j in jobs:
         clean.append({k: v for k, v in j.items() if k not in _CACHE_STRIP_FIELDS})
-    key = _cache_key(role, site, city, state, country, internship_mode, hours_old)
+    key = _cache_key(role, site, city, state, country, internship_mode, hours_old, is_remote)
     with _write_lock:
         with _get_conn() as (conn, cur):
             # Merge new jobs into existing entry — dedup by URL so the cache
@@ -453,7 +506,7 @@ def save_cache_entry(role: str, site: str, city: str, state: str, country: str,
             existing = []
             if keep_larger:
                 cur.execute(
-                    "SELECT jobs_json FROM job_cache WHERE role=? AND site=? AND city=? AND state=? AND country=? AND internship_mode=? AND hours_old=?",
+                    "SELECT jobs_json FROM job_cache WHERE role=? AND site=? AND city=? AND state=? AND country=? AND internship_mode=? AND hours_old=? AND is_remote=?",
                     key,
                 )
                 row = cur.fetchone()
@@ -470,9 +523,9 @@ def save_cache_entry(role: str, site: str, city: str, state: str, country: str,
             if max_jobs and max_jobs > 0 and len(clean) > max_jobs:
                 clean = clean[-max_jobs:]
             cur.execute(
-                """INSERT INTO job_cache (role, site, city, state, country, internship_mode, hours_old, job_count, jobs_json, scraped_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                   ON CONFLICT(role, site, city, state, country, internship_mode, hours_old)
+                """INSERT INTO job_cache (role, site, city, state, country, internship_mode, hours_old, is_remote, job_count, jobs_json, scraped_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(role, site, city, state, country, internship_mode, hours_old, is_remote)
                    DO UPDATE SET job_count = excluded.job_count, jobs_json = excluded.jobs_json, scraped_at = excluded.scraped_at""",
                 key + (len(clean), json.dumps(clean, ensure_ascii=False), _now()),
             )
@@ -480,15 +533,15 @@ def save_cache_entry(role: str, site: str, city: str, state: str, country: str,
 
 
 def get_cache_entry(role: str, site: str, city: str, state: str, country: str, internship_mode: int,
-                    hours_old: int, ttl_hours: float = 12.0, min_volume: int = 5) -> tuple:
+                    hours_old: int, ttl_hours: float = 12.0, min_volume: int = 5, is_remote: int = 0) -> tuple:
     """Returns (status, entry) where status is 'fresh', 'stale', or 'missing'.
     'fresh' requires the entry to be newer than ttl_hours AND have at least
     min_volume jobs; older/smaller entries are still returned as 'stale' so the
     caller can serve them while refreshing."""
-    key = _cache_key(role, site, city, state, country, internship_mode, hours_old)
+    key = _cache_key(role, site, city, state, country, internship_mode, hours_old, is_remote)
     with _get_conn() as (conn, cur):
         cur.execute(
-            "SELECT * FROM job_cache WHERE role=? AND site=? AND city=? AND state=? AND country=? AND internship_mode=? AND hours_old=?",
+            "SELECT * FROM job_cache WHERE role=? AND site=? AND city=? AND state=? AND country=? AND internship_mode=? AND hours_old=? AND is_remote=?",
             key,
         )
         row = cur.fetchone()
@@ -581,7 +634,7 @@ def upsert_prewarm_combo(role: str, site: str, city: str, state: str, country: s
     """Add a combo to the prewarm queue. User-searched combos get priority bumped
     so they are warmed first on the next scheduler pass."""
     now = _now()
-    key = _cache_key(role, site, city, state, country, internship_mode, hours_old)
+    key = _prewarm_key(role, site, city, state, country, internship_mode, hours_old)
     with _write_lock:
         with _get_conn() as (conn, cur):
             cur.execute(
@@ -598,7 +651,7 @@ def upsert_prewarm_combo(role: str, site: str, city: str, state: str, country: s
 def touch_prewarm_combo(role: str, site: str, city: str, state: str, country: str,
                         internship_mode: int, hours_old: int = 168) -> None:
     """Record that a combo was just warmed (updates last_refreshed_at)."""
-    key = _cache_key(role, site, city, state, country, internship_mode, hours_old)
+    key = _prewarm_key(role, site, city, state, country, internship_mode, hours_old)
     with _write_lock:
         with _get_conn() as (conn, cur):
             cur.execute(
@@ -631,7 +684,7 @@ def upsert_custom_prewarm(role: str, site: str, city: str, state: str, country: 
                           internship_mode: int, hours_old: int = 168) -> None:
     """Persist a user-searched combo so the scheduler prewarms it on every pass."""
     now = _now()
-    key = _cache_key(role, site, city, state, country, internship_mode, hours_old)
+    key = _prewarm_key(role, site, city, state, country, internship_mode, hours_old)
     with _write_lock:
         with _get_conn() as (conn, cur):
             cur.execute(
@@ -648,7 +701,7 @@ def upsert_custom_prewarm(role: str, site: str, city: str, state: str, country: 
 def increment_custom_prewarm_usage(role: str, site: str, city: str, state: str, country: str,
                                     internship_mode: int, hours_old: int = 168) -> None:
     """Bump usage_count for a user-searched combo."""
-    key = _cache_key(role, site, city, state, country, internship_mode, hours_old)
+    key = _prewarm_key(role, site, city, state, country, internship_mode, hours_old)
     now = _now()
     with _write_lock:
         with _get_conn() as (conn, cur):
@@ -673,7 +726,7 @@ def increment_combo_usage(role: str, site: str, city: str, state: str, country: 
                 """UPDATE job_cache
                    SET usage_count = usage_count + 1, last_used_at = ?
                    WHERE role=? AND site=? AND city=? AND state=? AND country=?
-                   AND internship_mode=? AND hours_old=?""",
+                   AND internship_mode=? AND hours_old=? AND is_remote=?""",
                 (now,) + key,
             )
             conn.commit()
@@ -704,7 +757,7 @@ def gc_custom_prewarm(max_age_days: int = 14) -> None:
 def remove_custom_prewarm(role: str, site: str, city: str, state: str, country: str,
                           internship_mode: int, hours_old: int = 168) -> bool:
     """Remove a custom prewarm combo."""
-    key = _cache_key(role, site, city, state, country, internship_mode, hours_old)
+    key = _prewarm_key(role, site, city, state, country, internship_mode, hours_old)
     with _write_lock:
         with _get_conn() as (conn, cur):
             cur.execute(

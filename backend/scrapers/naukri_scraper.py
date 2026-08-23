@@ -97,7 +97,7 @@ def _get_working_proxy():
     tested = 0
     working = []
     for p in all_proxies:
-        if tested >= 25 or len(working) >= 5:
+        if tested >= 30 or len(working) >= 10:
             break
         proxy_url = p if p.startswith("http") else f"http://{p}"
         tested += 1
