@@ -14,7 +14,7 @@ let _sortKey = "date", _sortDir = -1;
 // ── Utils ──
 function formatDate(iso) {
   if (!iso) return "\u2014";
-  const d = new Date(iso);
+  const d = new Date(iso + (iso.endsWith("Z") ? "" : "Z"));
   const now = new Date();
   const pad = n => String(n).padStart(2, "0");
   const datePart = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -32,6 +32,15 @@ function formatDuration(sec) {
 }
 
 function fmtTime() { return new Date().toLocaleTimeString(); }
+
+function formatRelative(iso) {
+  if (!iso) return "\u2014";
+  const diff = Math.floor((Date.now() - new Date(iso + (iso.endsWith("Z") ? "" : "Z")).getTime()) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
 
 function showRealContent() {
   if (_ready) return;
@@ -60,7 +69,7 @@ function startRefresh() {
   stopRefresh();
   _refreshInterval = setInterval(() => {
     setRefreshing(true);
-    loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage();
+    loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage(); loadCacheStats();
   }, 300000);
 }
 
@@ -173,6 +182,31 @@ async function loadComboUsage() {
         },
       },
     });
+  } catch {}
+}
+
+// ── Cache Stats ──
+async function loadCacheStats() {
+  try {
+    const r = await fetch("/api/admin/cache-stats", { cache: "no-cache" });
+    const d = await r.json();
+    const sites = d.sites || [];
+    const rows = sites.map(s => `<tr>
+      <td>${s.site || "\u2014"}</td>
+      <td>${s.entries || 0}</td>
+      <td>${s.total_jobs || 0}</td>
+      <td>${s.last_cached ? formatRelative(s.last_cached) : "\u2014"}</td>
+    </tr>`).join("");
+    const newest = sites.reduce((acc, s) => {
+      return !acc || (s.last_cached && s.last_cached > acc) ? s.last_cached : acc;
+    }, null);
+    const totalRow = sites.length ? `<tr style="font-weight:600;border-top:2px solid #e2e8f0">
+      <td>Total</td>
+      <td>${d.total_entries}</td>
+      <td>${d.total_jobs}</td>
+      <td>${formatRelative(newest)}</td>
+    </tr>` : "";
+    document.getElementById("cacheBody").innerHTML = rows ? rows + totalRow : '<tr><td colspan="4" class="empty">No cached jobs</td></tr>';
   } catch {}
 }
 
@@ -590,11 +624,12 @@ window.filterSessions = filterSessions;
 window.toggleDetail = toggleDetail;
 window.loadVisits = loadVisits;
 window.loadRegistrations = loadRegistrations;
+window.loadCacheStats = loadCacheStats;
 window.switchTab = switchTab;
 window.loadDbInfo = loadDbInfo;
 window.restoreDB = restoreDB;
 window.mergeDB = mergeDB;
 
 // ── Init ──
-loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage(); loadDbInfo();
+loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage(); loadDbInfo(); loadCacheStats();
 startRefresh();

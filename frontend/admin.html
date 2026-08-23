@@ -307,6 +307,7 @@ tr td:first-child { border-radius: 0; }
 
     <div class="tabs" data-group="main">
       <span class="tab active" data-tab="charts" onclick="switchTab('charts','main')">Charts</span>
+      <span class="tab" data-tab="cache" onclick="switchTab('cache','main')">Cache</span>
       <span class="tab" data-tab="uploads" onclick="switchTab('uploads','main')">Uploads</span>
       <span class="tab" data-tab="sessions" onclick="switchTab('sessions','main')">Sessions</span>
     </div>
@@ -323,6 +324,15 @@ tr td:first-child { border-radius: 0; }
         <div class="chart-box"><h3>Top Combo Usage (User Searches)</h3><canvas id="comboChart" height="200"></canvas></div>
       </div>
 
+    </div>
+
+    <div class="tab-content" data-group="main" data-tab="cache">
+      <div class="chart-box db-card">
+        <h3>Cached Jobs by Site</h3>
+        <div class="table-wrap"><table><thead><tr>
+          <th>Site</th><th>Entries</th><th>Jobs Cached</th><th>Last Cached</th>
+        </tr></thead><tbody id="cacheBody"></tbody></table></div>
+      </div>
     </div>
 
     <div class="tab-content" data-group="main" data-tab="uploads">

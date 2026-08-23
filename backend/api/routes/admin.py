@@ -478,6 +478,21 @@ async def get_combo_usage(limit: int = 50):
     return {"combos": rows}
 
 
+@router.get("/cache-stats")
+async def get_cache_stats():
+    from db import _get_conn
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            "SELECT site, COUNT(*) as entries, SUM(job_count) as total_jobs, "
+            "MAX(scraped_at) as last_cached FROM job_cache "
+            "GROUP BY site ORDER BY total_jobs DESC"
+        )
+        sites = [dict(r) for r in cur.fetchall()]
+        cur.execute("SELECT COUNT(*) as e, SUM(job_count) as j FROM job_cache")
+        total = dict(cur.fetchone())
+    return {"sites": sites, "total_entries": total["e"] or 0, "total_jobs": total["j"] or 0}
+
+
 @router.delete("/prewarm/custom")
 async def delete_custom_prewarm(
     role: str = "", site: str = "", city: str = "",
