@@ -161,4 +161,4 @@ async def download_db():
         return FileResponse(_DB_PATH, filename="job_agent.db", media_type="application/octet-stream")
     return PlainTextResponse("Database not found", status_code=404)
 if os.path.isdir(_frontend_dir):
-    app.mount("/", StaticFiles(directory=_frontend_dir, html=True), name="frontend")
+    app.mount("/", StaticFiles(directory=_frontend_dir), name="frontend")
