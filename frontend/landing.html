@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
+<html lang="en" class="scroll-smooth overflow-x-hidden">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -153,7 +153,7 @@
 
         <div class="relative w-full max-w-xl mx-auto lg:ml-auto opacity-0 animate-fade-in-up delay-200">
           <!-- Background glow for mockup -->
-          <div class="absolute -inset-1 bg-gradient-to-r from-brand-500 to-purple-600 rounded-[2rem] blur-2xl opacity-20 animate-pulse-slow"></div>
+          <div class="absolute inset-0 bg-gradient-to-r from-brand-500 to-purple-600 rounded-[2rem] blur-2xl opacity-20 animate-pulse-slow"></div>
           
           <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-float">
             <!-- Mockup Browser Bar -->
@@ -472,15 +472,15 @@
 
   <section class="py-24 bg-white relative overflow-hidden">
     <div class="max-w-5xl mx-auto px-6 relative z-10">
-      <div class="bg-slate-900 rounded-[3rem] p-12 md:p-20 text-center relative overflow-hidden shadow-2xl">
+      <div class="bg-slate-900 rounded-[3rem] p-8 sm:p-12 md:p-20 text-center relative overflow-hidden shadow-2xl">
         <!-- Decorative glowing orb -->
-        <div class="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-brand-500 rounded-full blur-[100px] opacity-40"></div>
-        <div class="absolute bottom-0 left-0 -ml-20 -mb-20 w-96 h-96 bg-purple-600 rounded-full blur-[100px] opacity-30"></div>
+        <div class="absolute top-0 right-0 -mr-10 -mt-10 w-64 h-64 bg-brand-500 rounded-full blur-[100px] opacity-40 sm:-mr-20 sm:-mt-20 sm:w-96 sm:h-96"></div>
+        <div class="absolute bottom-0 left-0 -ml-10 -mb-10 w-64 h-64 bg-purple-600 rounded-full blur-[100px] opacity-30 sm:-ml-20 sm:-mb-20 sm:w-96 sm:h-96"></div>
         
         <div class="relative z-10">
           <h2 class="text-4xl md:text-5xl font-extrabold text-white tracking-tight mb-6">Your next role is one search away.</h2>
           <p class="text-xl text-slate-300 mb-10 max-w-2xl mx-auto font-medium">Join thousands of job seekers finding better roles, faster, and skipping the endless application line.</p>
-          <a href="/app" class="inline-flex items-center gap-2 px-8 py-4 rounded-xl text-lg font-bold bg-white text-slate-900 hover:bg-slate-100 hover:scale-105 transition-all shadow-xl shadow-white/10">
+          <a href="/app" class="inline-flex items-center gap-2 px-6 sm:px-8 py-4 rounded-xl text-base sm:text-lg font-bold bg-white text-slate-900 hover:bg-slate-100 hover:scale-105 transition-all shadow-xl shadow-white/10">
             Start Searching Free
             <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
           </a>
