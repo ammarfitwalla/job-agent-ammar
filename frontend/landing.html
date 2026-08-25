@@ -91,7 +91,6 @@
       </div>
 
       <div class="flex items-center gap-4">
-        <a href="/app" class="hidden md:inline-flex items-center justify-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">Log in</a>
         <a href="/app" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-slate-900 text-white hover:bg-slate-800 hover:shadow-xl hover:shadow-slate-900/20 hover:-translate-y-0.5 transition-all">
           Start Searching
           <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
@@ -134,19 +133,19 @@
 
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-6 mt-16 pt-10 border-t border-slate-200/60">
             <div>
-              <div class="text-3xl font-extrabold text-slate-900 tracking-tight"><span class="stat-counter" data-target="14582">0</span>+</div>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight"><span class="stat-counter" data-key="total_searches">0</span>+</div>
               <div class="text-sm font-semibold text-slate-500 mt-1">Searches Run</div>
             </div>
             <div>
-              <div class="text-3xl font-extrabold text-slate-900 tracking-tight"><span class="stat-counter" data-target="425k">0</span></div>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight"><span class="stat-counter" data-key="total_scraped">0</span></div>
               <div class="text-sm font-semibold text-slate-500 mt-1">Jobs Scraped</div>
             </div>
             <div>
-              <div class="text-3xl font-extrabold text-slate-900 tracking-tight"><span class="stat-counter" data-target="8400">0</span>+</div>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight"><span class="stat-counter" data-key="total_users">0</span>+</div>
               <div class="text-sm font-semibold text-slate-500 mt-1">Users</div>
             </div>
             <div>
-              <div class="text-3xl font-extrabold text-slate-900 tracking-tight"><span class="stat-counter" data-target="950">0</span>+</div>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight"><span class="stat-counter" data-key="total_companies">0</span>+</div>
               <div class="text-sm font-semibold text-slate-500 mt-1">Companies</div>
             </div>
           </div>
@@ -386,10 +385,6 @@
               <p class="text-sm text-slate-400 mt-1">Anthropic • Referred 12 people</p>
             </div>
             <div class="flex items-center gap-6 mt-4 sm:mt-0">
-              <div class="text-right hidden sm:block">
-                <div class="text-xl font-bold text-emerald-600">94%</div>
-                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Match</div>
-              </div>
               <button class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 hover:shadow-lg hover:-translate-y-0.5 transition-all">Request Referral</button>
             </div>
           </div>
@@ -403,10 +398,6 @@
               <p class="text-sm text-slate-400 mt-1">Databricks • Referred 8 people</p>
             </div>
             <div class="flex items-center gap-6 mt-4 sm:mt-0">
-              <div class="text-right hidden sm:block">
-                <div class="text-xl font-bold text-emerald-600">91%</div>
-                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Match</div>
-              </div>
               <button class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-100 text-slate-900 border border-slate-200 font-bold hover:bg-slate-200 transition-all">Request Referral</button>
             </div>
           </div>
@@ -420,10 +411,6 @@
               <p class="text-sm text-slate-400 mt-1">Google • Referred 24 people</p>
             </div>
             <div class="flex items-center gap-6 mt-4 sm:mt-0">
-              <div class="text-right hidden sm:block">
-                <div class="text-xl font-bold text-emerald-500">88%</div>
-                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Match</div>
-              </div>
               <button class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-100 text-slate-900 border border-slate-200 font-bold hover:bg-slate-200 transition-all">Request Referral</button>
             </div>
           </div>
@@ -518,8 +505,8 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      
-      // 1. Navbar shrink effect on scroll
+
+      // Navbar shrink effect on scroll
       const nav = document.querySelector('nav');
       window.addEventListener('scroll', () => {
         if (window.scrollY > 20) {
@@ -531,66 +518,42 @@
         }
       });
 
-      // 2. Beautiful Number Counter Animation 
-      // Replaced the failed fetch with mock parsing to ensure the demo is always beautiful
       const counters = document.querySelectorAll('.stat-counter');
-      const speed = 150; // The lower the slower
 
-      const animateCounter = (counter) => {
-        const targetAttr = counter.getAttribute('data-target');
-        let targetVal = parseInt(targetAttr.replace(/\D/g, ''));
-        const hasK = targetAttr.toLowerCase().includes('k');
-        if(hasK) targetVal = targetVal * 1000;
-        
-        const updateCount = () => {
-          const current = +counter.innerText.replace(/,/g, '');
-          const inc = Math.ceil(targetVal / speed);
-
-          if (current < targetVal) {
-            let newVal = current + inc;
-            if(newVal > targetVal) newVal = targetVal;
-            
-            // Format number
-            if(hasK && newVal >= 1000 && targetVal % 1000 === 0) {
-              counter.innerText = (newVal/1000).toFixed(0) + 'k';
-            } else {
-              counter.innerText = newVal.toLocaleString();
-            }
-            setTimeout(updateCount, 20);
-          } else {
-            if(hasK) {
-               counter.innerText = (targetVal/1000).toFixed(0) + 'k';
-            } else {
-               counter.innerText = targetVal.toLocaleString();
-            }
-          }
+      const animateCounter = (counter, target) => {
+        if (!target) { counter.textContent = '0'; return; }
+        const duration = 1200;
+        const start = performance.now();
+        const step = (now) => {
+          const elapsed = now - start;
+          const progress = Math.min(elapsed / duration, 1);
+          const eased = 1 - Math.pow(1 - progress, 3);
+          counter.textContent = Math.round(target * eased).toLocaleString();
+          if (progress < 1) requestAnimationFrame(step);
         };
-
-        // Reset to 0 before starting
-        counter.innerText = '0';
-        updateCount();
+        requestAnimationFrame(step);
       };
 
-      // Intersection Observer to trigger stats animation when visible
-      const observerOptions = {
-        root: null,
-        rootMargin: '0px',
-        threshold: 0.1
-      };
+      // Fetch first, then animate on scroll
+      fetch('/api/stats/public')
+        .then(r => r.json())
+        .then(data => {
+          counters.forEach(c => { c.dataset.value = data[c.dataset.key] || 0; });
 
-      const observer = new IntersectionObserver((entries, observer) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            animateCounter(entry.target);
-            observer.unobserve(entry.target);
-          }
+          const observer = new IntersectionObserver((entries, obs) => {
+            entries.forEach(entry => {
+              if (entry.isIntersecting) {
+                animateCounter(entry.target, parseInt(entry.target.dataset.value || '0', 10));
+                obs.unobserve(entry.target);
+              }
+            });
+          }, { threshold: 0.1 });
+
+          counters.forEach(c => observer.observe(c));
+        })
+        .catch(() => {
+          counters.forEach(c => observer.observe(c));
         });
-      }, observerOptions);
-
-      counters.forEach(counter => {
-        observer.observe(counter);
-      });
-      
     });
   </script>
 </body>

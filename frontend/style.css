@@ -27,7 +27,11 @@ body {
   border: 1px solid rgba(0,0,0,0.06);
   border-radius: 20px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.premium-card:hover {
+  box-shadow: 0 8px 30px rgba(0,0,0,0.06);
+  border-color: #c7d2fe;
 }
 
 .sec-icon {
@@ -73,14 +77,15 @@ details[open] > summary::after { transform: rotate(180deg); }
 }
 
 .pill-checkbox:checked + div {
-  background-color: #0f172a;
+  background: linear-gradient(135deg, #4f46e5, #4338ca);
   color: #ffffff;
-  border-color: #0f172a;
+  border-color: #4f46e5;
+  box-shadow: 0 2px 8px rgba(79,70,229,0.2);
 }
 
 .premium-input:focus-within {
-  border-color: #cbd5e1;
-  box-shadow: 0 0 0 4px rgba(241, 245, 249, 1);
+  border-color: #a5b4fc;
+  box-shadow: 0 0 0 3px #eef2ff;
 }
 
 .blur-job {
@@ -93,8 +98,9 @@ body.internship-mode .glass-header {
   border-bottom-color: rgba(20, 184, 166, 0.2);
 }
 body.internship-mode .pill-checkbox:checked + div {
-  background-color: #0d9488;
+  background: linear-gradient(135deg, #0d9488, #0f766e);
   border-color: #0d9488;
+  box-shadow: 0 2px 8px rgba(13,148,136,0.2);
 }
 body.internship-mode {
   background-color: #f0fdfa;
@@ -111,10 +117,10 @@ body.internship-mode {
   100% { background-position: -200% 0; }
 }
 
-aside::-webkit-scrollbar { width: 12px; }
-aside::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
-aside::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; border: 3px solid #f1f5f9; }
-aside::-webkit-scrollbar-thumb:hover { background: #64748b; }
+aside::-webkit-scrollbar { width: 6px; }
+aside::-webkit-scrollbar-track { background: transparent; }
+aside::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+aside::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
 #resume {
   resize: none;
@@ -173,7 +179,7 @@ aside::-webkit-scrollbar-thumb:hover { background: #64748b; }
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: #FAFAFA;
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 50%, #f8fafc 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -187,12 +193,18 @@ aside::-webkit-scrollbar-thumb:hover { background: #64748b; }
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  animation: splashContentIn 0.5s ease-out;
+}
+@keyframes splashContentIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .splash-tagline {
   color: #64748b;
   font-size: 1.125rem;
+  font-weight: 500;
   opacity: 0;
-  animation: splashTaglineIn 0.6s ease 0.6s forwards;
+  animation: splashTaglineIn 0.6s ease 0.4s forwards;
 }
 @keyframes splashFadeOut {
   from { opacity: 1; pointer-events: auto; }
@@ -219,11 +231,12 @@ aside::-webkit-scrollbar-thumb:hover { background: #64748b; }
   border-color: #cbd5e1;
 }
 .employment-pill.active-pill {
-  background: #0f172a;
+  background: linear-gradient(135deg, #4f46e5, #4338ca);
   color: #ffffff;
-  border-color: #0f172a;
+  border-color: #4f46e5;
+  box-shadow: 0 2px 8px rgba(79,70,229,0.2);
 }
 .employment-pill.active-pill:hover {
-  background: #1e293b;
-  border-color: #1e293b;
+  background: linear-gradient(135deg, #4338ca, #3730a3);
+  border-color: #4338ca;
 }

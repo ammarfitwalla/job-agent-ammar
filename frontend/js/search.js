@@ -543,90 +543,121 @@ function jobCardHtml(j) {
   const relevanceLocked = limitReached || !_searchComplete;
 
   const expBadge = j.experience_level === "internship"
-    ? '<span class="text-xs bg-teal-50 text-teal-700 border border-teal-100 px-2.5 py-1 rounded-md font-medium flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0z"/></svg> Internship</span>'
+    ? '<span class="text-[11px] bg-teal-50 text-teal-700 border border-teal-100/60 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-sm"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0z"/></svg> Internship</span>'
     : j.experience_level === "entry_level"
-      ? '<span class="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-md font-medium">Entry Level</span>'
+      ? '<span class="text-[11px] bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-0.5 rounded-full font-bold shadow-sm">Entry Level</span>'
       : "";
 
   const levelBadge = j.job_level && j.job_level !== "Not Applicable"
-    ? `<span class="text-xs bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-md font-medium">${j.job_level}</span>`
+    ? `<span class="text-[11px] bg-blue-50 text-blue-700 border border-blue-100/60 px-2.5 py-0.5 rounded-full font-bold shadow-sm">${j.job_level}</span>`
     : "";
 
   const companyHtml = j.company_url
-    ? `<span class="font-medium text-indigo-600 hover:underline cursor-pointer" onclick="event.preventDefault(); event.stopPropagation(); window.open('${j.company_url.replace(/'/g, "\\'")}', '_blank')">${j.company}</span>`
-    : `<span class="font-medium">${j.company}</span>`;
+    ? `<span class="font-bold text-slate-900 hover:text-brand-600 transition-colors cursor-pointer" onclick="event.preventDefault(); event.stopPropagation(); window.open('${j.company_url.replace(/'/g, "\\'")}', '_blank')">${j.company}</span>`
+    : `<span class="font-bold text-slate-900">${j.company}</span>`;
 
   const tagsHtml = j.tags && j.tags.length
-    ? `<div class="mt-3 flex flex-wrap gap-1.5">${j.tags.slice(0, 6).map(t =>
-        `<span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">${typeof t === 'string' ? t : ''}</span>`
-      ).join("")}</div>`
+    ? `<div class="mt-3.5 flex flex-wrap gap-2">${j.tags.slice(0, 5).map(t =>
+        `<span class="text-[11px] bg-slate-50 border border-slate-100 text-slate-500 font-semibold px-2.5 py-1 rounded-lg">${typeof t === 'string' ? t : ''}</span>`
+      ).join("")}${j.tags.length > 5 ? `<span class="text-[11px] text-slate-400 font-medium px-1 py-1">+${j.tags.length - 5} more</span>` : ''}</div>`
     : "";
 
+  // Dynamic Score Styling
+  let scoreColors = 'from-slate-200 to-slate-300 text-slate-600 border-slate-200';
+  let glowColor = '';
+  if (scored) {
+    if (j.total_score >= 75) {
+      scoreColors = 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white border-emerald-400/20';
+      glowColor = 'bg-emerald-400 shadow-emerald-500/40';
+    } else if (j.total_score >= 50) {
+      scoreColors = 'bg-gradient-to-br from-amber-400 to-orange-400 text-white border-amber-400/20';
+      glowColor = 'bg-amber-400 shadow-amber-500/40';
+    } else {
+      scoreColors = 'bg-gradient-to-br from-rose-400 to-red-500 text-white border-rose-400/20';
+      glowColor = 'bg-rose-400 shadow-rose-500/40';
+    }
+  }
+
   const scorePill = scored
-    ? `<div class="shrink-0 text-right">
-        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">AI Match</span>
-        <div class="mt-1 inline-flex items-center justify-center min-w-[3.25rem] px-3 py-1.5 rounded-xl font-bold text-sm text-white shadow-sm bg-gradient-to-r ${j.total_score >= 70 ? 'from-emerald-500 to-teal-600' : j.total_score >= 50 ? 'from-amber-500 to-orange-500' : 'from-slate-400 to-slate-600'}">${Math.round(j.total_score)}%</div>
+    ? `<div class="shrink-0 flex flex-col items-center justify-center relative group-hover:scale-105 transition-transform duration-300">
+        <div class="absolute inset-0 rounded-2xl ${glowColor} blur-md opacity-30"></div>
+        <div class="relative w-14 h-14 rounded-2xl flex flex-col items-center justify-center font-black text-xl leading-none ${scoreColors} shadow-lg border">
+          ${Math.round(j.total_score)}
+          <span class="text-[8px] font-extrabold uppercase tracking-widest opacity-90 mt-0.5">Match</span>
+        </div>
       </div>`
     : "";
 
   const aiNoteHtml = j.reason
-    ? `<div class="mt-3 rounded-xl bg-gradient-to-r from-indigo-50 to-fuchsia-50 border border-indigo-100 px-3.5 py-3 flex items-start gap-2">
-        <span class="text-sm leading-none shrink-0 mt-0.5">✨</span>
-        <p class="text-xs leading-relaxed text-slate-700">${j.reason}</p>
+    ? `<div class="mt-4 rounded-xl bg-gradient-to-br from-brand-50/50 to-purple-50/30 border border-brand-100/50 p-3.5 flex items-start gap-3 shadow-inner">
+        <div class="w-6 h-6 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0 border border-brand-50 text-brand-500 text-xs">✨</div>
+        <p class="text-xs leading-relaxed text-slate-600 font-medium pt-0.5">${j.reason}</p>
       </div>`
     : "";
 
   const relevanceBtn = scored
-    ? `          <button class="w-full sm:w-auto justify-center shrink-0 text-xs font-semibold inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-emerald-50 text-emerald-700 border-emerald-200 opacity-60 cursor-default" disabled data-url="${j.url || ''}" title="Scored">
-        <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+    ? `<button class="flex-1 sm:flex-none justify-center shrink-0 text-xs font-bold inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border bg-emerald-50/50 text-emerald-600 border-emerald-200/50 cursor-default" disabled data-url="${j.url || ''}" title="Scored">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
         <span>Scored</span>
       </button>`
-    : `<button data-relevance-btn="true" class="w-full sm:w-auto justify-center shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${relevanceLocked ? 'bg-slate-50 text-slate-400 border-slate-200 opacity-50 cursor-not-allowed' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 active:bg-slate-200'}" data-url="${j.url || ''}" onclick="event.preventDefault(); event.stopPropagation(); checkRelevance(event)" title="Check relevance" ${relevanceLocked ? 'disabled' : ''}>
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        <span>Check relevance</span>
+    : `<button data-relevance-btn="true" class="flex-1 sm:flex-none justify-center shrink-0 text-xs font-bold transition-all duration-200 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border shadow-sm ${relevanceLocked ? 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed' : 'bg-white text-slate-700 border-slate-200 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'}" data-url="${j.url || ''}" onclick="event.preventDefault(); event.stopPropagation(); checkRelevance(event)" title="Check AI Relevance" ${relevanceLocked ? 'disabled' : ''}>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z"/></svg>
+        <span>Analyze Match</span>
       </button>`;
 
   return `
-    <a href="${j.url}" target="_blank" data-job-url="${j.url || ''}" class="block group relative bg-white rounded-2xl p-5 sm:p-6 border border-[#e8ecf1] hover:border-slate-300 hover:shadow-lg transition-all duration-300 outline-none focus:ring-2 focus:ring-indigo-500">
-      <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+    <a href="${j.url}" target="_blank" data-job-url="${j.url || ''}" class="block group relative bg-white rounded-[20px] p-5 sm:p-6 border border-slate-200 hover:border-brand-400 hover:shadow-[0_0_0_3px_rgba(99,102,241,0.08),0_8px_30px_-4px_rgba(99,102,241,0.15)] transition-all duration-300 outline-none focus:ring-4 focus:ring-brand-500/20">
+      
+      <div class="flex flex-col-reverse sm:flex-row sm:items-start justify-between gap-4">
         <div class="flex-1 min-w-0">
-          <div class="flex flex-wrap items-center gap-2 mb-2">
-            <h3 class="text-sm sm:text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate pr-1">${j.title}</h3>
+          <div class="flex flex-wrap items-center gap-2 mb-1.5">
+            <h3 class="text-base sm:text-lg font-extrabold text-slate-900 group-hover:text-brand-600 transition-colors truncate pr-1">${j.title}</h3>
             ${expBadge} ${levelBadge}
           </div>
-          <p class="text-sm text-slate-600 flex items-center gap-2 truncate">
+          
+          <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-sm font-medium text-slate-500">
             ${companyHtml}
             <span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span>
-            <span>${j.location}</span>
-            ${j.salary ? `<span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span><span class="premium-badge bg-emerald-50 text-emerald-700 border-emerald-100 font-medium">${j.salary}</span>` : ""}
-            ${j.date_posted ? `<span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span><span class="text-xs text-slate-400">${relativeDate(j.date_posted)}</span>` : ""}
-          </p>
+            <span class="flex items-center gap-1"><svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg> ${j.location}</span>
+            ${j.salary ? `<span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span><span class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded-md font-bold">${j.salary}</span>` : ""}
+            ${j.date_posted ? `<span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span><span class="text-slate-400 flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> ${relativeDate(j.date_posted)}</span>` : ""}
+          </div>
         </div>
-        ${scorePill}
+        
+        <div class="self-end sm:self-auto mb-2 sm:mb-0">
+          ${scorePill}
+        </div>
       </div>
 
       ${tagsHtml}
-
       ${aiNoteHtml}
 
-      <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
-        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 flex-1 pr-3 min-w-0">
-          <button class="bookmark-btn w-full sm:w-auto justify-center shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${isSaved ? 'bg-indigo-500 text-white border-indigo-500 hover:bg-indigo-600' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 active:bg-indigo-200'}" data-url="${j.url || ''}" onclick="toggleSaveJob(event)" title="Save job">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mt-5 pt-5 border-t border-slate-100">
+        
+        <!-- Action Buttons Grid for Mobile, Flex for Desktop -->
+        <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5 flex-1 pr-0 sm:pr-3 min-w-0">
+          
+          <button class="bookmark-btn flex-1 sm:flex-none justify-center shrink-0 text-xs font-bold transition-all duration-200 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border shadow-sm ${isSaved ? 'bg-brand-600 text-white border-brand-600 hover:bg-brand-700 shadow-brand-500/25' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:text-brand-600'}" data-url="${j.url || ''}" onclick="event.preventDefault(); event.stopPropagation(); toggleSaveJob(event)" title="Save job">
             ${isSaved
-              ? '<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> Saved'
-              : '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg> Save'
+              ? '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z"/></svg> Saved'
+              : '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg> Save'
             }
           </button>
+          
           ${relevanceBtn}
-          <button class="w-full sm:w-auto justify-center shrink-0 text-xs font-semibold transition-all duration-200 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100 active:bg-violet-200 referral-btn" data-company="${j.company.replace(/"/g, '&quot;')}" onclick="event.preventDefault(); event.stopPropagation(); window._referralJobTitle='${(j.title||'').replace(/'/g, "\\'")}'; window._referralMatchScore=0; window._referralJobUrl='${(j.url||'').replace(/'/g, "\\'")}'; showReferralUsers('${j.company.replace(/'/g, "\\'")}')" title="See referrals at this company">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
-            <span class="referral-label">Referrals</span>
+          
+          <button class="col-span-2 sm:col-span-1 flex-1 sm:flex-none justify-center shrink-0 text-xs font-bold transition-all duration-200 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border shadow-sm bg-indigo-50 text-indigo-700 border-indigo-200/60 hover:bg-indigo-100 hover:border-indigo-300 active:bg-indigo-200 referral-btn group/ref" data-company="${j.company.replace(/"/g, '&quot;')}" onclick="event.preventDefault(); event.stopPropagation(); window._referralJobTitle='${(j.title||'').replace(/'/g, "\\'")}'; window._referralMatchScore=0; window._referralJobUrl='${(j.url||'').replace(/'/g, "\\'")}'; showReferralUsers('${j.company.replace(/'/g, "\\'")}')" title="See referrals at this company">
+            <svg class="w-4 h-4 group-hover/ref:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
+            <span class="referral-label">Find Referrals</span>
           </button>
+
         </div>
-        <div class="flex items-center gap-1.5 text-xs font-medium text-slate-400 shrink-0">
-          <span>via ${siteName}</span>
-          <svg class="w-4 h-4 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+
+        <div class="flex items-center justify-center sm:justify-end gap-1.5 text-xs font-bold text-slate-400 shrink-0 mt-2 sm:mt-0 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+          <span>via <span class="text-slate-600">${siteName}</span></span>
+          <svg class="w-3.5 h-3.5 group-hover:text-brand-500 group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
         </div>
+
       </div>
     </a>`;
 }
