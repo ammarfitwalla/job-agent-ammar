@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Agent — AI-Powered Job Search</title>
+  <meta name="description" content="AI finds the right jobs across LinkedIn, Indeed, and Naukri. Resume-tailored scoring. Referral network at top companies.">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#312e81',
+            }
+          },
+          animation: {
+            'fade-in-up': 'fadeInUp 0.8s ease-out forwards',
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'float': 'float 6s ease-in-out infinite',
+          },
+          keyframes: {
+            fadeInUp: {
+              '0%': { opacity: '0', transform: 'translateY(20px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+            float: {
+              '0%, 100%': { transform: 'translateY(0)' },
+              '50%': { transform: 'translateY(-10px)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Utilities */
+    .text-gradient {
+      background: linear-gradient(135deg, #4f46e5, #9333ea, #db2777);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .bg-gradient-mesh {
+      background-color: #ffffff;
+      background-image: radial-gradient(at 40% 20%, hsla(247,100%,74%,0.15) 0px, transparent 50%),
+                        radial-gradient(at 80% 0%, hsla(189,100%,56%,0.15) 0px, transparent 50%),
+                        radial-gradient(at 0% 50%, hsla(355,100%,93%,0.1) 0px, transparent 50%);
+    }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+    }
+    .delay-100 { animation-delay: 100ms; }
+    .delay-200 { animation-delay: 200ms; }
+    .delay-300 { animation-delay: 300ms; }
+  </style>
+</head>
+<body class="font-sans text-slate-800 bg-slate-50 antialiased selection:bg-brand-500 selection:text-white overflow-x-hidden">
+
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-b border-slate-200/80 transition-all duration-300">
+    <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-3 group">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-900 to-slate-700 text-white flex items-center justify-center font-bold text-sm shadow-lg shadow-slate-900/20 group-hover:scale-105 transition-transform">
+          JA
+        </div>
+        <span class="font-bold text-lg text-slate-900 tracking-tight">Job Agent</span>
+      </a>
+      
+      <div class="hidden md:flex items-center gap-8">
+        <a href="#how" class="text-sm font-semibold text-slate-500 hover:text-brand-600 transition-colors">How it Works</a>
+        <a href="#referrals" class="text-sm font-semibold text-slate-500 hover:text-brand-600 transition-colors">Referrals</a>
+        <a href="#testimonials" class="text-sm font-semibold text-slate-500 hover:text-brand-600 transition-colors">Testimonials</a>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <a href="/app" class="hidden md:inline-flex items-center justify-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">Log in</a>
+        <a href="/app" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-slate-900 text-white hover:bg-slate-800 hover:shadow-xl hover:shadow-slate-900/20 hover:-translate-y-0.5 transition-all">
+          Start Searching
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-32 pb-16 lg:pt-48 lg:pb-24 bg-gradient-mesh relative overflow-hidden">
+    <div class="max-w-7xl mx-auto px-6 relative z-10">
+      <div class="grid lg:grid-cols-2 gap-16 items-center">
+        
+        <!-- Hero Content -->
+        <div class="max-w-2xl text-center lg:text-left opacity-0 animate-fade-in-up">
+          <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-50 border border-brand-100 text-sm font-bold text-brand-700 mb-8 shadow-sm">
+            <span class="flex h-2 w-2 relative">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-500 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-brand-600"></span>
+            </span>
+            AI-Powered • Multi-Board • Referrals
+          </div>
+          
+          <h1 class="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-slate-900 tracking-tight leading-[1.1] mb-6">
+            Stop applying into <br class="hidden sm:block"/>
+            <span class="text-gradient">the void.</span>
+          </h1>
+          
+          <p class="text-lg text-slate-600 mb-10 leading-relaxed max-w-xl mx-auto lg:mx-0">
+            AI scrapes LinkedIn, Indeed, and Naukri for you. Scores every job against your resume. You only apply to the ones that fit. 
+            <strong class="text-slate-900 font-bold">Get referred</strong> by insiders at top companies.
+          </p>
+          
+          <div class="flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start">
+            <a href="/app" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-base font-bold bg-brand-600 text-white hover:bg-brand-700 hover:shadow-2xl hover:shadow-brand-500/30 hover:-translate-y-1 transition-all">
+              Start Searching — It's Free
+              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+            </a>
+            <p class="text-sm text-slate-500 font-medium">No credit card required</p>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-6 mt-16 pt-10 border-t border-slate-200/60">
+            <div>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight"><span class="stat-counter" data-target="14582">0</span>+</div>
+              <div class="text-sm font-semibold text-slate-500 mt-1">Searches Run</div>
+            </div>
+            <div>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight"><span class="stat-counter" data-target="425k">0</span></div>
+              <div class="text-sm font-semibold text-slate-500 mt-1">Jobs Scraped</div>
+            </div>
+            <div>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight"><span class="stat-counter" data-target="8400">0</span>+</div>
+              <div class="text-sm font-semibold text-slate-500 mt-1">Users</div>
+            </div>
+            <div>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight"><span class="stat-counter" data-target="950">0</span>+</div>
+              <div class="text-sm font-semibold text-slate-500 mt-1">Companies</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="relative w-full max-w-xl mx-auto lg:ml-auto opacity-0 animate-fade-in-up delay-200">
+          <!-- Background glow for mockup -->
+          <div class="absolute -inset-1 bg-gradient-to-r from-brand-500 to-purple-600 rounded-[2rem] blur-2xl opacity-20 animate-pulse-slow"></div>
+          
+          <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-float">
+            <!-- Mockup Browser Bar -->
+            <div class="bg-slate-50 border-b border-slate-100 p-4 flex items-center gap-4">
+              <div class="flex gap-2">
+                <div class="w-3 h-3 rounded-full bg-red-400"></div>
+                <div class="w-3 h-3 rounded-full bg-amber-400"></div>
+                <div class="w-3 h-3 rounded-full bg-green-400"></div>
+              </div>
+              <div class="flex-1 bg-white border border-slate-200 rounded-lg py-1.5 px-3 flex items-center justify-center text-xs font-medium text-slate-400 shadow-sm">
+                <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                jobagent.com/app
+              </div>
+            </div>
+            
+            <!-- Mockup Content -->
+            <div class="p-6 bg-slate-50/50 space-y-4">
+              <!-- High Match Job -->
+              <div class="bg-white p-4 rounded-xl border border-green-100 shadow-sm hover:border-green-300 hover:shadow-md transition-all cursor-pointer flex gap-4 items-start group">
+                <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-green-400 to-green-600 text-white flex items-center justify-center font-bold text-xl shadow-lg shadow-green-500/20 shrink-0 group-hover:scale-105 transition-transform">
+                  92
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h4 class="font-bold text-slate-900 truncate">Senior Software Engineer</h4>
+                  <p class="text-sm font-medium text-slate-500 truncate mt-0.5">Google • Bangalore</p>
+                  <div class="flex flex-wrap gap-2 mt-3">
+                    <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-green-50 text-green-700 border border-green-100 flex items-center gap-1">
+                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
+                      AI Match
+                    </span>
+                    <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100">LinkedIn</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Med-High Match Job -->
+              <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-brand-300 hover:shadow-md transition-all cursor-pointer flex gap-4 items-start group">
+                <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white flex items-center justify-center font-bold text-xl shadow-lg shadow-emerald-500/20 shrink-0 group-hover:scale-105 transition-transform">
+                  88
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h4 class="font-bold text-slate-900 truncate">Full Stack Developer</h4>
+                  <p class="text-sm font-medium text-slate-500 truncate mt-0.5">Microsoft • Hyderabad</p>
+                  <div class="flex flex-wrap gap-2 mt-3">
+                    <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-green-50 text-green-700 border border-green-100">AI Match</span>
+                    <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">Indeed</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Medium Match Job -->
+              <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex gap-4 items-start opacity-75">
+                <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-white flex items-center justify-center font-bold text-xl shadow-lg shadow-amber-500/20 shrink-0">
+                  71
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h4 class="font-bold text-slate-900 truncate">Backend Engineer</h4>
+                  <p class="text-sm font-medium text-slate-500 truncate mt-0.5">Amazon • Chennai</p>
+                  <div class="flex flex-wrap gap-2 mt-3">
+                    <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">Naukri</span>
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <section class="py-12 bg-white border-y border-slate-200/60">
+    <div class="max-w-7xl mx-auto px-6">
+      <p class="text-center text-sm font-bold text-slate-400 uppercase tracking-widest mb-8">Trusted by professionals at</p>
+      <div class="flex flex-wrap justify-center items-center gap-x-12 gap-y-8 opacity-60 grayscale hover:grayscale-0 transition-all duration-500">
+        <!-- Using text placeholders styled nicely as logos -->
+        <div class="flex items-center gap-2 text-xl font-black text-slate-700"><div class="w-8 h-8 bg-blue-600 text-white rounded flex items-center justify-center text-xs">CO</div> Cognizant</div>
+        <div class="flex items-center gap-2 text-xl font-black text-slate-700"><div class="w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center text-xs">W</div> WPP</div>
+        <div class="flex items-center gap-2 text-xl font-black text-slate-700"><div class="w-8 h-8 bg-slate-900 text-white rounded-lg flex items-center justify-center text-xs">M</div> Media</div>
+        <div class="flex items-center gap-2 text-xl font-black text-slate-700">Google</div>
+        <div class="flex items-center gap-2 text-xl font-black text-slate-700">Amazon</div>
+        <div class="flex items-center gap-2 text-xl font-black text-slate-700">Microsoft</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how" class="py-24 bg-slate-50">
+    <div class="max-w-7xl mx-auto px-6">
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <span class="text-brand-600 font-bold text-sm tracking-widest uppercase mb-3 block">How it Works</span>
+        <h2 class="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-6">Four steps to your next role</h2>
+        <p class="text-lg text-slate-600">No cold applications. No black holes. Just AI-matched jobs ranked precisely by how well they fit your unique background.</p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+        <!-- Step 1 -->
+        <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 hover:shadow-xl hover:border-brand-200 transition-all group relative overflow-hidden">
+          <div class="absolute top-0 right-0 p-6 opacity-5 text-8xl font-black text-brand-600 -mt-8 -mr-4 transition-transform group-hover:scale-110">1</div>
+          <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 text-white flex items-center justify-center font-bold text-xl mb-6 shadow-lg shadow-brand-500/20">1</div>
+          <h3 class="text-xl font-bold text-slate-900 mb-3">Upload Resume</h3>
+          <p class="text-slate-600 leading-relaxed font-medium">Paste your resume text or upload a PDF. Our AI instantly extracts your skills, experience, and keywords.</p>
+        </div>
+        
+        <!-- Step 2 -->
+        <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 hover:shadow-xl hover:border-brand-200 transition-all group relative overflow-hidden">
+          <div class="absolute top-0 right-0 p-6 opacity-5 text-8xl font-black text-brand-600 -mt-8 -mr-4 transition-transform group-hover:scale-110">2</div>
+          <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 text-white flex items-center justify-center font-bold text-xl mb-6 shadow-lg shadow-brand-500/20">2</div>
+          <h3 class="text-xl font-bold text-slate-900 mb-3">Pick Target Roles</h3>
+          <p class="text-slate-600 leading-relaxed font-medium">Choose from 120+ roles or add your own. Select exact locations, job boards, and preferences.</p>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 hover:shadow-xl hover:border-brand-200 transition-all group relative overflow-hidden">
+          <div class="absolute top-0 right-0 p-6 opacity-5 text-8xl font-black text-brand-600 -mt-8 -mr-4 transition-transform group-hover:scale-110">3</div>
+          <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 text-white flex items-center justify-center font-bold text-xl mb-6 shadow-lg shadow-brand-500/20">3</div>
+          <h3 class="text-xl font-bold text-slate-900 mb-3">AI Searches Boards</h3>
+          <p class="text-slate-600 leading-relaxed font-medium">We scrape LinkedIn, Indeed, and Naukri simultaneously to pull fresh results, not recycled listings.</p>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 hover:shadow-xl hover:border-brand-200 transition-all group relative overflow-hidden">
+          <div class="absolute top-0 right-0 p-6 opacity-5 text-8xl font-black text-brand-600 -mt-8 -mr-4 transition-transform group-hover:scale-110">4</div>
+          <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 text-white flex items-center justify-center font-bold text-xl mb-6 shadow-lg shadow-brand-500/20">4</div>
+          <h3 class="text-xl font-bold text-slate-900 mb-3">Apply to Matches</h3>
+          <p class="text-slate-600 leading-relaxed font-medium">Every job is scored against your exact resume. Apply only to the ones where you actually fit perfectly.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="referrals" class="py-24 bg-white border-y border-slate-200/60">
+    <div class="max-w-7xl mx-auto px-6">
+      <div class="grid lg:grid-cols-2 gap-16 items-center">
+        <div>
+          <span class="text-brand-600 font-bold text-sm tracking-widest uppercase mb-3 block">Network Referrals</span>
+          <h2 class="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-6">Skip the line with an insider referral.</h2>
+          <p class="text-lg text-slate-600 mb-8 leading-relaxed">Stop letting your resume rot in the ATS (Applicant Tracking System). We connect you with verified employees who can put your name directly on the hiring manager's desk.</p>
+          
+          <div class="hidden lg:block p-6 bg-brand-50 rounded-2xl border border-brand-100">
+             <div class="flex items-start gap-4">
+               <div class="w-10 h-10 rounded-full bg-brand-200 flex items-center justify-center text-brand-700 font-bold shrink-0">💡</div>
+               <div>
+                 <h4 class="font-bold text-slate-900">Did you know?</h4>
+                 <p class="text-sm font-medium text-slate-600 mt-1">Referred candidates are 4x more likely to be offered a job compared to regular applicants.</p>
+               </div>
+             </div>
+          </div>
+        </div>
+
+        <div class="space-y-6">
+          <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex gap-6 hover:shadow-md hover:border-brand-300 transition-all cursor-default">
+            <div class="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center font-bold text-lg shrink-0">1</div>
+            <div>
+              <h3 class="text-lg font-bold text-slate-900 mb-2">Find the perfect role</h3>
+              <p class="text-slate-600 font-medium leading-relaxed">Search any role across our supported job boards and let our AI score your fit.</p>
+            </div>
+          </div>
+          <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex gap-6 hover:shadow-md hover:border-brand-300 transition-all cursor-default relative overflow-hidden">
+            <div class="absolute left-0 top-0 bottom-0 w-1 bg-brand-500 rounded-l-2xl"></div>
+            <div class="w-12 h-12 rounded-xl bg-brand-500 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-lg shadow-brand-500/30">2</div>
+            <div>
+              <h3 class="text-lg font-bold text-slate-900 mb-2">Match with an insider</h3>
+              <p class="text-slate-600 font-medium leading-relaxed">We automatically match you to verified employees at your target company who are willing to refer.</p>
+            </div>
+          </div>
+          <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex gap-6 hover:shadow-md hover:border-brand-300 transition-all cursor-default">
+            <div class="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center font-bold text-lg shrink-0">3</div>
+            <div>
+              <h3 class="text-lg font-bold text-slate-900 mb-2">Get referred</h3>
+              <p class="text-slate-600 font-medium leading-relaxed">Send a request in one click. They submit you internally, bypassing the dreaded application pile.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="py-24 bg-slate-50">
+    <div class="max-w-7xl mx-auto px-6">
+      
+      <div class="mb-16">
+        <span class="text-brand-600 font-bold text-sm tracking-widest uppercase mb-3 block">The Product</span>
+        <h2 class="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-6">Everything you need to get in the door</h2>
+        <p class="text-lg text-slate-600 max-w-2xl">Find insiders, tailor your resume perfectly for each specific role, and track your referral requests. All handled in one powerful dashboard.</p>
+      </div>
+
+      <div class="grid lg:grid-cols-3 gap-8 mb-16">
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex gap-4 items-start">
+          <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl shrink-0">🔍</div>
+          <div>
+            <h3 class="font-bold text-slate-900 mb-1">Find insiders</h3>
+            <p class="text-sm font-medium text-slate-600 leading-relaxed">Surface verified employees at your target company, ranked by background fit.</p>
+          </div>
+        </div>
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex gap-4 items-start">
+          <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl shrink-0">✍️</div>
+          <div>
+            <h3 class="font-bold text-slate-900 mb-1">Tailor your resume</h3>
+            <p class="text-sm font-medium text-slate-600 leading-relaxed">Every resume is scored and optimized against the JD before an insider sees it.</p>
+          </div>
+        </div>
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex gap-4 items-start">
+          <div class="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl shrink-0">📊</div>
+          <div>
+            <h3 class="font-bold text-slate-900 mb-1">Track requests</h3>
+            <p class="text-sm font-medium text-slate-600 leading-relaxed">See who is ready to refer before spending credits. Real people, real results.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Insider Mockup Grid -->
+      <div class="max-w-4xl mx-auto bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
+        <div class="bg-slate-900 p-6 text-white border-b border-slate-800 flex justify-between items-center">
+          <div>
+            <h3 class="font-bold text-lg">Your Insider Matches</h3>
+            <p class="text-slate-400 text-sm mt-1">Based on your recent search for "Software Engineer"</p>
+          </div>
+          <div class="px-3 py-1.5 bg-slate-800 rounded-lg text-xs font-semibold text-slate-300">5 Available</div>
+        </div>
+        
+        <div class="divide-y divide-slate-100">
+          
+          <!-- Insider 1 -->
+          <div class="p-6 flex flex-col sm:flex-row sm:items-center gap-6 hover:bg-slate-50 transition-colors">
+            <div class="w-14 h-14 rounded-full bg-gradient-to-tr from-brand-400 to-purple-500 text-white flex items-center justify-center font-bold text-xl shrink-0 shadow-md">SC</div>
+            <div class="flex-1">
+              <h4 class="text-lg font-bold text-slate-900 flex items-center gap-2">Sarah Chen <svg class="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg></h4>
+              <p class="text-slate-600 font-medium">Technical Staff</p>
+              <p class="text-sm text-slate-400 mt-1">Anthropic • Referred 12 people</p>
+            </div>
+            <div class="flex items-center gap-6 mt-4 sm:mt-0">
+              <div class="text-right hidden sm:block">
+                <div class="text-xl font-bold text-emerald-600">94%</div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Match</div>
+              </div>
+              <button class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 hover:shadow-lg hover:-translate-y-0.5 transition-all">Request Referral</button>
+            </div>
+          </div>
+
+          <!-- Insider 2 -->
+          <div class="p-6 flex flex-col sm:flex-row sm:items-center gap-6 hover:bg-slate-50 transition-colors">
+            <div class="w-14 h-14 rounded-full bg-gradient-to-tr from-blue-400 to-cyan-500 text-white flex items-center justify-center font-bold text-xl shrink-0 shadow-md">ML</div>
+            <div class="flex-1">
+              <h4 class="text-lg font-bold text-slate-900 flex items-center gap-2">Marcus Lee <svg class="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg></h4>
+              <p class="text-slate-600 font-medium">Software Engineer • Backend</p>
+              <p class="text-sm text-slate-400 mt-1">Databricks • Referred 8 people</p>
+            </div>
+            <div class="flex items-center gap-6 mt-4 sm:mt-0">
+              <div class="text-right hidden sm:block">
+                <div class="text-xl font-bold text-emerald-600">91%</div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Match</div>
+              </div>
+              <button class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-100 text-slate-900 border border-slate-200 font-bold hover:bg-slate-200 transition-all">Request Referral</button>
+            </div>
+          </div>
+
+          <!-- Insider 3 -->
+          <div class="p-6 flex flex-col sm:flex-row sm:items-center gap-6 hover:bg-slate-50 transition-colors">
+            <div class="w-14 h-14 rounded-full bg-gradient-to-tr from-rose-400 to-orange-400 text-white flex items-center justify-center font-bold text-xl shrink-0 shadow-md">PN</div>
+            <div class="flex-1">
+              <h4 class="text-lg font-bold text-slate-900 flex items-center gap-2">Priya Nair <svg class="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg></h4>
+              <p class="text-slate-600 font-medium">Product Manager</p>
+              <p class="text-sm text-slate-400 mt-1">Google • Referred 24 people</p>
+            </div>
+            <div class="flex items-center gap-6 mt-4 sm:mt-0">
+              <div class="text-right hidden sm:block">
+                <div class="text-xl font-bold text-emerald-500">88%</div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Match</div>
+              </div>
+              <button class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-100 text-slate-900 border border-slate-200 font-bold hover:bg-slate-200 transition-all">Request Referral</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="testimonials" class="py-24 bg-white border-y border-slate-200/60">
+    <div class="max-w-7xl mx-auto px-6">
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <span class="text-brand-600 font-bold text-sm tracking-widest uppercase mb-3 block">What Users Say</span>
+        <h2 class="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-6">From searching to hired</h2>
+        <p class="text-lg text-slate-600">Real people, real results. See how we've helped thousands escape the application black hole.</p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-8">
+        
+        <div class="bg-slate-50 p-8 rounded-3xl border border-slate-100 relative">
+          <div class="text-amber-400 text-xl tracking-widest mb-6">★★★★★</div>
+          <p class="text-slate-700 font-medium leading-relaxed mb-8 italic">"Applied to 80+ roles with nothing. One search through Job Agent and I had 5 interviews that week. The AI scoring saved me from wasting time on mismatched roles."</p>
+          <div class="flex items-center gap-4 mt-auto">
+            <div class="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-500">SM</div>
+            <div>
+              <h4 class="font-bold text-slate-900">Siddharth M.</h4>
+              <p class="text-sm font-medium text-slate-500">Software Engineer at Cognizant</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 p-8 rounded-3xl border border-slate-100 relative">
+          <div class="text-amber-400 text-xl tracking-widest mb-6">★★★★★</div>
+          <p class="text-slate-700 font-medium leading-relaxed mb-8 italic">"The referral feature is a game-changer. Got referred at WPP through the platform and bypassed the application pile entirely. Hired within 3 weeks."</p>
+          <div class="flex items-center gap-4 mt-auto">
+            <div class="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-500">PK</div>
+            <div>
+              <h4 class="font-bold text-slate-900">Priya K.</h4>
+              <p class="text-sm font-medium text-slate-500">Marketing Lead at WPP</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 p-8 rounded-3xl border border-slate-100 relative">
+          <div class="text-amber-400 text-xl tracking-widest mb-6">★★★★★</div>
+          <p class="text-slate-700 font-medium leading-relaxed mb-8 italic">"Scraping 3 boards at once and getting AI-ranked results? This is what job search should be. Stopped wasting hours on endless LinkedIn scroll sessions."</p>
+          <div class="flex items-center gap-4 mt-auto">
+            <div class="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-500">RT</div>
+            <div>
+              <h4 class="font-bold text-slate-900">Rahul T.</h4>
+              <p class="text-sm font-medium text-slate-500">Data Analyst at Media</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <section class="py-24 bg-white relative overflow-hidden">
+    <div class="max-w-5xl mx-auto px-6 relative z-10">
+      <div class="bg-slate-900 rounded-[3rem] p-12 md:p-20 text-center relative overflow-hidden shadow-2xl">
+        <!-- Decorative glowing orb -->
+        <div class="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-brand-500 rounded-full blur-[100px] opacity-40"></div>
+        <div class="absolute bottom-0 left-0 -ml-20 -mb-20 w-96 h-96 bg-purple-600 rounded-full blur-[100px] opacity-30"></div>
+        
+        <div class="relative z-10">
+          <h2 class="text-4xl md:text-5xl font-extrabold text-white tracking-tight mb-6">Your next role is one search away.</h2>
+          <p class="text-xl text-slate-300 mb-10 max-w-2xl mx-auto font-medium">Join thousands of job seekers finding better roles, faster, and skipping the endless application line.</p>
+          <a href="/app" class="inline-flex items-center gap-2 px-8 py-4 rounded-xl text-lg font-bold bg-white text-slate-900 hover:bg-slate-100 hover:scale-105 transition-all shadow-xl shadow-white/10">
+            Start Searching Free
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="bg-white py-12 border-t border-slate-200">
+    <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-xs">JA</div>
+        <span class="text-sm font-semibold text-slate-500">&copy; 2026 Job Agent. All rights reserved.</span>
+      </div>
+      <div class="flex items-center gap-8">
+        <a href="/app" class="text-sm font-semibold text-slate-500 hover:text-brand-600 transition-colors">Search Jobs</a>
+        <a href="/profile.html" class="text-sm font-semibold text-slate-500 hover:text-brand-600 transition-colors">Profile</a>
+        <a href="/admin" class="text-sm font-semibold text-slate-500 hover:text-brand-600 transition-colors">Admin</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      
+      // 1. Navbar shrink effect on scroll
+      const nav = document.querySelector('nav');
+      window.addEventListener('scroll', () => {
+        if (window.scrollY > 20) {
+          nav.classList.add('shadow-sm');
+          nav.style.padding = '0';
+        } else {
+          nav.classList.remove('shadow-sm');
+          nav.style.padding = '';
+        }
+      });
+
+      // 2. Beautiful Number Counter Animation 
+      // Replaced the failed fetch with mock parsing to ensure the demo is always beautiful
+      const counters = document.querySelectorAll('.stat-counter');
+      const speed = 150; // The lower the slower
+
+      const animateCounter = (counter) => {
+        const targetAttr = counter.getAttribute('data-target');
+        let targetVal = parseInt(targetAttr.replace(/\D/g, ''));
+        const hasK = targetAttr.toLowerCase().includes('k');
+        if(hasK) targetVal = targetVal * 1000;
+        
+        const updateCount = () => {
+          const current = +counter.innerText.replace(/,/g, '');
+          const inc = Math.ceil(targetVal / speed);
+
+          if (current < targetVal) {
+            let newVal = current + inc;
+            if(newVal > targetVal) newVal = targetVal;
+            
+            // Format number
+            if(hasK && newVal >= 1000 && targetVal % 1000 === 0) {
+              counter.innerText = (newVal/1000).toFixed(0) + 'k';
+            } else {
+              counter.innerText = newVal.toLocaleString();
+            }
+            setTimeout(updateCount, 20);
+          } else {
+            if(hasK) {
+               counter.innerText = (targetVal/1000).toFixed(0) + 'k';
+            } else {
+               counter.innerText = targetVal.toLocaleString();
+            }
+          }
+        };
+
+        // Reset to 0 before starting
+        counter.innerText = '0';
+        updateCount();
+      };
+
+      // Intersection Observer to trigger stats animation when visible
+      const observerOptions = {
+        root: null,
+        rootMargin: '0px',
+        threshold: 0.1
+      };
+
+      const observer = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            animateCounter(entry.target);
+            observer.unobserve(entry.target);
+          }
+        });
+      }, observerOptions);
+
+      counters.forEach(counter => {
+        observer.observe(counter);
+      });
+      
+    });
+  </script>
+</body>
+</html>

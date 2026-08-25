@@ -72,7 +72,11 @@ async def auth_send_code(req: SendCodeRequest):
     code = "".join(random.choices(string.digits, k=6))
     expires_at = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
     save_verification_code(req.email, code, expires_at)
-    return {"ok": True, "code": code, "message": "Code generated"}
+    from utils.smtp_sender import send_verification_email
+    smtp_ok = send_verification_email(req.email, code)
+    if smtp_ok:
+        return {"ok": True, "message": "Code sent"}
+    return {"ok": True, "code": code, "fallback": True, "message": "Code generated"}
 
 
 @router.post("/verify-code")

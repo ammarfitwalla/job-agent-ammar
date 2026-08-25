@@ -124,6 +124,8 @@ async def view_logs():
 # Admin dashboard redirect
 _frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "frontend")
 _admin_html = os.path.join(_frontend_dir, "admin.html")
+_landing_html = os.path.join(_frontend_dir, "landing.html")
+_app_html = os.path.join(_frontend_dir, "index.html")
 
 
 @app.get("/admin")
@@ -131,6 +133,20 @@ async def admin_redirect():
     if os.path.isfile(_admin_html):
         return FileResponse(_admin_html)
     return PlainTextResponse("admin.html not found", status_code=404)
+
+
+@app.get("/app")
+async def app_redirect():
+    if os.path.isfile(_app_html):
+        return FileResponse(_app_html)
+    return PlainTextResponse("index.html not found", status_code=404)
+
+
+@app.get("/")
+async def landing_page():
+    if os.path.isfile(_landing_html):
+        return FileResponse(_landing_html)
+    return PlainTextResponse("landing.html not found", status_code=404)
 
 
 # Serve frontend (must be last — catches all unmatched routes)

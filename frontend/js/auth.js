@@ -58,24 +58,31 @@ function promptSendCode() {
         setTimeout(() => document.querySelector(".code-digit").focus(), 100);
         return;
       }
-      sendEmailJS({
-        email: email,
-        subject: "Your Job Agent verification code",
-        passcode: d.code,
-      }).then(emailRes => {
-        if (!emailRes.ok) {
-          errEl.textContent = emailRes.error || "Failed to send email.";
-          errEl.classList.remove("hidden");
-          btn.disabled = false;
-          text.textContent = "Send Code";
-          spinner.classList.add("hidden");
-          return;
-        }
-        document.getElementById("modalEmail").textContent = email;
-        document.getElementById("authModal").style.display = "flex";
-        document.querySelectorAll(".code-digit").forEach(inp => { inp.value = ""; });
-        setTimeout(() => document.querySelector(".code-digit").focus(), 100);
-      });
+      if (d.fallback && d.code) {
+        sendEmailJS({
+          email: email,
+          subject: "Your Job Agent verification code",
+          passcode: d.code,
+        }).then(emailRes => {
+          if (!emailRes.ok) {
+            errEl.textContent = emailRes.error || "Failed to send email.";
+            errEl.classList.remove("hidden");
+            btn.disabled = false;
+            text.textContent = "Send Code";
+            spinner.classList.add("hidden");
+            return;
+          }
+          document.getElementById("modalEmail").textContent = email;
+          document.getElementById("authModal").style.display = "flex";
+          document.querySelectorAll(".code-digit").forEach(inp => { inp.value = ""; });
+          setTimeout(() => document.querySelector(".code-digit").focus(), 100);
+        });
+        return;
+      }
+      document.getElementById("modalEmail").textContent = email;
+      document.getElementById("authModal").style.display = "flex";
+      document.querySelectorAll(".code-digit").forEach(inp => { inp.value = ""; });
+      setTimeout(() => document.querySelector(".code-digit").focus(), 100);
       return;
     } else {
       errEl.textContent = d.error || "Failed to send code.";

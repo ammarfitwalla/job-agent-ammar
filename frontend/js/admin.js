@@ -1,7 +1,7 @@
 // ── Auth Guard ──
 const _adminEmail = "ammarfitwalla@gmail.com";
 const _email = localStorage.getItem("jobagent_profile_email");
-if (!_email || _email.toLowerCase() !== _adminEmail.toLowerCase()) { window.location.href = "/"; }
+if (!_email || _email.toLowerCase() !== _adminEmail.toLowerCase()) { window.location.href = "/app"; }
 
 // ── State ──
 let dailyChart, statusChart, comboChart;

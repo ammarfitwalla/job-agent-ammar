@@ -342,17 +342,19 @@ async function authSendCode() {
       btn.textContent = "Send Code";
       return;
     }
-    const emailRes = await window.sendEmailJS({
-      email: email,
-      subject: "Your Job Agent verification code",
-      passcode: d.code,
-    });
-    if (!emailRes.ok) {
-      errEl.textContent = emailRes.error || "Failed to send email. Try again.";
-      errEl.classList.remove("hidden");
-      btn.disabled = false;
-      btn.textContent = "Send Code";
-      return;
+    if (d.fallback && d.code) {
+      const emailRes = await window.sendEmailJS({
+        email: email,
+        subject: "Your Job Agent verification code",
+        passcode: d.code,
+      });
+      if (!emailRes.ok) {
+        errEl.textContent = emailRes.error || "Failed to send email. Try again.";
+        errEl.classList.remove("hidden");
+        btn.disabled = false;
+        btn.textContent = "Send Code";
+        return;
+      }
     }
     _authEmail = email;
     document.getElementById("authSentEmail").textContent = email;
