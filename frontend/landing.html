@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="scroll-smooth overflow-x-hidden">
+<html lang="en" class="scroll-smooth" style="overflow-x: clip">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -73,7 +73,7 @@
     .delay-300 { animation-delay: 300ms; }
   </style>
 </head>
-<body class="font-sans text-slate-800 bg-slate-50 antialiased selection:bg-brand-500 selection:text-white overflow-x-hidden">
+<body class="font-sans text-slate-800 bg-slate-50 antialiased selection:bg-brand-500 selection:text-white [overflow-x:clip]">
 
   <nav class="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-b border-slate-200/80 transition-all duration-300">
     <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
@@ -101,10 +101,10 @@
 
   <main class="pt-32 pb-16 lg:pt-48 lg:pb-24 bg-gradient-mesh relative overflow-hidden">
     <div class="max-w-7xl mx-auto px-6 relative z-10">
-      <div class="grid lg:grid-cols-2 gap-16 items-center">
+      <div class="grid lg:grid-cols-2 gap-16 items-center min-w-0">
         
         <!-- Hero Content -->
-        <div class="max-w-2xl text-center lg:text-left opacity-0 animate-fade-in-up">
+        <div class="max-w-2xl text-center lg:text-left opacity-0 animate-fade-in-up min-w-0">
           <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-50 border border-brand-100 text-sm font-bold text-brand-700 mb-8 shadow-sm">
             <span class="flex h-2 w-2 relative">
               <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-500 opacity-75"></span>
@@ -113,8 +113,8 @@
             AI-Powered • Multi-Board • Referrals
           </div>
           
-          <h1 class="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-slate-900 tracking-tight leading-[1.1] mb-6">
-            Stop applying into <br class="hidden sm:block"/>
+          <h1 class="text-[2rem] sm:text-6xl lg:text-7xl font-extrabold text-slate-900 tracking-tight leading-[1.1] mb-6">
+            Stop applying into <br class="sm:hidden"/>
             <span class="text-gradient">the void.</span>
           </h1>
           
@@ -151,13 +151,13 @@
           </div>
         </div>
 
-        <div class="relative w-full max-w-xl mx-auto lg:ml-auto opacity-0 animate-fade-in-up delay-200">
+        <div class="relative w-full max-w-sm sm:max-w-full opacity-0 animate-fade-in-up delay-200 min-w-0">
           <!-- Background glow for mockup -->
           <div class="absolute inset-0 bg-gradient-to-r from-brand-500 to-purple-600 rounded-[2rem] blur-2xl opacity-20 animate-pulse-slow"></div>
           
           <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-float">
             <!-- Mockup Browser Bar -->
-            <div class="bg-slate-50 border-b border-slate-100 p-4 flex items-center gap-4">
+            <div class="bg-slate-50 border-b border-slate-100 p-3 sm:p-4 flex items-center gap-4">
               <div class="flex gap-2">
                 <div class="w-3 h-3 rounded-full bg-red-400"></div>
                 <div class="w-3 h-3 rounded-full bg-amber-400"></div>
@@ -170,15 +170,15 @@
             </div>
             
             <!-- Mockup Content -->
-            <div class="p-6 bg-slate-50/50 space-y-4">
+            <div class="p-4 sm:p-6 bg-slate-50/50 space-y-3 sm:space-y-4">
               <!-- High Match Job -->
-              <div class="bg-white p-4 rounded-xl border border-green-100 shadow-sm hover:border-green-300 hover:shadow-md transition-all cursor-pointer flex gap-4 items-start group">
-                <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-green-400 to-green-600 text-white flex items-center justify-center font-bold text-xl shadow-lg shadow-green-500/20 shrink-0 group-hover:scale-105 transition-transform">
+              <div class="bg-white p-3 sm:p-4 rounded-xl border border-green-100 shadow-sm hover:border-green-300 hover:shadow-md transition-all cursor-pointer flex gap-3 sm:gap-4 items-start group">
+                <div class="w-10 h-10 sm:w-14 sm:h-14 rounded-xl bg-gradient-to-br from-green-400 to-green-600 text-white flex items-center justify-center font-bold text-base sm:text-xl shadow-lg shadow-green-500/20 shrink-0 group-hover:scale-105 transition-transform">
                   92
                 </div>
                 <div class="flex-1 min-w-0">
-                  <h4 class="font-bold text-slate-900 truncate">Senior Software Engineer</h4>
-                  <p class="text-sm font-medium text-slate-500 truncate mt-0.5">Google • Bangalore</p>
+                  <h4 class="font-bold text-slate-900 truncate text-sm sm:text-base">Senior Software Engineer</h4>
+                  <p class="text-xs sm:text-sm font-medium text-slate-500 truncate mt-0.5">Google • Bangalore</p>
                   <div class="flex flex-wrap gap-2 mt-3">
                     <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-green-50 text-green-700 border border-green-100 flex items-center gap-1">
                       <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
@@ -190,13 +190,13 @@
               </div>
 
               <!-- Med-High Match Job -->
-              <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-brand-300 hover:shadow-md transition-all cursor-pointer flex gap-4 items-start group">
-                <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white flex items-center justify-center font-bold text-xl shadow-lg shadow-emerald-500/20 shrink-0 group-hover:scale-105 transition-transform">
+              <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm hover:border-brand-300 hover:shadow-md transition-all cursor-pointer flex gap-3 sm:gap-4 items-start group">
+                <div class="w-10 h-10 sm:w-14 sm:h-14 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white flex items-center justify-center font-bold text-base sm:text-xl shadow-lg shadow-emerald-500/20 shrink-0 group-hover:scale-105 transition-transform">
                   88
                 </div>
                 <div class="flex-1 min-w-0">
-                  <h4 class="font-bold text-slate-900 truncate">Full Stack Developer</h4>
-                  <p class="text-sm font-medium text-slate-500 truncate mt-0.5">Microsoft • Hyderabad</p>
+                  <h4 class="font-bold text-slate-900 truncate text-sm sm:text-base">Full Stack Developer</h4>
+                  <p class="text-xs sm:text-sm font-medium text-slate-500 truncate mt-0.5">Microsoft • Hyderabad</p>
                   <div class="flex flex-wrap gap-2 mt-3">
                     <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-green-50 text-green-700 border border-green-100">AI Match</span>
                     <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">Indeed</span>
@@ -205,13 +205,13 @@
               </div>
 
               <!-- Medium Match Job -->
-              <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex gap-4 items-start opacity-75">
-                <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-white flex items-center justify-center font-bold text-xl shadow-lg shadow-amber-500/20 shrink-0">
+              <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm flex gap-3 sm:gap-4 items-start opacity-75">
+                <div class="w-10 h-10 sm:w-14 sm:h-14 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-white flex items-center justify-center font-bold text-base sm:text-xl shadow-lg shadow-amber-500/20 shrink-0">
                   71
                 </div>
                 <div class="flex-1 min-w-0">
-                  <h4 class="font-bold text-slate-900 truncate">Backend Engineer</h4>
-                  <p class="text-sm font-medium text-slate-500 truncate mt-0.5">Amazon • Chennai</p>
+                  <h4 class="font-bold text-slate-900 truncate text-sm sm:text-base">Backend Engineer</h4>
+                  <p class="text-xs sm:text-sm font-medium text-slate-500 truncate mt-0.5">Amazon • Chennai</p>
                   <div class="flex flex-wrap gap-2 mt-3">
                     <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">Naukri</span>
                   </div>
