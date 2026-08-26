@@ -729,8 +729,8 @@ def increment_combo_usage(role: str, site: str, city: str, state: str, country: 
                    hours_old, is_remote, job_count, jobs_json, scraped_at, usage_count, last_used_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, '[]', ?, 1, ?)
                    ON CONFLICT(role, site, city, state, country, internship_mode, hours_old, is_remote)
-                   DO UPDATE SET usage_count = usage_count + 1, last_used_at = ?""",
-                key + (now, now, now),
+                   DO UPDATE SET usage_count = usage_count + 1, last_used_at = excluded.last_used_at""",
+                key[:7] + (now, now),
             )
             conn.commit()
 
