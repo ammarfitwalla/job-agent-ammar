@@ -1,5 +1,6 @@
 import json
 import os
+import platform
 import tempfile
 from datetime import datetime, timedelta
 from fastapi import APIRouter, UploadFile, File, Form
@@ -502,3 +503,185 @@ async def delete_custom_prewarm(
     from db import remove_custom_prewarm
     removed = remove_custom_prewarm(role, site, city, state, country, internship_mode, hours_old)
     return {"ok": removed}
+
+
+# ── Server Stats ──
+
+import ctypes
+import multiprocessing
+
+if os.name == "nt":
+    import ctypes.wintypes
+
+
+def _read_proc(filename):
+    try:
+        with open(f"/proc/{filename}", "r") as f:
+            return f.read()
+    except Exception:
+        return ""
+
+
+def _meminfo_linux():
+    raw = _read_proc("meminfo")
+    if not raw:
+        return None
+    info = {}
+    for line in raw.splitlines():
+        parts = line.split()
+        if len(parts) >= 2:
+            info[parts[0].rstrip(":")] = int(parts[1])
+    total = info.get("MemTotal", 0)
+    available = info.get("MemAvailable", 0)
+    used = total - available
+    return {
+        "total_gb": round(total / 1048576, 1),
+        "used_gb": round(used / 1048576, 1),
+        "available_gb": round(available / 1048576, 1),
+        "percent": round(used / total * 100, 1) if total else 0,
+    }
+
+
+def _meminfo_windows():
+    try:
+        class MEMORYSTATUSEX(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.wintypes.DWORD),
+                ("dwMemoryLoad", ctypes.wintypes.DWORD),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+        stat = MEMORYSTATUSEX()
+        stat.dwLength = ctypes.sizeof(stat)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+        total = stat.ullTotalPhys
+        avail = stat.ullAvailPhys
+        used = total - avail
+        return {
+            "total_gb": round(total / (1024**3), 1),
+            "used_gb": round(used / (1024**3), 1),
+            "available_gb": round(avail / (1024**3), 1),
+            "percent": round(used / total * 100, 1) if total else 0,
+        }
+    except Exception:
+        return None
+
+
+def _parse_meminfo():
+    if os.name == "nt":
+        return _meminfo_windows() or {"total_gb": 0, "used_gb": 0, "available_gb": 0, "percent": 0}
+    return _meminfo_linux() or {"total_gb": 0, "used_gb": 0, "available_gb": 0, "percent": 0}
+
+
+def _parse_loadavg():
+    raw = _read_proc("loadavg")
+    if not raw:
+        try:
+            import subprocess
+            if os.name == "nt":
+                r = subprocess.run(["wmic", "cpu", "get", "loadpercentage"],
+                                   capture_output=True, text=True, timeout=5)
+                for line in r.stdout.splitlines():
+                    line = line.strip()
+                    if line.isdigit():
+                        pct = float(line) / 100
+                        return {"load_1": round(pct, 2), "load_5": round(pct, 2), "load_15": round(pct, 2)}
+            else:
+                r = subprocess.run(["cat", "/proc/loadavg"], capture_output=True, text=True, timeout=5)
+                if r.returncode == 0:
+                    parts = r.stdout.split()
+                    return {"load_1": float(parts[0]), "load_5": float(parts[1]), "load_15": float(parts[2])}
+        except Exception:
+            pass
+        return {"load_1": 0, "load_5": 0, "load_15": 0}
+    parts = raw.split()
+    return {
+        "load_1": float(parts[0]) if len(parts) > 0 else 0,
+        "load_5": float(parts[1]) if len(parts) > 1 else 0,
+        "load_15": float(parts[2]) if len(parts) > 2 else 0,
+    }
+
+
+def _parse_uptime():
+    raw = _read_proc("uptime")
+    if raw:
+        return float(raw.split()[0]) if raw.split() else 0
+    try:
+        return ctypes.windll.kernel32.GetTickCount64() / 1000
+    except Exception:
+        return 0
+
+
+def _cpu_count():
+    try:
+        return multiprocessing.cpu_count()
+    except Exception:
+        return 0
+
+
+def _disk_usage(path=None):
+    if path is None:
+        path = "C:\\" if os.name == "nt" else "/"
+    try:
+        if os.name == "nt":
+            free_bytes = ctypes.c_ulonglong(0)
+            total_bytes = ctypes.c_ulonglong(0)
+            ctypes.windll.kernel32.GetDiskFreeSpaceExW(
+                path, None, ctypes.byref(total_bytes), ctypes.byref(free_bytes)
+            )
+            total = total_bytes.value
+            free = free_bytes.value
+        else:
+            st = os.statvfs(path)
+            total = st.f_blocks * st.f_frsize
+            free = st.f_bavail * st.f_frsize
+        used = total - free
+        return {
+            "total_gb": round(total / (1024**3), 1),
+            "used_gb": round(used / (1024**3), 1),
+            "available_gb": round(free / (1024**3), 1),
+            "percent": round(used / total * 100, 1) if total else 0,
+        }
+    except Exception:
+        return {"total_gb": 0, "used_gb": 0, "available_gb": 0, "percent": 0}
+
+
+def _process_count():
+    try:
+        return len([p for p in os.listdir("/proc") if p.isdigit()])
+    except Exception:
+        pass
+    try:
+        import subprocess
+        r = subprocess.run(["tasklist", "/fo", "csv", "/nh"], capture_output=True, text=True, timeout=5)
+        return len(r.stdout.strip().splitlines()) if r.stdout.strip() else 0
+    except Exception:
+        return 0
+
+
+@router.get("/server")
+async def get_server_stats():
+    uptime_s = _parse_uptime()
+    days = int(uptime_s // 86400)
+    hours = int((uptime_s % 86400) // 3600)
+    mins = int((uptime_s % 3600) // 60)
+    uptime_str = f"{days}d {hours}h {mins}m" if days else f"{hours}h {mins}m"
+
+    return {
+        "memory": _parse_meminfo(),
+        "cpu": {
+            "cores": _cpu_count(),
+            **_parse_loadavg(),
+        },
+        "disk": _disk_usage(),
+        "uptime_seconds": uptime_s,
+        "uptime_formatted": uptime_str,
+        "processes": _process_count(),
+        "hostname": platform.node(),
+        "python_version": platform.python_version(),
+    }

@@ -71,7 +71,7 @@ function startRefresh() {
   stopRefresh();
   _refreshInterval = setInterval(() => {
     setRefreshing(true);
-    loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage(); loadCacheStats();
+    loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage(); loadCacheStats(); loadServerStats();
   }, 300000);
 }
 
@@ -185,6 +185,61 @@ async function loadComboUsage() {
       },
     });
   } catch {}
+}
+
+// ── Server Stats ──
+async function loadServerStats() {
+  try {
+    const r = await fetch("/api/admin/server", { cache: "no-cache" });
+    const d = await r.json();
+    const mem = d.memory || {};
+    const cpu = d.cpu || {};
+    const disk = d.disk || {};
+    const pctBar = (pct, color) =>
+      `<div style="background:#e2e8f0;border-radius:8px;height:10px;overflow:hidden;margin-top:8px">
+        <div style="width:${Math.min(pct, 100)}%;height:100%;background:${color};border-radius:8px;transition:width 0.6s ease"></div>
+      </div>`;
+    const statCard = (title, pct, detail, icon) => {
+      const color = pct > 90 ? "#ef4444" : pct > 70 ? "#f59e0b" : "#10b981";
+      return `<div style="background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-md);padding:20px 24px;min-width:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">${_esc(title)}</span>
+          <span style="font-size:22px">${icon}</span>
+        </div>
+        <div style="font-size:28px;font-weight:700;color:${color}">${pct}%</div>
+        <div style="font-size:13px;color:var(--text-light);margin-top:2px">${_esc(detail)}</div>
+        ${pctBar(pct, color)}
+      </div>`;
+    };
+    const memDetail = `${mem.used_gb} GB / ${mem.total_gb} GB used`;
+    const diskDetail = `${disk.used_gb} GB / ${disk.total_gb} GB used`;
+    const cpuDetail = `${cpu.cores} cores · Load: ${cpu.load_1}/${cpu.load_5}/${cpu.load_15}`;
+    const grid = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:24px">
+        ${statCard("Memory", mem.percent, memDetail, "🧠")}
+        ${statCard("CPU Load", Math.min((cpu.load_1 / cpu.cores) * 100, 100).toFixed(0), cpuDetail, "⚡")}
+        ${statCard("Disk", disk.percent, diskDetail, "💾")}
+      </div>`;
+    const row = (label, value) =>
+      `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border-lighter)">
+        <span style="color:var(--text-muted);font-size:13px">${_esc(label)}</span>
+        <span style="font-weight:600;font-size:13px;font-family:'JetBrains Mono',monospace">${_esc(String(value))}</span>
+      </div>`;
+    const details = `
+      <div style="background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-md);padding:20px 24px">
+        <h3 style="font-size:15px;font-weight:600;margin-bottom:12px">System Info</h3>
+        ${row("Hostname", d.hostname || "—")}
+        ${row("Uptime", d.uptime_formatted || "—")}
+        ${row("Processes", d.processes || "—")}
+        ${row("Python", d.python_version || "—")}
+        ${row("CPU Cores", cpu.cores)}
+        ${row("Load (1 / 5 / 15 min)", `${cpu.load_1} / ${cpu.load_5} / ${cpu.load_15}`)}
+      </div>`;
+    document.getElementById("serverStats").innerHTML = grid + details;
+  } catch (e) {
+    document.getElementById("serverStats").innerHTML =
+      `<div style="text-align:center;padding:40px;color:var(--text-light)">Failed to load server stats</div>`;
+  }
 }
 
 // ── Cache Stats ──
@@ -627,11 +682,12 @@ window.toggleDetail = toggleDetail;
 window.loadVisits = loadVisits;
 window.loadRegistrations = loadRegistrations;
 window.loadCacheStats = loadCacheStats;
+window.loadServerStats = loadServerStats;
 window.switchTab = switchTab;
 window.loadDbInfo = loadDbInfo;
 window.restoreDB = restoreDB;
 window.mergeDB = mergeDB;
 
 // ── Init ──
-loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage(); loadDbInfo(); loadCacheStats();
+loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage(); loadDbInfo(); loadCacheStats(); loadServerStats();
 startRefresh();
