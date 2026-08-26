@@ -1,4 +1,6 @@
-import { getProfile, showToast } from "./utils.js";
+import { getProfile, showToast, htmlEscape } from "./utils.js";
+
+function _esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
 let allSavedJobs = [];
 let _filterStatus = "";
@@ -100,17 +102,17 @@ function renderJobList() {
     return `
     <div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 hover:border-indigo-300 hover:shadow-md transition-all group cursor-pointer flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
       <div class="flex items-start sm:items-center gap-4 w-full sm:w-auto">
-        <div class="w-12 h-12 rounded-xl ${cc} flex items-center justify-center font-bold text-xl shrink-0">${(j.company || "?").charAt(0).toUpperCase()}</div>
+        <div class="w-12 h-12 rounded-xl ${cc} flex items-center justify-center font-bold text-xl shrink-0">${_esc((j.company || "?").charAt(0).toUpperCase())}</div>
         <div class="flex-1 min-w-0">
           <h4 class="font-bold text-slate-900 text-base group-hover:text-indigo-600 transition-colors truncate">
-            <a href="${j.url}" target="_blank">${j.title || "Untitled Position"}</a>
+            <a href="${_esc(j.url)}" target="_blank">${_esc(j.title || "Untitled Position")}</a>
           </h4>
           <div class="flex flex-wrap items-center text-sm text-slate-500 mt-0.5 gap-x-2 gap-y-1">
-            <span class="font-medium text-slate-700">${j.company || "Unknown"}</span>
-            <span class="hidden sm:inline">•</span>
-            ${j.location ? `<span class="truncate">${j.location}</span>` : ""}
+            <span class="font-medium text-slate-700">${_esc(j.company || "Unknown")}</span>
+            <span class="hidden sm:inline">&bull;</span>
+            ${j.location ? `<span class="truncate">${_esc(j.location)}</span>` : ""}
           </div>
-          ${tags.length ? `<div class="flex flex-wrap items-center gap-1.5 mt-2">${tags.map(t => `<span class="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">${t}</span>`).join("")}</div>` : ""}
+          ${tags.length ? `<div class="flex flex-wrap items-center gap-1.5 mt-2">${tags.map(t => `<span class="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">${_esc(typeof t === 'string' ? t : '')}</span>`).join("")}</div>` : ""}
         </div>
       </div>
 
@@ -128,7 +130,7 @@ function renderJobList() {
             </select>
           </div>
         </div>
-        <button class="text-xs font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg transition-colors referral-open-btn" data-job-title="${(j.title || "").replace(/"/g, '&quot;')}" data-job-url="${(j.url || "").replace(/"/g, '&quot;')}" data-company="${(j.company || "").replace(/"/g, '&quot;')}" title="See referrals at this company">
+        <button class="text-xs font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg transition-colors referral-open-btn" data-job-title="${_esc(j.title || '')}" data-job-url="${_esc(j.url || '')}" data-company="${_esc(j.company || '')}" title="See referrals at this company">
           <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
         </button>
         <button class="text-slate-400 hover:text-red-500 transition-colors p-1 rounded-md hover:bg-red-50" onclick="removeJob(${j.id})" title="Remove">

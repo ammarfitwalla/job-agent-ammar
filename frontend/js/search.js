@@ -8,7 +8,6 @@ if (typeof crypto !== 'undefined' && !crypto.randomUUID) {
 }
 
 function _esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
-function _jesc(s) { return (s || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/</g, "\\x3c").replace(/>/g, "\\x3e").replace(/`/g, "\\x60"); }
 
 // ===== STATE =====
 function relativeDate(dateStr) {
@@ -604,7 +603,7 @@ function jobCardHtml(j) {
     : "";
 
   const relevanceBtn = scored
-    ? `<button class="flex-1 sm:flex-none justify-center shrink-0 text-xs font-bold inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border bg-emerald-50/50 text-emerald-600 border-emerald-200/50 cursor-default" disabled data-url="${j.url || ''}" title="Scored">
+    ? `<button class="flex-1 sm:flex-none justify-center shrink-0 text-xs font-bold inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border bg-emerald-50/50 text-emerald-600 border-emerald-200/50 cursor-default" disabled data-url="${_esc(j.url || '')}" title="Scored">
         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
         <span>Scored</span>
       </button>`
@@ -614,7 +613,7 @@ function jobCardHtml(j) {
       </button>`;
 
   return `
-    <a href="${j.url}" target="_blank" data-job-url="${j.url || ''}" class="block group relative bg-white rounded-[20px] p-5 sm:p-6 border border-slate-200 hover:border-brand-400 hover:shadow-[0_0_0_3px_rgba(99,102,241,0.08),0_8px_30px_-4px_rgba(99,102,241,0.15)] transition-all duration-300 outline-none focus:ring-4 focus:ring-brand-500/20">
+    <a href="${_esc(j.url)}" target="_blank" data-job-url="${_esc(j.url || '')}" class="block group relative bg-white rounded-[20px] p-5 sm:p-6 border border-slate-200 hover:border-brand-400 hover:shadow-[0_0_0_3px_rgba(99,102,241,0.08),0_8px_30px_-4px_rgba(99,102,241,0.15)] transition-all duration-300 outline-none focus:ring-4 focus:ring-brand-500/20">
       
       <div class="flex flex-col-reverse sm:flex-row sm:items-start justify-between gap-4">
         <div class="flex-1 min-w-0">
@@ -1017,7 +1016,13 @@ function setStatus(msg, type = "blue") {
     icon = '<svg class="w-4 h-4 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>';
   }
 
-  el.innerHTML = `${icon}<span>${msg}</span>`;
+  el.textContent = '';
+  const tmp = document.createElement('div');
+  tmp.innerHTML = icon;
+  if (tmp.firstChild) el.appendChild(tmp.firstChild);
+  const span = document.createElement("span");
+  span.textContent = msg || "";
+  el.appendChild(span);
 }
 
 function renderTimeline(logs, status) {

@@ -84,7 +84,21 @@ function showToast(msg) {
   const el = document.createElement("div");
   el.id = "toast-msg";
   el.className = "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-sm font-medium px-5 py-3 rounded-full shadow-xl flex items-center gap-2 fade-in";
-  el.innerHTML = `<svg class="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> ${msg}`;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "w-4 h-4 text-emerald-400");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2.5");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  path.setAttribute("d", "M5 13l4 4L19 7");
+  svg.appendChild(path);
+  el.appendChild(svg);
+  const span = document.createElement("span");
+  span.textContent = msg || "";
+  el.appendChild(span);
   document.body.appendChild(el);
   setTimeout(() => {
     el.style.opacity = "0";

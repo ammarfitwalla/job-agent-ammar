@@ -717,17 +717,20 @@ def increment_custom_prewarm_usage(role: str, site: str, city: str, state: str, 
 
 def increment_combo_usage(role: str, site: str, city: str, state: str, country: str,
                            internship_mode: int, hours_old: int = 168) -> None:
-    """Bump usage_count for any combo in job_cache (config grid + user-discovered)."""
+    """Bump usage_count for any combo in job_cache (config grid + user-discovered).
+    Uses upsert so the count is recorded even if the row doesn't exist yet
+    (e.g. first search for a combo that hasn't been prewarmed)."""
     key = _cache_key(role, site, city, state, country, internship_mode, hours_old)
     now = _now()
     with _write_lock:
         with _get_conn() as (conn, cur):
             cur.execute(
-                """UPDATE job_cache
-                   SET usage_count = usage_count + 1, last_used_at = ?
-                   WHERE role=? AND site=? AND city=? AND state=? AND country=?
-                   AND internship_mode=? AND hours_old=? AND is_remote=?""",
-                (now,) + key,
+                """INSERT INTO job_cache (role, site, city, state, country, internship_mode,
+                   hours_old, is_remote, job_count, jobs_json, scraped_at, usage_count, last_used_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, '[]', ?, 1, ?)
+                   ON CONFLICT(role, site, city, state, country, internship_mode, hours_old, is_remote)
+                   DO UPDATE SET usage_count = usage_count + 1, last_used_at = ?""",
+                key + (now, now, now),
             )
             conn.commit()
 
