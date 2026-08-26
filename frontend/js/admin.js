@@ -3,6 +3,8 @@ const _adminEmail = "ammarfitwalla@gmail.com";
 const _email = localStorage.getItem("jobagent_profile_email");
 if (!_email || _email.toLowerCase() !== _adminEmail.toLowerCase()) { window.location.href = "/app"; }
 
+function _esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+
 // ── State ──
 let dailyChart, statusChart, comboChart;
 let allSessions = [];
@@ -238,14 +240,14 @@ function renderSessions(sessions) {
     const sj = JSON.stringify({ keywords: s.keywords || [], roles: s.roles || [], sites: s.sites || [], id: s.id }).replace(/'/g, "&#39;");
     return `<tr class="clickable" onclick="toggleDetail('${s.id}')">
       <td style="white-space:nowrap">${s.created_at ? formatDate(s.created_at) : "\u2014"}</td>
-      <td><span class="sid-cell" title="${s.id}">${s.id?.slice(0, 12)}...</span></td>
-      <td title="${s.user_email || ""}">${s.user_email || "\u2014"}</td>
+      <td><span class="sid-cell" title="${_esc(s.id)}">${_esc(s.id?.slice(0, 12))}...</span></td>
+      <td title="${_esc(s.user_email || "")}">${_esc(s.user_email) || "\u2014"}</td>
       <td><span class="mode-badge ${mc}">${ml}</span></td>
-      <td><span class="badge ${sc}">${s.classification}</span></td>
-      <td title="${s.location || ""}">${s.location || "\u2014"}</td>
-      <td class="sites-cell" title="${(s.sites || []).join(", ")}">${(s.sites || []).join(", ")}</td>
+      <td><span class="badge ${sc}">${_esc(s.classification)}</span></td>
+      <td title="${_esc(s.location || "")}">${_esc(s.location) || "\u2014"}</td>
+      <td class="sites-cell" title="${_esc((s.sites || []).join(", "))}">${_esc((s.sites || []).join(", "))}</td>
       <td>${s.relevant_jobs || 0}</td>
-      <td>${s.resume_available ? `<a class="job-link" href="/api/admin/sessions/${s.id}/resume" target="_blank">View &#8599;</a>` : "\u2014"}</td>
+      <td>${s.resume_available ? `<a class="job-link" href="/api/admin/sessions/${encodeURIComponent(s.id)}/resume" target="_blank">View &#8599;</a>` : "\u2014"}</td>
       <td>${formatDuration(s.elapsed_seconds)}</td>
     </tr><tr class="detail-row" id="detail-${s.id}" data-session='${sj}'><td colspan="10"><div class="detail-panel" id="panel-${s.id}"><div class="empty">Loading session details...</div></div></td></tr>`;
   }).join("") || `<tr><td colspan="10"><div class="empty">No sessions found</div></td></tr>`;
@@ -289,7 +291,7 @@ async function toggleDetail(sid) {
   try {
     const r = await fetch(`/api/admin/sessions/${sid}`);
     const d = await r.json();
-    if (d.error) { panel.innerHTML += `<div class="empty">${d.error}</div>`; return; }
+    if (d.error) { panel.innerHTML += `<div class="empty">${_esc(d.error)}</div>`; return; }
 
     const s = d.session || {};
     const refs = d.referral_requests || [];
@@ -299,12 +301,12 @@ async function toggleDetail(sid) {
       html += `<div class="section"><div class="section-title">Referral Requests (${refs.length})</div>`;
       html += `<table style="width:100%"><tr><th>Job</th><th>Score</th><th>To</th><th>Status</th><th>Date</th></tr>`;
       html += refs.map(r => `<tr>
-        <td style="max-width:280px"><span class="truncate" title="${r.job_title}">${r.job_title || "\u2014"}</span>
-          ${r.company ? `<div style="font-size:11px;color:#64748b">${r.company}</div>` : ""}</td>
+        <td style="max-width:280px"><span class="truncate" title="${_esc(r.job_title)}">${_esc(r.job_title) || "\u2014"}</span>
+          ${r.company ? `<div style="font-size:11px;color:#64748b">${_esc(r.company)}</div>` : ""}</td>
         <td class="score-cell">${r.match_score ?? 0}
           <div class="score-bar"><div class="score-fill" style="width:${Math.min(r.match_score || 0, 100)}%"></div></div>
         </td>
-        <td>${r.to_name || r.to_email || "\u2014"}${r.to_company ? ` <span style="font-size:11px;color:#64748b">(${r.to_company})</span>` : ""}</td>
+        <td>${_esc(r.to_name || r.to_email || "\u2014")}${r.to_company ? ` <span style="font-size:11px;color:#64748b">(${_esc(r.to_company)})</span>` : ""}</td>
         <td>${statusPill(r.status)}</td>
         <td style="white-space:nowrap">${formatDate(r.created_at)}</td>
       </tr>`).join("");
@@ -315,7 +317,7 @@ async function toggleDetail(sid) {
       html += `<div class="empty">${s.user_email ? "No referral requests from this user yet" : "No user recorded for this session (sessions before this change are not linked to a user)"}</div>`;
     }
     panel.innerHTML = renderBasicDetail(sid, sd) + html;
-  } catch (e) { panel.innerHTML += `<div class="empty">${e.message}</div>`; }
+  } catch (e) { panel.innerHTML += `<div class="empty">${_esc(e.message)}</div>`; }
 }
 
 function statusPill(status) {
@@ -328,9 +330,9 @@ function statusPill(status) {
 
 function renderBasicDetail(sid, s) {
   let h = "";
-  if ((s.keywords || []).length) h += `<div class="section"><div class="section-title">Keywords</div><div style="display:flex;flex-wrap:wrap;gap:4px">${s.keywords.map(k => `<span class="badge badge-blue">${k}</span>`).join("")}</div></div>`;
-  if ((s.roles || []).length) h += `<div class="section"><div class="section-title">Roles</div><div style="display:flex;flex-wrap:wrap;gap:4px">${s.roles.map(r => `<span class="badge badge-gray">${r}</span>`).join("")}</div></div>`;
-  if ((s.sites || []).length) h += `<div class="section"><div class="section-title">Sites</div><div>${s.sites.join(", ")}</div></div>`;
+  if ((s.keywords || []).length) h += `<div class="section"><div class="section-title">Keywords</div><div style="display:flex;flex-wrap:wrap;gap:4px">${s.keywords.map(k => `<span class="badge badge-blue">${_esc(k)}</span>`).join("")}</div></div>`;
+  if ((s.roles || []).length) h += `<div class="section"><div class="section-title">Roles</div><div style="display:flex;flex-wrap:wrap;gap:4px">${s.roles.map(r => `<span class="badge badge-gray">${_esc(r)}</span>`).join("")}</div></div>`;
+  if ((s.sites || []).length) h += `<div class="section"><div class="section-title">Sites</div><div>${_esc(s.sites.join(", "))}</div></div>`;
   return h ? `<div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:12px">${h}</div>` : "";
 }
 
@@ -350,8 +352,8 @@ async function loadVisits() {
       `<div class="card teal" style="flex:0 0 auto;min-width:100px"><div class="num">${stats.unique_visitors || 0}</div><div class="label">Unique</div></div>`;
 
     const ipHtml = (stats.by_ip || []).slice(0, 20).map(ip =>
-      `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid #f1f5f9;display:flex;gap:12px;align-items:center">
-        <span style="font-family:monospace;min-width:120px">${ip.ip}</span>
+      `      <div style="font-size:12px;padding:4px 0;border-bottom:1px solid #f1f5f9;display:flex;gap:12px;align-items:center">
+        <span style="font-family:monospace;min-width:120px">${_esc(ip.ip)}</span>
         <span style="color:#64748b;min-width:40px">${ip.count}x</span>
         <span style="color:#94a3b8;min-width:80px">${ip.country || ""}</span>
         <span style="color:#94a3b8;font-size:11px">${ip.last_visit ? formatDate(ip.last_visit) : ""}</span>
@@ -365,10 +367,10 @@ async function loadVisits() {
     document.getElementById("visitBody").innerHTML = visits.length
       ? visits.map(v => `<tr>
         <td style="white-space:nowrap">${v.created_at ? formatDate(v.created_at) : "\u2014"}</td>
-        <td style="font-family:monospace;font-size:12px">${v.ip_address}</td>
-        <td>${[v.country, v.region, v.city].filter(Boolean).join(", ") || "\u2014"}</td>
-        <td>${v.device_type || "\u2014"}</td>
-        <td>${v.path || "\u2014"}</td>
+        <td style="font-family:monospace;font-size:12px">${_esc(v.ip_address)}</td>
+        <td>${_esc([v.country, v.region, v.city].filter(Boolean).join(", ")) || "\u2014"}</td>
+        <td>${_esc(v.device_type) || "\u2014"}</td>
+        <td>${_esc(v.path) || "\u2014"}</td>
         <td>${v.duration_seconds ? Math.round(v.duration_seconds) + "s" : "\u2014"}</td>
       </tr>`).join("")
       : '<tr><td colspan="6"><div class="empty">No visits yet</div></td></tr>';

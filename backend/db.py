@@ -426,7 +426,7 @@ def init_db():
         conn.commit()
 
 
-def gc_sessions(max_age_minutes: int = 10080):
+def gc_sessions(max_age_minutes: int = 259200):
     with _write_lock:
         with _get_conn() as (conn, cur):
             cutoff = (datetime.utcnow() - timedelta(minutes=max_age_minutes)).isoformat()

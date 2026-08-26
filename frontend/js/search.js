@@ -7,6 +7,9 @@ if (typeof crypto !== 'undefined' && !crypto.randomUUID) {
   };
 }
 
+function _esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+function _jesc(s) { return (s || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/</g, "\\x3c").replace(/>/g, "\\x3e").replace(/`/g, "\\x60"); }
+
 // ===== STATE =====
 function relativeDate(dateStr) {
   if (!dateStr) return '';
@@ -181,10 +184,10 @@ function filterCompanyDropdown() {
   const val = input.value.toLowerCase().trim();
   const matches = val ? _companyList.filter(c => c.toLowerCase().includes(val)) : _companyList;
   let html = matches.slice(0, 30).map(c =>
-    `<div class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 transition-colors" onclick="selectCompany('${c.replace(/'/g, "\\'")}')">${c}</div>`
+    `<div class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 transition-colors company-option" data-company="${_esc(c)}">${_esc(c)}</div>`
   ).join("");
   if (val && !_companyList.some(c => c.toLowerCase() === val)) {
-    html += `<div class="px-3 py-2 text-sm cursor-pointer text-indigo-600 border-t border-slate-100 hover:bg-indigo-50 transition-colors font-medium" onclick="addCustomCompany('${val.replace(/'/g, "\\'")}', event)">+ Add "${input.value.trim()}"</div>`;
+    html += `<div class="px-3 py-2 text-sm cursor-pointer text-indigo-600 border-t border-slate-100 hover:bg-indigo-50 transition-colors font-medium add-custom-company" data-company="${_esc(val)}" data-display="${_esc(input.value.trim())}">+ Add "${_esc(input.value.trim())}"</div>`;
   }
   if (!html) {
     dropdown.classList.add("hidden");
@@ -216,7 +219,12 @@ document.addEventListener("click", function(e) {
   const dd = document.getElementById("companyDropdown");
   if (dd && !e.target.closest("#authCompany") && !e.target.closest("#companyDropdown")) {
     dd.classList.add("hidden");
+    return;
   }
+  const opt = e.target.closest(".company-option");
+  if (opt) { selectCompany(opt.dataset.company); return; }
+  const addBtn = e.target.closest(".add-custom-company");
+  if (addBtn) { addCustomCompany(addBtn.dataset.company, new Event("click")); }
 });
 
 function selectEmploymentStatus(status) {
@@ -549,16 +557,16 @@ function jobCardHtml(j) {
       : "";
 
   const levelBadge = j.job_level && j.job_level !== "Not Applicable"
-    ? `<span class="text-[11px] bg-blue-50 text-blue-700 border border-blue-100/60 px-2.5 py-0.5 rounded-full font-bold shadow-sm">${j.job_level}</span>`
+    ? `<span class="text-[11px] bg-blue-50 text-blue-700 border border-blue-100/60 px-2.5 py-0.5 rounded-full font-bold shadow-sm">${_esc(j.job_level)}</span>`
     : "";
 
   const companyHtml = j.company_url
-    ? `<span class="font-bold text-slate-900 hover:text-brand-600 transition-colors cursor-pointer" onclick="event.preventDefault(); event.stopPropagation(); window.open('${j.company_url.replace(/'/g, "\\'")}', '_blank')">${j.company}</span>`
-    : `<span class="font-bold text-slate-900">${j.company}</span>`;
+    ? `<span class="font-bold text-slate-900 hover:text-brand-600 transition-colors cursor-pointer" data-company-url="${_esc(j.company_url)}" data-company-name="${_esc(j.company)}" onclick="event.preventDefault(); event.stopPropagation(); window.open(this.dataset.companyUrl, '_blank')">${_esc(j.company)}</span>`
+    : `<span class="font-bold text-slate-900">${_esc(j.company)}</span>`;
 
   const tagsHtml = j.tags && j.tags.length
     ? `<div class="mt-3.5 flex flex-wrap gap-2">${j.tags.slice(0, 5).map(t =>
-        `<span class="text-[11px] bg-slate-50 border border-slate-100 text-slate-500 font-semibold px-2.5 py-1 rounded-lg">${typeof t === 'string' ? t : ''}</span>`
+        `<span class="text-[11px] bg-slate-50 border border-slate-100 text-slate-500 font-semibold px-2.5 py-1 rounded-lg">${_esc(typeof t === 'string' ? t : '')}</span>`
       ).join("")}${j.tags.length > 5 ? `<span class="text-[11px] text-slate-400 font-medium px-1 py-1">+${j.tags.length - 5} more</span>` : ''}</div>`
     : "";
 
@@ -591,7 +599,7 @@ function jobCardHtml(j) {
   const aiNoteHtml = j.reason
     ? `<div class="mt-4 rounded-xl bg-gradient-to-br from-brand-50/50 to-purple-50/30 border border-brand-100/50 p-3.5 flex items-start gap-3 shadow-inner">
         <div class="w-6 h-6 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0 border border-brand-50 text-brand-500 text-xs">✨</div>
-        <p class="text-xs leading-relaxed text-slate-600 font-medium pt-0.5">${j.reason}</p>
+        <p class="text-xs leading-relaxed text-slate-600 font-medium pt-0.5">${_esc(j.reason)}</p>
       </div>`
     : "";
 
@@ -600,7 +608,7 @@ function jobCardHtml(j) {
         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
         <span>Scored</span>
       </button>`
-    : `<button data-relevance-btn="true" class="flex-1 sm:flex-none justify-center shrink-0 text-xs font-bold transition-all duration-200 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border shadow-sm ${relevanceLocked ? 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed' : 'bg-white text-slate-700 border-slate-200 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'}" data-url="${j.url || ''}" onclick="event.preventDefault(); event.stopPropagation(); checkRelevance(event)" title="Check AI Relevance" ${relevanceLocked ? 'disabled' : ''}>
+    : `<button data-relevance-btn="true" class="flex-1 sm:flex-none justify-center shrink-0 text-xs font-bold transition-all duration-200 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border shadow-sm ${relevanceLocked ? 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed' : 'bg-white text-slate-700 border-slate-200 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'}" data-url="${_esc(j.url || '')}" title="Check AI Relevance" ${relevanceLocked ? 'disabled' : ''}>
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z"/></svg>
         <span>Analyze Match</span>
       </button>`;
@@ -611,15 +619,15 @@ function jobCardHtml(j) {
       <div class="flex flex-col-reverse sm:flex-row sm:items-start justify-between gap-4">
         <div class="flex-1 min-w-0">
           <div class="flex flex-wrap items-center gap-2 mb-1.5">
-            <h3 class="text-base sm:text-lg font-extrabold text-slate-900 group-hover:text-brand-600 transition-colors truncate pr-1">${j.title}</h3>
+            <h3 class="text-base sm:text-lg font-extrabold text-slate-900 group-hover:text-brand-600 transition-colors truncate pr-1">${_esc(j.title)}</h3>
             ${expBadge} ${levelBadge}
           </div>
           
           <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-sm font-medium text-slate-500">
             ${companyHtml}
             <span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span>
-            <span class="flex items-center gap-1"><svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg> ${j.location}</span>
-            ${j.salary ? `<span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span><span class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded-md font-bold">${j.salary}</span>` : ""}
+            <span class="flex items-center gap-1"><svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg> ${_esc(j.location)}</span>
+            ${j.salary ? `<span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span><span class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded-md font-bold">${_esc(j.salary)}</span>` : ""}
             ${j.date_posted ? `<span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span><span class="text-slate-400 flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> ${relativeDate(j.date_posted)}</span>` : ""}
           </div>
         </div>
@@ -646,7 +654,7 @@ function jobCardHtml(j) {
           
           ${relevanceBtn}
           
-          <button class="col-span-2 sm:col-span-1 flex-1 sm:flex-none justify-center shrink-0 text-xs font-bold transition-all duration-200 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border shadow-sm bg-indigo-50 text-indigo-700 border-indigo-200/60 hover:bg-indigo-100 hover:border-indigo-300 active:bg-indigo-200 referral-btn group/ref" data-company="${j.company.replace(/"/g, '&quot;')}" onclick="event.preventDefault(); event.stopPropagation(); window._referralJobTitle='${(j.title||'').replace(/'/g, "\\'")}'; window._referralMatchScore=0; window._referralJobUrl='${(j.url||'').replace(/'/g, "\\'")}'; showReferralUsers('${j.company.replace(/'/g, "\\'")}')" title="See referrals at this company">
+          <button class="col-span-2 sm:col-span-1 flex-1 sm:flex-none justify-center shrink-0 text-xs font-bold transition-all duration-200 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border shadow-sm bg-indigo-50 text-indigo-700 border-indigo-200/60 hover:bg-indigo-100 hover:border-indigo-300 active:bg-indigo-200 referral-btn group/ref" data-company="${_esc(j.company)}" data-job-title="${_esc(j.title || '')}" data-job-url="${_esc(j.url || '')}" title="See referrals at this company">
             <svg class="w-4 h-4 group-hover/ref:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
             <span class="referral-label">Find Referrals</span>
           </button>
@@ -1397,8 +1405,8 @@ function renderKeywords(kws) {
   if (!kws.length) { c.innerHTML = '<span class="text-sm text-slate-400 italic">No keywords found</span>'; return; }
   c.innerHTML = kws.map(k => `
     <label class="inline-flex items-center gap-2 px-3 py-2 border rounded-lg text-sm font-medium cursor-pointer transition-colors ${k.selected ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">
-      <input type="checkbox" value="${k.word}" ${k.selected ? "checked" : ""} class="hidden" onchange="this.parentElement.classList.toggle('bg-slate-900');this.parentElement.classList.toggle('text-white');this.parentElement.classList.toggle('border-slate-900');this.parentElement.classList.toggle('bg-white');this.parentElement.classList.toggle('text-slate-600');this.parentElement.classList.toggle('border-slate-200');updateKwCount()">
-      <span>${k.word}</span>
+      <input type="checkbox" value="${_esc(k.word)}" ${k.selected ? "checked" : ""} class="hidden" onchange="this.parentElement.classList.toggle('bg-slate-900');this.parentElement.classList.toggle('text-white');this.parentElement.classList.toggle('border-slate-900');this.parentElement.classList.toggle('bg-white');this.parentElement.classList.toggle('text-slate-600');this.parentElement.classList.toggle('border-slate-200');updateKwCount()">
+      <span>${_esc(k.word)}</span>
     </label>`).join("");
   updateKwCount();
 }
@@ -1411,8 +1419,8 @@ function renderSuggestedRoles(roles) {
     roles.map(r => {
       const exists = allRoles.includes(r);
       const isSelected = selectedRoles.has(r);
-      return `<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border cursor-pointer transition-colors ${isSelected ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100'}" onclick="selectSuggestedRole('${r.replace(/'/g, "\\'")}')">
-        ${r} <span class="text-indigo-400">+</span>
+      return `<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border cursor-pointer transition-colors ${isSelected ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100'} suggested-role" data-role="${_esc(r)}">
+        ${_esc(r)} <span class="text-indigo-400">+</span>
       </span>`;
     }).join("");
   c.classList.remove("hidden");
@@ -1453,8 +1461,8 @@ function renderCustomKeywords() {
   const c = document.getElementById("customKeywords");
   c.innerHTML = customKeywords.map(kw => `
     <span class="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 text-indigo-700 text-sm px-3 py-1.5 rounded-lg font-medium">
-      <span>${kw}</span>
-      <button class="remove-kw hover:text-indigo-900 ml-1 opacity-70 hover:opacity-100" data-kw="${kw}">
+      <span>${_esc(kw)}</span>
+      <button class="remove-kw hover:text-indigo-900 ml-1 opacity-70 hover:opacity-100" data-kw="${_esc(kw)}">
         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
       </button>
     </span>`).join("");
@@ -1512,17 +1520,17 @@ function renderRoles(categories) {
     if (exists) {
       c.innerHTML = '<span class="text-sm text-slate-400 italic px-2">Role already added</span>';
     } else {
-      c.innerHTML = `<button class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-emerald-50 cursor-pointer text-sm text-emerald-700 font-medium transition-colors" onclick="addRoleFromSearch('${q.replace(/'/g, "\\'")}')">
+      c.innerHTML = `<button class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-emerald-50 cursor-pointer text-sm text-emerald-700 font-medium transition-colors" data-add-role="${_esc(q)}">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        <span>Add <strong>${q}</strong> role</span>
+        <span>Add <strong>${_esc(q)}</strong> role</span>
       </button>`;
     }
     return;
   }
   c.innerHTML = allRoles.map(r =>
     `<label class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer text-sm text-slate-600 transition-colors">
-      <input type="checkbox" class="role-cb w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900" value="${r}" onchange="onRoleToggle(this)" ${selectedRoles.has(r) ? 'checked' : ''}>
-      <span>${r}</span>
+      <input type="checkbox" class="role-cb w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900" value="${_esc(r)}" onchange="onRoleToggle(this)" ${selectedRoles.has(r) ? 'checked' : ''}>
+      <span>${_esc(r)}</span>
     </label>`
   ).join("");
 }
@@ -1611,8 +1619,8 @@ function renderSelectedRoles() {
   if (!selectedRoles.size) { c.innerHTML = ""; return; }
   c.innerHTML = [...selectedRoles].map(r => `
     <span class="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 text-indigo-700 text-sm px-3 py-1.5 rounded-lg font-medium">
-      <span>${r}</span>
-      <button class="deselect-role hover:text-indigo-900 ml-1 opacity-70 hover:opacity-100" data-role="${r}">
+      <span>${_esc(r)}</span>
+      <button class="deselect-role hover:text-indigo-900 ml-1 opacity-70 hover:opacity-100" data-role="${_esc(r)}">
         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
       </button>
     </span>`).join("");
@@ -1803,7 +1811,7 @@ function applyInternshipModeUI() {
     document.body.classList.add("internship-mode");
     toggle.classList.replace("bg-slate-200", "bg-teal-500");
     knob.style.transform = "translateX(20px)";
-    btn.innerHTML = '<span class="text-base">🎓</span> Search Internships';
+    btn.innerHTML = '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0z"/></svg> Search Internships';
   } else {
     document.body.classList.remove("internship-mode");
     toggle.classList.replace("bg-teal-500", "bg-slate-200");
@@ -2231,6 +2239,25 @@ document.addEventListener('click', (e) => {
   if (!page || page < 1) return;
   _currentPage = page;
   renderAllJobs(getFilteredBaseJobs());
+});
+
+// Event delegation for refactored data-attribute buttons
+document.addEventListener('click', (e) => {
+  const addRoleBtn = e.target.closest('[data-add-role]');
+  if (addRoleBtn) { addRoleFromSearch(addRoleBtn.dataset.addRole); return; }
+  const sugRole = e.target.closest('.suggested-role');
+  if (sugRole) { selectSuggestedRole(sugRole.dataset.role); return; }
+  const relBtn = e.target.closest('[data-relevance-btn]');
+  if (relBtn) { e.preventDefault(); e.stopPropagation(); checkRelevance({ currentTarget: relBtn, preventDefault(){}, stopPropagation(){} }); return; }
+  const refBtn = e.target.closest('.referral-btn');
+  if (refBtn) {
+    e.preventDefault(); e.stopPropagation();
+    window._referralJobTitle = refBtn.dataset.jobTitle || '';
+    window._referralMatchScore = 0;
+    window._referralJobUrl = refBtn.dataset.jobUrl || '';
+    showReferralUsers(refBtn.dataset.company);
+    return;
+  }
 });
 
 // ===== RESTORE LAST SEARCH ON PAGE LOAD =====

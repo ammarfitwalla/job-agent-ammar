@@ -180,10 +180,10 @@ function filterCompanyDropdown() {
   const val = input.value.toLowerCase().trim();
   const matches = val ? _authCompanyList.filter(c => c.toLowerCase().includes(val)) : _authCompanyList;
   let html = matches.slice(0, 30).map(c =>
-    `<div class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 transition-colors" onclick="selectCompany('${c.replace(/'/g, "\\'")}')">${c}</div>`
+    `<div class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 transition-colors company-option" data-company="${c.replace(/"/g, '&quot;')}">${c.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`
   ).join("");
   if (val && !_authCompanyList.some(c => c.toLowerCase() === val)) {
-    html += `<div class="px-3 py-2 text-sm cursor-pointer text-indigo-600 border-t border-slate-100 hover:bg-indigo-50 transition-colors font-medium" onclick="addCustomCompany('${val.replace(/'/g, "\\'")}', event)">+ Add "${input.value.trim()}"</div>`;
+    html += `<div class="px-3 py-2 text-sm cursor-pointer text-indigo-600 border-t border-slate-100 hover:bg-indigo-50 transition-colors font-medium add-custom-company" data-company="${val.replace(/"/g, '&quot;')}">+ Add "${input.value.trim().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}"</div>`;
   }
   if (!html) {
     dropdown.classList.add("hidden");

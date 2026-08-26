@@ -100,6 +100,16 @@ function htmlEscape(str) {
   return div.innerHTML;
 }
 
+function jsEscape(str) {
+  return (str || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
+    .replace(/</g, "\\x3c")
+    .replace(/>/g, "\\x3e")
+    .replace(/`/g, "\\x60");
+}
+
 function formatDate(iso) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -114,6 +124,7 @@ window.updateProfileIcon = updateProfileIcon;
 window.fetchProfile = fetchProfile;
 window.showToast = showToast;
 window.htmlEscape = htmlEscape;
+window.jsEscape = jsEscape;
 window.formatDate = formatDate;
 
-export { getProfile, setProfile, clearProfile, updateNavIcon, updateProfileIcon, fetchProfile, showToast, htmlEscape, formatDate };
+export { getProfile, setProfile, clearProfile, updateNavIcon, updateProfileIcon, fetchProfile, showToast, htmlEscape, jsEscape, formatDate };
