@@ -151,6 +151,25 @@ function showAuthModal() {
   loadCompanyList();
 }
 let _pendingAuthRefresh = false;
+let _invitedBy = new URLSearchParams(window.location.search).get("ref") || "";
+let _inviteCompany = new URLSearchParams(window.location.search).get("company") || "";
+
+function prefillInviteDetails() {
+  if (_inviteCompany) {
+    const c = document.getElementById("authCompany");
+    if (c) c.value = _inviteCompany;
+    document.querySelectorAll(".employment-pill").forEach(p => {
+      p.classList.toggle("active-pill", p.dataset.status === "employed");
+    });
+    const group = document.getElementById("authCompanyGroup");
+    if (group) group.classList.remove("hidden");
+    window.selectCompany(_inviteCompany);
+  }
+  if (_invitedBy) {
+    const inviteBanner = document.getElementById("authInviteBanner");
+    if (inviteBanner) inviteBanner.classList.remove("hidden");
+  }
+}
 
 function closeAuthModal() {
   document.getElementById("authModal").classList.add("hidden");
@@ -274,7 +293,7 @@ async function authRegister() {
     } catch {}
     const r = await fetch("/api/auth/register", {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ email: _authEmail, name, company, position, linkedin_url: linkedin, search_id: searchId }),
+      body: JSON.stringify({ email: _authEmail, name, company, position, linkedin_url: linkedin, search_id: searchId, refer_opt_in: document.getElementById("authReferOptIn")?.checked ? 1 : 0, invited_by: _invitedBy || "" }),
     });
     const d = await r.json();
     if (!d.ok) {
@@ -284,6 +303,8 @@ async function authRegister() {
       btn.textContent = "Complete Profile";
       return;
     }
+    window.setProfile(d.user);
+    if (_invitedBy) showToast("Welcome! You're now available for referrals — +5 credits earned");
     const resumeFile = document.getElementById("authResume")?.files?.[0];
     if (resumeFile) {
       try {
@@ -292,7 +313,6 @@ async function authRegister() {
         await fetch(`/api/profile/resume?email=${encodeURIComponent(_authEmail)}`, { method: "POST", body: fd });
       } catch {}
     }
-    window.setProfile(d.user);
     document.getElementById("authStep4").classList.add("hidden");
     document.getElementById("authStep3").classList.remove("hidden");
     window.updateProfileIcon();
@@ -415,6 +435,7 @@ async function authVerifyCode() {
       document.getElementById("authStep4").classList.remove("hidden");
       document.getElementById("authName").value = d.user.name || d.user.email.split("@")[0];
       document.getElementById("authName").focus();
+      prefillInviteDetails();
     }
   } catch (e) {
     errEl.textContent = "Network error. Try again.";
@@ -2329,6 +2350,7 @@ function closeHowItWorks() {
 
 window.showAuthModal = showAuthModal;
 window.closeAuthModal = closeAuthModal;
+window.prefillInviteDetails = prefillInviteDetails;
 window.authGoBack = authGoBack;
 window.selectEmploymentStatus = selectEmploymentStatus;
 window.filterCompanyDropdown = filterCompanyDropdown;

@@ -419,6 +419,10 @@ tailwind.config = {
         <button type="button" onclick="selectEmploymentStatus('career_break')" class="employment-pill" data-status="career_break">Career Break</button>
       </div>
       <div class="space-y-3 mt-4">
+        <div id="authInviteBanner" class="hidden items-center gap-2.5 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2.5">
+          <svg class="w-5 h-5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>
+          <p class="text-xs text-emerald-700 font-medium">You were invited! Complete your profile and you'll be set up as a referrer (+5 credits for you and your friend).</p>
+        </div>
         <input id="authName" type="text" placeholder="Your name" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors">
         <div id="authCompanyGroup" class="relative">
           <input id="authCompany" type="text" placeholder="Company (type to search)" autocomplete="off" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors" oninput="filterCompanyDropdown()" onfocus="filterCompanyDropdown()">
@@ -426,6 +430,13 @@ tailwind.config = {
         </div>
         <input id="authPosition" type="text" placeholder="Your position (e.g. Senior Frontend Engineer)" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors">
         <input id="authLinkedin" type="url" placeholder="LinkedIn URL (optional)" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400 transition-colors">
+        <label for="authReferOptIn" class="flex items-start gap-2.5 p-3 rounded-lg bg-indigo-50/70 border border-indigo-100 cursor-pointer select-none">
+          <input id="authReferOptIn" type="checkbox" class="w-4 h-4 mt-0.5 accent-indigo-600 rounded" checked>
+          <span class="text-xs text-slate-600 leading-relaxed">
+            <span class="font-semibold text-slate-800 block">Earn referral credits by referring others</span>
+            <span class="text-slate-500">Show me as "available for referrals" at my company so seekers can request referrals from me.</span>
+          </span>
+        </label>
       </div>
       <p id="authRegisterError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center font-medium mt-2 border border-red-100"></p>
       <button id="authRegisterBtn" onclick="authRegister()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors mt-3 flex items-center justify-center gap-1.5">
@@ -494,12 +505,12 @@ tailwind.config = {
     </div>
   </div>
 
-  <script type="module" src="js/constants.js?v=14"></script>
-  <script type="module" src="js/utils.js?v=14"></script>
-  <script type="module" src="js/auth.js?v=14"></script>
-  <script type="module" src="js/profile.js?v=14"></script>
-  <script type="module" src="js/jobs.js?v=14"></script>
-  <script type="module" src="js/referrals.js?v=14"></script>
-  <script type="module" src="js/main.js?v=14"></script>
+  <script type="module" src="js/constants.js?v=15"></script>
+  <script type="module" src="js/utils.js?v=15"></script>
+  <script type="module" src="js/auth.js?v=15"></script>
+  <script type="module" src="js/profile.js?v=15"></script>
+  <script type="module" src="js/jobs.js?v=15"></script>
+  <script type="module" src="js/referrals.js?v=15"></script>
+  <script type="module" src="js/main.js?v=15"></script>
 </body>
 </html>
