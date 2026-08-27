@@ -500,26 +500,7 @@ async function useProfileResume() {
 document.addEventListener("DOMContentLoaded", () => {
   setupCodeInputs();
   window.fetchProfile().then(() => { window.updateProfileIcon(); refreshProfileResumeBtn(); });
-  loadStatsBar();
 });
-
-async function loadStatsBar() {
-  const bar = document.getElementById("statsBar");
-  const content = document.getElementById("statsContent");
-  if (!bar || !content) return;
-  try {
-    const r = await fetch("/api/stats/public");
-    const d = await r.json();
-    if (d.total_users === undefined) return;
-    content.innerHTML = [
-      { label: "searches", value: d.total_searches },
-      { label: "jobs scraped", value: d.total_scraped },
-      { label: "users", value: d.total_users },
-      { label: "companies", value: d.total_companies },
-    ].map(s => `<span class="inline-flex items-center gap-1"><span class="font-semibold text-slate-700">${s.value.toLocaleString()}</span> <span class="text-slate-400">${s.label}</span></span>`).join('<span class="text-slate-200">·</span>');
-    bar.classList.remove("hidden");
-  } catch {}
-}
 
 // ===== SAVE JOBS =====
 async function toggleSaveJob(event) {

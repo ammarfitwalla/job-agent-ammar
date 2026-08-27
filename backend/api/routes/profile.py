@@ -76,6 +76,15 @@ async def profile_upload_resume(email: str = Query(""), file: UploadFile = File(
     filepath = os.path.join(_RESUME_DIR, filename)
     with open(filepath, "wb") as f:
         f.write(await file.read())
+    user = get_user(email)
+    old = (user or {}).get("resume_filename", "") if user else ""
+    if old and old != filename:
+        try:
+            old_path = os.path.join(_RESUME_DIR, old)
+            if os.path.isfile(old_path):
+                os.remove(old_path)
+        except OSError:
+            pass
     update_user_profile(email, resume_filename=filename)
     return {"ok": True, "filename": filename}
 

@@ -1,405 +1,289 @@
-# Profile + Saved Jobs + Application Status — Implementation Plan
+# Plan: refer.me-style Referral Network ("Paste a job link → Get referred")
 
-## Overview
-
-Two linked features that transform the app from a one-shot search tool into a personal job pipeline:
-
-1. **Save jobs** with email-verified profiles
-2. **Track application status** per saved job
-
-No cron, no saved search re-scraping — just individual job saving with a lightweight account system.
+Status: PLANNED — Phase 1 (growth version) confirmed, awaiting implementation.
+Owner: Ammar
+Last updated: 2026-08-27
 
 ---
 
-## User Flow
+## 1. Objective
 
-```
-User sees a job card ─click bookmark icon─┐
-                                          ▼
-                              ┌──────────────────────┐
-                              │  "Enter your email    │
-                              │  to save jobs"        │
-                              │  [email input]        │
-                              │  [Send Code]          │
-                              └──────────────────────┘
-                                          │
-                                          ▼
-                              ┌──────────────────────┐
-                              │  Check your inbox     │
-                              │  [6-digit code input] │
-                              │  [Verify]             │
-                              └──────────────────────┘
-                                          │
-                               ┌─────────┴─────────┐
-                               ▼                    ▼
-                         ┌──────────┐      ┌──────────────────┐
-                         │ Profile  │      │ Job saved        │
-                         │ created  │      │ bookmark fills   │
-                         └──────────┘      └──────────────────┘
+Turn the existing in-app referral feature into a refer.me-style network:
 
-On return visits: email cached in localStorage → no re-auth
-User visits /profile.html → sees name, saved jobs, status dropdowns
-```
+> A user pastes any job URL, the system resolves the company + job title,
+> lists **registered employees at that company who have opted in as referrers**,
+> and lets the user send a referral request (with AI match score + resume).
+
+**Primary goal: GROWTH.** The paste-link referral flow is the demand-side UI.
+The real growth engine is **referrer supply** — seeded by Ammar's contacts and
+grown by converting every job seeker into a possible referrer.
 
 ---
 
-## Database Changes (`backend/db.py`)
+## 2. What already exists (reuse, do not rebuild)
 
-### New Table: `users`
-
-```sql
-CREATE TABLE IF NOT EXISTS users (
-    email TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-```
-
-### New Table: `verification_codes`
-
-```sql
-CREATE TABLE IF NOT EXISTS verification_codes (
-    email TEXT NOT NULL,
-    code TEXT NOT NULL,
-    expires_at TEXT NOT NULL,
-    used INTEGER DEFAULT 0,
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_vcodes_email ON verification_codes(email);
-```
-
-### New Table: `saved_jobs`
-
-```sql
-CREATE TABLE IF NOT EXISTS saved_jobs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_email TEXT NOT NULL,
-    title TEXT NOT NULL DEFAULT '',
-    company TEXT DEFAULT '',
-    url TEXT DEFAULT '',
-    location TEXT DEFAULT '',
-    salary TEXT DEFAULT '',
-    total_score INTEGER DEFAULT 0,
-    ai_score INTEGER DEFAULT 0,
-    keyword_score INTEGER DEFAULT 0,
-    reason TEXT DEFAULT '',
-    experience_level TEXT DEFAULT '',
-    tags TEXT DEFAULT '[]',
-    site TEXT DEFAULT '',
-    application_status TEXT DEFAULT 'saved',
-    saved_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (user_email) REFERENCES users(email)
-);
-CREATE INDEX IF NOT EXISTS idx_saved_email ON saved_jobs(user_email);
-CREATE INDEX IF NOT EXISTS idx_saved_status ON saved_jobs(user_email, application_status);
-```
-
-### New DB Functions
-
-| Function | What it does |
-|----------|-------------|
-| `get_user(email)` | Returns user dict or None |
-| `create_user(email, name)` | INSERT user |
-| `update_user_name(email, name)` | UPDATE name |
-| `save_verification_code(email, code, expires_at)` | INSERT code |
-| `verify_code(email, code)` | Check + mark used |
-| `add_saved_job(user_email, job_data)` | INSERT saved job |
-| `get_saved_jobs(user_email, status=None)` | SELECT, filter by status |
-| `update_saved_job_status(job_id, status)` | PATCH application_status |
-| `delete_saved_job(job_id)` | DELETE |
-| `is_job_saved(user_email, url)` | Boolean check |
+| Capability | Location |
+|---|---|
+| Referral request lifecycle (pending → accepted/declined/cancelled → complete) | `backend/api/routes/referrals.py` |
+| Dual-confirmation + `referral_credits` economy | `backend/db.py` `confirm_referral` |
+| Monthly send cap (5) | `_MONTHLY_LIMIT` in `referrals.py`, `get_monthly_sent_count` |
+| AI match scoring (0-100, resume-based, cached) | `_score_referral_job` / `_get_or_score_referral_job`, `POST /api/referrals/score` |
+| Per-company employee discovery | `GET /api/users/at-company` → `get_users_by_company` (`db.py:1143`) |
+| Referral dashboards (incoming/sent/accepted/declined) | `frontend/js/referrals.js`, `frontend/profile.html` Referral Network |
+| Resume-on-profile gating for senders | `askReferral` / `sendReferralRequest` resume checks in `referrals.js` |
+| Anonymized contact reveal (only on accept) | `referrals.py:182-191` |
+| Existing in-app "Refer" button on job cards | `search.js` (line ~2244), `jobs.js` (line ~190) |
 
 ---
 
-## New API Endpoints
+## 3. Key decisions (confirmed)
 
-### Auth Routes — `backend/api/routes/auth.py`
-
-`/api/auth` router — added to `main.py` as `app.include_router(auth.router)`
-
-| Method | Path | Body | Response | Logic |
-|--------|------|------|----------|-------|
-| `POST` | `/api/auth/send-code` | `{"email": "a@b.com"}` | `{"sent": true}` | Generate 6-digit code, store in DB with 10min expiry, send email via SMTP |
-| `POST` | `/api/auth/verify-code` | `{"email": "a@b.com", "code": "123456"}` | `{"ok": true, "user": {email, name}}` | Check code, mark used, create user if first time, return user |
-
-**Email sending:** Reuse `utils/emailer.py` — add a new function `send_verification_code(email, code)` that sends a simple plain-text email with the code. The receiver is dynamic (not `config.EMAIL_TO`).
-
-### Profile Routes — `backend/api/routes/profile.py`
-
-`/api/profile` router
-
-| Method | Path | Body | Response |
-|--------|------|------|----------|
-| `GET` | `/api/profile` | Query: `?email=x` | `{email, name, created_at}` |
-| `PUT` | `/api/profile/name` | `{"email": "x", "name": "Alex"}` | `{email, name}` |
-
-### Saved Jobs Routes — `backend/api/routes/saved_jobs.py`
-
-`/api/saved-jobs` router
-
-| Method | Path | Body / Query | Response |
-|--------|------|-------------|----------|
-| `POST` | `/api/saved-jobs` | `{"email": "x", "title": "...", "company": "...", "url": "...", ...}` | `{id, saved: true}` |
-| `GET` | `/api/saved-jobs` | Query: `?email=x&status=applied` | `[{id, title, company, ...}, ...]` |
-| `GET` | `/api/saved-jobs/check` | Query: `?email=x&url=...` | `{saved: true/false}` |
-| `PATCH` | `/api/saved-jobs/{id}/status` | `{"status": "interviewing"}` | `{ok: true}` |
-| `DELETE` | `/api/saved-jobs/{id}` | — | `{deleted: true}` |
-
-### Emailer Update
-
-Modify `utils/emailer.py`:
-
-```python
-def send_verification_code(email: str, code: str):
-    """Send 6-digit code to an arbitrary email address using existing SMTP config."""
-    # Uses config.EMAIL_USER / EMAIL_PASSWORD
-    # Receiver is the `email` parameter (not config.EMAIL_TO)
-```
+1. **URL → job details:** Best-effort parse (domain map + optional scrape),
+   with manual company + title override as the safety net.
+2. **Referrer discovery:** Opt-in only. Only employees who enable
+   "Available for referrals" are shown in the paste-link flow, the in-app
+   Refer button, and the company directory.
+3. **Frontend MVP:** Modal in the app (`index.html`) "Got a job link? Get
+   referred" + matching CTA on `landing.html`.
+4. **Scoring:** Keep the existing AI match score in the new flow.
+5. **Opt-in placement:** One-tap **"Earn referral credits" checkbox at
+   registration** + visible toggle in **profile**. Buyers become sellers.
+6. **Empty-state = viral loop (not a dead end).** When a pasted URL has zero
+   opted-in referrers, the user gets BOTH:
+   - **Invite link + credit**: shareable `/app?ref=<email>` — registering the
+     friend auto-opts them in as a referrer and grants bonus `referral_credits`
+     once they complete signup.
+   - **Notify me**: "we'll email when a referrer at X joins."
+   Shown as an empty-state card **and** a "Notify me" button near the referral
+   list generally (e.g. on the company list in the modal).
+7. **Supply seeding:** MVP referrer supply = Ammar's contacts at **Cognizant,
+   WPP Media, TCS, Wipro, Infosys** and other large companies (pitched on
+   paid-referral incentive). MAANG/FAANG recruitment deferred until the loop
+   is proven.
+8. **Proceed now** with the growth build (validated: don't wait to prove
+   supply before building).
+9. **Deployment (existing policy):** Changes stay local until Ammar says "deploy".
+   Deploy method = scp → `docker cp` → `docker restart job-agent`.
+   `config.py` is bind-mounted on Oracle and is never pushed to the repo.
 
 ---
 
-## Frontend Changes
+## 4. Backend changes
 
-### 1. Updated Job Card — `frontend/index.html`
+### 4.1 URL resolver — `POST /api/referrals/resolve-url`
 
-Each card gets a bookmark icon in the top-right corner:
+- File: new `backend/api/routes/joblink.py` (router prefix `/api/referrals`).
+  Register in `main.py`/app router include.
+- Request: `{ "url": string }` (Pydantic model).
+- Response:
+  ```json
+  {
+    "ok": true,
+    "url": "https://...",
+    "company": "Google",
+    "company_candidates": ["Google", "Alphabet/Google"],
+    "job_title": "Software Engineer",
+    "source": "domain_map" | "scrape" | "manual_hint"
+  }
+  ```
+- Pipeline (best-effort, never hard-fails):
+  1. Normalize URL; require `http://` / `https://` (return 400 otherwise).
+  2. **Domain map (primary, no network):** strip known patterns and map to
+     `COMPANIES` from `backend/config.py`:
+     - `careers.<co>.com`, `jobs.<co>.com`, `boards.<co>.com`
+     - `boards.greenhouse.io/<org-slug>`
+     - `jobs.lever.co/<org-slug>`
+     - `linkedin.com/jobs/view/<id>` and `linkedin.com/company/<slug>`
+     - `naukri.com/job/<slug>`, `naukri.com/<slug>/job`
+     - `<co>.com/jobs`, `<co>.com/careers`
+     - Normalize org slug → company name (strip `-jobs`, `-careers`, digits,
+       lowercase fuzzy match against `COMPANIES`).
+  3. **Scrape (optional enhancer, guarded):** `requests.get(url, timeout≈8)`
+     with browser-ish UA; extract:
+     - `og:site_name` → company hint
+     - `application/ld+json` JobPosting → `hiringOrganization.name`, `title`
+     - `<title>` → fallback
+     - Wrap in try/except; if blocked/failed, silently continue with
+       domain-map result.
+  4. **Fuzzy match** resolved company against registered company names in the
+     `users` table → return up to N candidates for an override dropdown.
+- Rate-limit endpoint (reuse `check_rate_limit`), e.g. `resolve_url:user` 10/60s.
 
-```html
-<div class="job-card">
-  <div class="flex justify-between">
-    <div> ... title, company, scores ... </div>
-    <button class="bookmark-btn" onclick="toggleSaveJob(event, jobData)">
-      <!-- Empty when not saved (⬡), filled when saved (⬢) -->
-      <svg class="bookmark-icon" data-saved="false">...</svg>
-    </button>
-  </div>
-  <div> ... rest of card ... </div>
-</div>
-```
+### 4.2 Referrer opt-in
 
-- **Not saved:** Outline bookmark icon (gray, semi-transparent, shows on hover)
-- **Saved:** Filled bookmark icon (blue/indigo)
-- Clicking → if user email is cached → toggle save; if not → show auth modal
+- `backend/db.py` schema migration (guarded ALTER, style of `db.py:340-353`):
+  ```sql
+  ALTER TABLE users ADD COLUMN refer_opt_in INTEGER DEFAULT 0;
+  ```
+  Add to schema/bootstrap and test schemas that build tables from scratch
+  (`tests/test_features.py`, `tests/test_integration.py`).
+- `backend/db.py` helpers:
+  - `update_user_refer_opt_in(email, value: int)`
+  - Modify `get_users_by_company` (default) → `WHERE refer_opt_in = 1`,
+    keep company-only filter. (See scope note in §8.1.)
+- `GET /api/profile` → include `refer_opt_in`.
+- `PUT /api/profile` and/or new `PUT /api/profile/refer-opt-in` → accept it.
+- `GET /api/users/at-company` returns only opted-in users; counts reflect
+  opted-in only (used by `loadCompanyUserCounts` and the referral modal).
 
-### 2. Auth Modal — `frontend/index.html`
+### 4.3 Company directory — `GET /api/referrals/companies`
 
-A modal overlay (hidden by default) with two steps:
+- Return `[{ company, referrer_count, positions: [...] }]` for companies with
+  ≥1 opted-in referrer, ordered by count desc, limited (e.g. 100).
+- Fuel for the landing "Browse companies" section (refer.me-style proof).
+- DB: `SELECT company, COUNT(*) ... WHERE refer_opt_in = 1 AND company != '' GROUP BY LOWER(company)`.
 
-**Step 1 — Email entry:**
-```
-┌──────────────────────────────────┐
-│        Save jobs to profile      │
-│                                  │
-│  Email: [___________________]    │
-│                                  │
-│         [Send Code]              │
-│                                  │
-└──────────────────────────────────┘
-```
+### 4.4 Request submit — reuse existing pipeline
 
-**Step 2 — Code verification:**
-```
-┌──────────────────────────────────┐
-│        Check your inbox          │
-│       Code sent to a@b.com       │
-│                                  │
-│  Code: [____]                    │
-│                                  │
-│         [Verify]                 │
-│                                  │
-│  ── or ──                       │
-│  [Try another email]             │
-└──────────────────────────────────┘
-```
+- `POST /api/referrals/request` unchanged (already carries `job_url`,
+  `job_title`, `company`, `match_score`, `message`, `job_description`,
+  `resume_text`). No backend change required here.
 
-On success:
-- Store `{email, name}` in `localStorage`
-- Close modal
-- Execute the save job action that triggered the flow
-- Show brief toast: "Job saved! View in Profile →"
+### 4.5 Invite + notify backend (viral loop)
 
-### 3. Profile Icon in Header — `frontend/index.html`
-
-In the top bar, next to the tagline or search controls:
-
-```html
-<a href="/profile.html" class="profile-link" title="Your Profile">
-  <svg>...</svg>  <!-- user icon -->
-</a>
-```
-
-If user is logged in (email in localStorage), show a filled user icon with a badge.
-If not logged in, show an outline icon — clicking opens the auth modal (or navigates to profile page which shows auth).
-
-### 4. Profile Page — `frontend/profile.html`
-
-New HTML page, same styling as `admin.html` (dark header, card layout, same fonts/colors).
-
-**Layout:**
-
-```
-┌──────────────────────────────────────────┐
-│  ← Back to Search      Profile           │
-├──────────────────────────────────────────┤
-│                                          │
-│  ┌────────────────────────────────────┐  │
-│  │  Your Name                         │  │
-│  │  [Alex             ✏️]             │  │
-│  │  alex@gmail.com                    │  │
-│  │  Member since Jun 2026             │  │
-│  └────────────────────────────────────┘  │
-│                                          │
-│  ┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐  │
-│  │  All (12) | Saved (5) |          │  │
-│  │  Applied (3) | Interviewing (2)  │  │
-│  │  Offer (0) | Rejected (2)       │  │
-│  └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘  │
-│                                          │
-│  ┌────────────────────────────────────┐  │
-│  │  Senior Dev @ Google       [▼]    │  │
-│  │  Saved · Jun 30, 2026             │  │
-│  │                                   │  │
-│  │  ┌──────────────────────────┐     │  │
-│  │  │ Score: 85 ──────────■── │     │  │
-│  │  └──────────────────────────┘     │  │
-│  │  AI: 45  KW: 40                   │  │
-│  └────────────────────────────────────┘  │
-│                                          │
-│  [More saved jobs...]                     │
-│                                          │
-└──────────────────────────────────────────┘
-```
-
-**Key interactive elements:**
-- **Name:** Click pencil icon → inline text input → `PUT /api/profile/name`
-- **Status dropdown per job:** `[Saved ▼]` → options: Saved, Applied, Interviewing, Offer, Rejected + Remove
-- **Status filter tabs:** Clicking filters the list
-- **Job title/company:** Clicking opens the URL in a new tab
-- **Back link:** Returns to main page with the search preserved
-
-**State on load:**
-1. Read email from `localStorage` → if none, show auth prompt
-2. `GET /api/profile?email=x` → populate name
-3. `GET /api/saved-jobs?email=x` → populate job list
-4. Default name = `email.split('@')[0]` (shown in name field)
-
-### 5. `localStorage` Schema
-
-```javascript
-{
-  "profile_email": "alex@gmail.com",
-  "profile_name": "Alex",
-  "profile_saved_at": "2026-06-30T..."
-}
-```
-
-Checked on every page load. If present, user is considered "logged in" for that session.
+- **Invite link with credit:**
+  - New `POST /api/referrals/invite` → body `{ from_email, company, inviter_link }`
+    OR generate a shareable URL client-side: `/app?ref=<from_email>`
+    (simpler — prefer sharing a URL + storing intent on signup).
+  - On user registration: if request carries `?ref=<email>`, auto-set
+    `refer_opt_in = 1` for the new user and grant bonus credits to BOTH
+    (referrer reward + new-user reward). Implement in `auth.py` register/
+    verify path, using new helper `credit_invite_bonus(email)` in `db.py`.
+- **Notify me:**
+  - New table `referral_notifies` (`email`, `company`, `created_at`) OR reuse
+    generic notify store; migration in `db.py`.
+  - `POST /api/referrals/notify` → `{ email, company }` (idempotent upsert).
+  - Background/on-demand send when the first opted-in referrer appears at a
+    company (can start as a note in admin + manual email later, or SMTP at
+    signup of a referrer matching a notify row — decide at impl time; keep MVP
+    to storing intent + a "check your notifications" surface).
+- Keep MVP lean: store notify requests; sending can be a small sweep on
+  new-referrer registration (reuse `utils/smtp_sender.py`).
 
 ---
 
-## Files to Create / Modify
+## 5. Frontend changes
 
-### New Files (4)
+### 5.1 Entry point — "Got a job link? Get referred"
 
-| File | Description |
-|------|-------------|
-| `backend/api/routes/auth.py` | `/api/auth/send-code`, `/api/auth/verify-code` |
-| `backend/api/routes/profile.py` | `/api/profile` endpoints |
-| `backend/api/routes/saved_jobs.py` | `/api/saved-jobs` CRUD |
-| `frontend/profile.html` | Profile page with saved jobs + status management |
+- `frontend/index.html`:
+  - New `referralUrlModal` (hidden, `fixed inset-0 z-50`, same pattern as
+    existing `referralModal`):
+    1. Step 1: URL input + "Find referrers" button.
+    2. Step 2: Resolved company (editable, with candidates `<select>`) +
+       job title (editable input).
+    3. Step 3: Render into existing `referralUserList`-style list (opt-in
+       referrers only) → reuse `askReferral` flow.
+    4. Empty state (no referrers): card with **Invite link** (copyable
+       `/app?ref=<email>` + company prefilled) and **Notify me** button.
+  - CTA button near header/referral badge: "Got a job link? Get referred".
+- `frontend/landing.html`:
+  - CTA in `#referrals` section → link to `/app` and auto-open modal
+    (e.g. `?refurl=1` query param handled by JS).
 
-### Modified Files (6)
+### 5.2 `frontend/js/referrals.js`
 
-| File | Changes |
-|------|---------|
-| `backend/db.py` | New tables (`users`, `verification_codes`, `saved_jobs`), new functions |
-| `backend/api/main.py` | Register new routers (`auth`, `profile`, `saved-jobs`) |
-| `frontend/index.html` | Bookmark icon on job cards, auth modal, profile icon in header |
-| `frontend/app.js` | `toggleSaveJob()`, `showAuthModal()`, `sendCode()`, `verifyCode()`, localStorage management |
-| `utils/emailer.py` | New `send_verification_code()` function |
-| `config.py` / `config.example.py` | No changes needed — existing SMTP config is sufficient |
+- New:
+  - `resolveReferralUrl(url)` → calls `/api/referrals/resolve-url`.
+  - `openReferralUrlModal()` / `closeReferralUrlModal()`.
+  - `submitReferralUrlResolve()` → fills company/title + candidates dropdown.
+  - `proceedFromUrlToReferrers()` → sets `window._referralJobUrl`,
+    `window._referralJobTitle`, `window._referralCompany`, then calls
+    existing `showReferralUsers(company)` (opt-in referrers list).
+  - `renderEmptyState(company)` → invite link (clipboard copy) + notify button.
+  - `inviteReferrer(company)`, `notifyWhenAvailable(company)` → call new APIs,
+    showToast on success.
+- Reuse (no change): `askReferral`, `sendReferralRequest`, resume gating,
+  score display, withdraw, dashboards.
+- Registration flow (`js/auth.js`): parse `?ref=<email>`; auto-check
+  "Available for referrals" → `refer_opt_in` at signup.
 
----
+### 5.3 Profile + registration opt-in control
 
-## Implementation Order
-
-```
-Phase 1 ─ DB + Auth
-  [1] Add tables to init_db() in db.py
-  [2] Add DB functions (user CRUD, code CRUD, saved job CRUD)
-  [3] Create auth.py (send-code, verify-code endpoints)
-  [4] Add send_verification_code() to emailer.py
-  [5] Test: curl POST /api/auth/send-code → check email
-
-Phase 2 ─ Saved Jobs API
-  [6] Create saved_jobs.py (all CRUD endpoints)
-  [7] Create profile.py (get + update name)
-  [8] Register all new routers in main.py
-  [9] Test: curl all endpoints
-
-Phase 3 ─ Frontend Auth Flow
-  [10] Build auth modal in index.html
-  [11] Add showAuthModal() / sendCode() / verifyCode() in app.js
-  [12] localStorage read/write helpers
-
-Phase 4 ─ Bookmark on Job Cards
-  [13] Add bookmark SVG icon to card template in app.js
-  [14] Add toggleSaveJob() handler
-  [15] Check saved status on load (GET /check)
-
-Phase 5 ─ Profile Page
-  [16] Create profile.html (header, name editing, saved jobs, status dropdowns)
-  [17] Link profile icon in main page header
-  [18] Wire all API calls in profile page JS
-
-Phase 6 ─ Polish
-  [19] Toasts for save/verify/error
-  [20] Bookmark icon animation (outline → filled)
-  [21] Mobile responsiveness for profile page
-```
+- `frontend/profile.html` edit modal: "Checkbox: Available for referrals".
+- `frontend/js/profile.js`: save via `PUT /api/profile` (include `refer_opt_in`);
+  badge on own profile + in referral lists ("✓ Available for referrals").
+- `frontend/index.html` registration modal (in `auth.js`): one-tap
+  "Earn referral credits by referring others" checkbox (default on for
+  invited users, off otherwise).
 
 ---
 
-## Data Flow Example
+## 6. Landing page copy (refer.me-style social proof)
 
-### Saving a job for the first time:
-
-```
-1. User clicks bookmark on job card
-2. app.js: check localStorage for profile_email
-3. Not found → showAuthModal()
-4. User enters email → POST /api/auth/send-code {email}
-5. Backend: generate 6-digit code, store in verification_codes, send email
-6. User enters code → POST /api/auth/verify-code {email, code}
-7. Backend: check code, create user if new, return {ok: true, user}
-8. app.js: store {profile_email, profile_name} in localStorage, close modal
-9. app.js: POST /api/saved-jobs {email, title, company, url, ...}
-10. Backend: INSERT into saved_jobs, return {id, saved: true}
-11. app.js: Update bookmark icon to filled state
-```
-
-### Returning user:
-
-```
-1. User opens page → localStorage has profile_email
-2. On job card load: GET /api/saved-jobs/check?email=x&url=y → {saved: bool}
-3. Bookmark icons pre-filled for already-saved jobs
-4. Click bookmark → POST /api/saved-jobs or DELETE /api/saved-jobs/{id}
-```
+- Update `#referrals` section: "Paste any job link, get referred by an insider
+  at the company" + 3-step explainer + CTA.
+- Optionally render company directory (`GET /api/referrals/companies`) as a
+  chip grid with referrer counts.
+- Add a "Refer talent and earn" supply-side pitch (position turnaround).
 
 ---
 
-## Edge Cases & Decisions
+## 7. Testing / verification
 
-| Case | Handling |
-|------|----------|
-| Email not received | "Resend code" button (60s cooldown), same flow |
-| Wrong code entered | Show error, allow retry (up to 5 attempts, then block 5 min) |
-| Same job saved twice | `saved_jobs` has UNIQUE(user_email, url) constraint |
-| localStorage cleared | User sees auth modal again on save attempt — verify-code will return existing user |
-| User deletes all localStorage | Same as above — they verify with same email, get back to their profile |
-| Job already saved, status updated | Inline PATCH, no re-auth needed |
-| Multiple tabs open | Each tab checks localStorage independently — consistent within tab |
-| User icon in header | Show filled icon + badge if logged in; outline icon if not |
+- Existing suites must still pass:
+  - `backend/tests/test_features.py`
+  - `backend/tests/test_integration.py`
+  (pytest; confirm command before running.)
+- Add tests:
+  - resolve-url: valid LinkedIn/greenhouse/lever/naukri/careers URLs →
+    company + title; garbage URL → 400; blocked scrape → domain-map fallback.
+  - opt-in: at-company filters to `refer_opt_in = 1`; profile PUT persists it.
+  - companies endpoint: only counted companies have opt-in referrers.
+  - invite: new user via `?ref=` auto-opts-in + credits granted to both.
+  - notify: idempotent upsert; notifies fired on new referrer at a company.
+- Static checks after edits: `python -m py_compile` on backend files,
+  `node --check` on JS files.
+
+## 8. Open questions / scope notes
+
+1. **Opt-in behavior change for existing in-app Refer button:**
+   Filtering `at-company` to opted-in means currently-registered employees who
+   never toggled the flag disappear from ALL referral discovery until they opt
+   in. Confirmed: **yes, opt-in only everywhere.** Mitigation: prominent opt-in
+   at registration + profile + one-time banner prompt on existing users.
+2. Scrape reliability varies by site (anti-bot). Domain map + manual override
+   is the safety net so UX never hard-fails.
+3. Self-refer (user pasting a URL for their own opted-in company/profile) →
+   already rejected by "You can't refer yourself" in the request flow.
+4. `referral_credits` are currently counted/shown but not yet redeemable —
+   making them spendable (redemption, referral-bonus display, leaderboard) is a
+   Phase 2 supply-incentive item.
+5. Notify sending mechanics: MVP = store intent (+ optional SMTP sweep on new
+   referrer). Full in-app notification center is later.
+
+---
+
+## 9. Pending work NOT part of this plan (tracked elsewhere)
+
+- NVIDIA provider integration (Nemotron-3-Super-120B-a12b as primary LLM,
+  Groq fallback) — config `NVIDIA_API_KEY`/`NVIDIA_MODEL`, new
+  `NvidiaProvider`, `llm_client.py` wiring.
+- Stats bar removal from `/app` (index.html + search.js) + profile resume
+  delete-on-re-upload (profile.py) — edits complete locally, not yet deployed.
+- No deployments happen until Ammar explicitly says "deploy"
+  (copy-paste workflow: scp → docker cp → docker restart).
+  `config.py` never committed/pushed (contains live secrets).
+
+## 10. Supply seeding checklist
+
+- [ ] Recruit Ammar's contacts at **Cognizant, WPP Media, TCS, Wipro, Infosys**
+      to register + opt in as referrers (paid-referral pitch).
+- [ ] For each: verify position/company (manual at first), enable opt-in.
+- [ ] Confirm at least 2-3 opted-in referrers at ~5 companies before marketing
+      the paste-link feature.
+- [ ] After loop is proven: begin MAANG/FAANG referrer recruitment.
+- [ ] Aim: every new user is offered the opt-in (buyers → sellers).
+
+## 11. Implementation order (suggested)
+
+1. `db.py`: migration (`refer_opt_in`, `referral_notifies`) +
+   `update_user_refer_opt_in` + `get_users_by_company` opt-in filter +
+   company-directory + invite-credit + notify helpers.
+2. `joblink.py`: resolve-url route + tests.
+3. `referrals.py`/`users.py`/`profile.py`/`auth.py`: expose opt-in, companies,
+   invite, notify endpoints.
+4. `referrals.js` + `index.html`: URL modal flow + empty-state (invite/notify).
+5. `profile.html`/`profile.js` + `auth.js`: opt-in toggle at profile + registration.
+6. `landing.html`: CTA + copy (+ company chips if decided).
+7. Run tests + static checks → report to Ammar → wait for deploy go-ahead.
