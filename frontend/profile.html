@@ -204,6 +204,10 @@ tailwind.config = {
 
             <div class="flex flex-wrap gap-2 mb-5">
               <span id="profileStatusBadge" class="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700"></span>
+              <span id="profileReferBadge" class="hidden inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider bg-green-50 text-green-700 gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>
+                <span id="profileReferBadgeText">Available for referrals</span>
+              </span>
               <span id="profileCredits" class="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 gap-1">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                 <span id="profileCreditsText">0 referral credits</span>
@@ -269,6 +273,13 @@ tailwind.config = {
               <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">LinkedIn URL</label>
               <input type="url" id="editLinkedin" placeholder="https://linkedin.com/in/..." class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:bg-white transition-colors">
             </div>
+            <label for="editReferOptIn" class="flex items-start gap-2.5 p-3 rounded-lg bg-indigo-50/70 border border-indigo-100 cursor-pointer select-none">
+              <input type="checkbox" id="editReferOptIn" class="w-4 h-4 mt-0.5 accent-indigo-600 rounded">
+              <span class="text-xs text-slate-600 leading-relaxed">
+                <span class="font-semibold text-slate-800 block">Available for referrals</span>
+                <span class="text-slate-500">Be findable by seekers at your company. You'll earn +5 credits per successful refer.</span>
+              </span>
+            </label>
             <div>
               <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Resume</label>
               <div id="profileResumeEditSection">
@@ -483,12 +494,12 @@ tailwind.config = {
     </div>
   </div>
 
-  <script type="module" src="js/constants.js?v=12"></script>
-  <script type="module" src="js/utils.js?v=12"></script>
-  <script type="module" src="js/auth.js?v=12"></script>
-  <script type="module" src="js/profile.js?v=12"></script>
-  <script type="module" src="js/jobs.js?v=12"></script>
-  <script type="module" src="js/referrals.js?v=12"></script>
-  <script type="module" src="js/main.js?v=12"></script>
+  <script type="module" src="js/constants.js?v=14"></script>
+  <script type="module" src="js/utils.js?v=14"></script>
+  <script type="module" src="js/auth.js?v=14"></script>
+  <script type="module" src="js/profile.js?v=14"></script>
+  <script type="module" src="js/jobs.js?v=14"></script>
+  <script type="module" src="js/referrals.js?v=14"></script>
+  <script type="module" src="js/main.js?v=14"></script>
 </body>
 </html>

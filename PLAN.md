@@ -1,6 +1,6 @@
 # Plan: refer.me-style Referral Network ("Paste a job link → Get referred")
 
-Status: PLANNED — Phase 1 (growth version) confirmed, awaiting implementation.
+Status: PLANNED — Phase 1 (growth version) confirmed. Scope = **Option 2 (lean cut)**: domain-map + manual override, notify stores intent only; scrape + notify-email sweep deferred.
 Owner: Ammar
 Last updated: 2026-08-27
 
@@ -38,8 +38,10 @@ grown by converting every job seeker into a possible referrer.
 
 ## 3. Key decisions (confirmed)
 
-1. **URL → job details:** Best-effort parse (domain map + optional scrape),
-   with manual company + title override as the safety net.
+1. **URL → job details:** Best-effort parse (**domain map only, no scrape in
+   MVP**) + manual company/title override as the safety net. Scrape step is a
+   purely additive enhancement later — resolver returns domain-map result as a
+   base, scrape (if added) only improves it, never hard-fails.
 2. **Referrer discovery:** Opt-in only. Only employees who enable
    "Available for referrals" are shown in the paste-link flow, the in-app
    Refer button, and the company directory.
@@ -88,7 +90,7 @@ grown by converting every job seeker into a possible referrer.
   ```
 - Pipeline (best-effort, never hard-fails):
   1. Normalize URL; require `http://` / `https://` (return 400 otherwise).
-  2. **Domain map (primary, no network):** strip known patterns and map to
+  2. **Domain map (primary, no network, MVP):** strip known patterns and map to
      `COMPANIES` from `backend/config.py`:
      - `careers.<co>.com`, `jobs.<co>.com`, `boards.<co>.com`
      - `boards.greenhouse.io/<org-slug>`
@@ -98,13 +100,12 @@ grown by converting every job seeker into a possible referrer.
      - `<co>.com/jobs`, `<co>.com/careers`
      - Normalize org slug → company name (strip `-jobs`, `-careers`, digits,
        lowercase fuzzy match against `COMPANIES`).
-  3. **Scrape (optional enhancer, guarded):** `requests.get(url, timeout≈8)`
-     with browser-ish UA; extract:
-     - `og:site_name` → company hint
-     - `application/ld+json` JobPosting → `hiringOrganization.name`, `title`
-     - `<title>` → fallback
-     - Wrap in try/except; if blocked/failed, silently continue with
-       domain-map result.
+  3. *[DEFERRED — additive later]* **Scrape (optional enhancer, guarded):**
+     `requests.get(url, timeout≈8)` with browser-ish UA; extract
+     `og:site_name`, `application/ld+json` JobPosting
+     (`hiringOrganization.name`, `title`), `<title>` fallback. Wrapped in
+     try/except; if blocked/failed, silently continue with domain-map result.
+     No schema/frontend change needed when added.
   4. **Fuzzy match** resolved company against registered company names in the
      `users` table → return up to N candidates for an override dropdown.
 - Rate-limit endpoint (reuse `check_rate_limit`), e.g. `resolve_url:user` 10/60s.
@@ -149,16 +150,14 @@ grown by converting every job seeker into a possible referrer.
     `refer_opt_in = 1` for the new user and grant bonus credits to BOTH
     (referrer reward + new-user reward). Implement in `auth.py` register/
     verify path, using new helper `credit_invite_bonus(email)` in `db.py`.
-- **Notify me:**
+- **Notify me (MVP = store intent only):**
   - New table `referral_notifies` (`email`, `company`, `created_at`) OR reuse
     generic notify store; migration in `db.py`.
   - `POST /api/referrals/notify` → `{ email, company }` (idempotent upsert).
-  - Background/on-demand send when the first opted-in referrer appears at a
-    company (can start as a note in admin + manual email later, or SMTP at
-    signup of a referrer matching a notify row — decide at impl time; keep MVP
-    to storing intent + a "check your notifications" surface).
-- Keep MVP lean: store notify requests; sending can be a small sweep on
-  new-referrer registration (reuse `utils/smtp_sender.py`).
+  - *[DEFERRED]* Background/on-demand SMTP sweep when the first opted-in
+    referrer appears at a company (reuse `utils/smtp_sender.py`). MVP: store
+    intent + surface in admin; Ammar emails the person manually once supply
+    exists.
 
 ---
 
@@ -227,11 +226,11 @@ grown by converting every job seeker into a possible referrer.
   (pytest; confirm command before running.)
 - Add tests:
   - resolve-url: valid LinkedIn/greenhouse/lever/naukri/careers URLs →
-    company + title; garbage URL → 400; blocked scrape → domain-map fallback.
+    company + title; garbage URL → 400.
   - opt-in: at-company filters to `refer_opt_in = 1`; profile PUT persists it.
   - companies endpoint: only counted companies have opt-in referrers.
   - invite: new user via `?ref=` auto-opts-in + credits granted to both.
-  - notify: idempotent upsert; notifies fired on new referrer at a company.
+  - notify: idempotent upsert.
 - Static checks after edits: `python -m py_compile` on backend files,
   `node --check` on JS files.
 
@@ -242,15 +241,15 @@ grown by converting every job seeker into a possible referrer.
    never toggled the flag disappear from ALL referral discovery until they opt
    in. Confirmed: **yes, opt-in only everywhere.** Mitigation: prominent opt-in
    at registration + profile + one-time banner prompt on existing users.
-2. Scrape reliability varies by site (anti-bot). Domain map + manual override
-   is the safety net so UX never hard-fails.
+2. Scrape step deferred (Option 2). Domain map + manual override is the safety
+   net so UX never hard-fails; scrape can be added later as a pure enhancement.
 3. Self-refer (user pasting a URL for their own opted-in company/profile) →
    already rejected by "You can't refer yourself" in the request flow.
 4. `referral_credits` are currently counted/shown but not yet redeemable —
    making them spendable (redemption, referral-bonus display, leaderboard) is a
    Phase 2 supply-incentive item.
-5. Notify sending mechanics: MVP = store intent (+ optional SMTP sweep on new
-   referrer). Full in-app notification center is later.
+5. Notify sending mechanics: MVP = store intent only (surfaced in admin; manual
+   email by Ammar). SMTP sweep + in-app notification center are later.
 
 ---
 
@@ -275,15 +274,22 @@ grown by converting every job seeker into a possible referrer.
 - [ ] After loop is proven: begin MAANG/FAANG referrer recruitment.
 - [ ] Aim: every new user is offered the opt-in (buyers → sellers).
 
-## 11. Implementation order (suggested)
+## 11. Implementation order (suggested, Option 2)
 
 1. `db.py`: migration (`refer_opt_in`, `referral_notifies`) +
    `update_user_refer_opt_in` + `get_users_by_company` opt-in filter +
    company-directory + invite-credit + notify helpers.
-2. `joblink.py`: resolve-url route + tests.
+2. `joblink.py`: resolve-url route (domain map only) + tests.
 3. `referrals.py`/`users.py`/`profile.py`/`auth.py`: expose opt-in, companies,
    invite, notify endpoints.
 4. `referrals.js` + `index.html`: URL modal flow + empty-state (invite/notify).
 5. `profile.html`/`profile.js` + `auth.js`: opt-in toggle at profile + registration.
 6. `landing.html`: CTA + copy (+ company chips if decided).
 7. Run tests + static checks → report to Ammar → wait for deploy go-ahead.
+
+## 12. DEFERRED (add later, no schema/frontend changes needed)
+
+- **Scrape enhancer** for resolve-url (OG tags / JSON-LD JobPosting), guarded
+  with domain-map fallback.
+- **Notify SMTP sweep** when a referrer opts in at a company someone requested.
+- **In-app notification center**; redeemable referral credits / leaderboard.

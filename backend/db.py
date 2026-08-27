@@ -103,6 +103,8 @@ def init_db():
                 linkedin_url TEXT DEFAULT '',
                 resume_filename TEXT DEFAULT '',
                 referral_credits INTEGER DEFAULT 0,
+                refer_opt_in INTEGER DEFAULT 0,
+                invited_by TEXT DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -249,6 +251,14 @@ def init_db():
                 UNIQUE(from_email, job_url, resume_hash)
             );
             CREATE INDEX IF NOT EXISTS idx_ref_scores_email ON referral_scores(from_email, job_url);
+            CREATE TABLE IF NOT EXISTS referral_notifies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL,
+                company TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                UNIQUE(email, company)
+            );
+            CREATE INDEX IF NOT EXISTS idx_ref_notifies_company ON referral_notifies(company);
             CREATE TABLE IF NOT EXISTS custom_roles (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -337,6 +347,16 @@ def init_db():
                 cur.execute(f"ALTER TABLE users ADD COLUMN {col}")
             except Exception:
                 pass
+        # Migrate existing users table — add referrer opt-in flag
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN refer_opt_in INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        # Migrate existing users table — add invited_by column
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN invited_by TEXT DEFAULT ''")
+        except Exception:
+            pass
         # Migrate existing referral_requests table
         try:
             cur.execute("ALTER TABLE referral_requests ADD COLUMN credit_awarded INTEGER DEFAULT 0")
@@ -1144,6 +1164,104 @@ def get_users_by_company(company: str) -> list[dict]:
     with _get_conn() as (conn, cur):
         cur.execute("SELECT email, name, position, linkedin_url FROM users WHERE LOWER(company) = LOWER(?)", (company,))
         return [dict(r) for r in cur.fetchall()]
+
+
+def get_referrers_by_company(company: str) -> list[dict]:
+    """Opted-in employees at a company who are available for referrals."""
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            "SELECT email, name, position, linkedin_url FROM users "
+            "WHERE LOWER(company) = LOWER(?) AND refer_opt_in = 1",
+            (company,))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_company_referrer_counts(companies: list[str], exclude_email: str = None) -> dict[str, int]:
+    """Returns dict of {lowercased_company: opted-in referrer count}, optionally excluding a user."""
+    if not companies:
+        return {}
+    with _get_conn() as (conn, cur):
+        params = [c.lower() for c in companies]
+        placeholders = ",".join("?" * len(params))
+        query = (
+            "SELECT LOWER(company), COUNT(*) FROM users "
+            f"WHERE LOWER(company) IN ({placeholders}) AND company != '' AND refer_opt_in = 1"
+        )
+        if exclude_email:
+            query += " AND email != ?"
+            params.append(exclude_email)
+        query += " GROUP BY LOWER(company)"
+        cur.execute(query, params)
+        return dict(cur.fetchall())
+
+
+def get_company_directory(limit: int = 100) -> list[dict]:
+    """Companies with >=1 opted-in referrer, ordered by count desc."""
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            "SELECT UPPER(SUBSTR(company,1,1)) || SUBSTR(company,2) AS company, COUNT(*) AS referrer_count "
+            "FROM users WHERE refer_opt_in = 1 AND company != '' "
+            "GROUP BY LOWER(company) HAVING referrer_count >= 1 ORDER BY referrer_count DESC, company ASC LIMIT ?",
+            (limit,))
+        return [{"company": r["company"], "referrer_count": r["referrer_count"]} for r in cur.fetchall()]
+
+
+def get_distinct_companies(limit: int = 500) -> list[str]:
+    """Distinct company names seen on any registered user profile (for override candidates)."""
+    with _get_conn() as (conn, cur):
+        cur.execute("SELECT DISTINCT company FROM users WHERE company != '' ORDER BY company LIMIT ?", (limit,))
+        return [r["company"] for r in cur.fetchall()]
+
+
+def update_user_refer_opt_in(email: str, value: int) -> bool:
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute("UPDATE users SET refer_opt_in = ?, updated_at = ? WHERE email = ?",
+                         (1 if value else 0, _now(), email))
+            conn.commit()
+            return cur.rowcount > 0
+
+
+def add_referral_notify(email: str, company: str) -> bool:
+    """Idempotent upsert of a 'notify me when a referrer joins' request."""
+    if not email or not company:
+        return False
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute(
+                "INSERT OR IGNORE INTO referral_notifies (email, company, created_at) VALUES (?, ?, ?)",
+                (email, company, _now()))
+            conn.commit()
+            return cur.rowcount > 0
+
+
+def get_referral_notifies(company: str = "") -> list[dict]:
+    with _get_conn() as (conn, cur):
+        if company:
+            cur.execute("SELECT * FROM referral_notifies WHERE LOWER(company) = LOWER(?) ORDER BY created_at DESC", (company,))
+        else:
+            cur.execute("SELECT * FROM referral_notifies ORDER BY created_at DESC")
+        return [dict(r) for r in cur.fetchall()]
+
+
+def credit_invite_bonus(email: str, amount: int = 5) -> bool:
+    """Grant bonus referral credits to a user (invite reward)."""
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute("UPDATE users SET referral_credits = referral_credits + ?, updated_at = ? WHERE email = ?",
+                         (amount, _now(), email))
+            conn.commit()
+            return cur.rowcount > 0
+
+
+def set_user_invited_by(email: str, inviter_email: str) -> bool:
+    """Record who invited this user via a referral link."""
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute("UPDATE users SET invited_by = ?, refer_opt_in = 1, updated_at = ? WHERE email = ?",
+                         (inviter_email, _now(), email))
+            conn.commit()
+            return cur.rowcount > 0
 
 
 def get_company_user_counts(companies: list[str], exclude_email: str = None) -> dict[str, int]:

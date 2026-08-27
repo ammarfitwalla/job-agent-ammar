@@ -500,6 +500,9 @@ async function useProfileResume() {
 document.addEventListener("DOMContentLoaded", () => {
   setupCodeInputs();
   window.fetchProfile().then(() => { window.updateProfileIcon(); refreshProfileResumeBtn(); });
+  if (new URLSearchParams(window.location.search).get("refurl")) {
+    setTimeout(() => window.openReferralUrlModal && window.openReferralUrlModal(), 400);
+  }
 });
 
 // ===== SAVE JOBS =====

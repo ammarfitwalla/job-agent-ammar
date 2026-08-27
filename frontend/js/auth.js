@@ -4,6 +4,8 @@ import { getProfile, setProfile, showToast, updateNavIcon } from "./utils.js";
 let emailjsInitialized = false;
 let _authEmail = "";
 let _authCompanyList = [];
+let _invitedBy = (new URLSearchParams(window.location.search)).get("ref") || "";
+let _inviteCompany = (new URLSearchParams(window.location.search)).get("company") || "";
 
 function initEmailJS() {
   if (typeof emailjs !== "undefined" && EMAILJS_PUBLIC_KEY) {
@@ -141,6 +143,7 @@ function verifyCode() {
         document.getElementById("authStep4").classList.remove("hidden");
         document.getElementById("authName").value = d.user.name || d.user.email.split("@")[0];
         document.getElementById("authName").focus();
+        prefillInviteDetails();
       }
     } else {
       errEl.textContent = d.error || "Invalid code provided.";
@@ -163,6 +166,22 @@ function selectEmploymentStatus(status) {
       document.getElementById("authCompany").value = "";
     }
   }
+}
+
+function prefillInviteDetails(done) {
+  // When arriving via /app?ref=<email>&company=X, prefill company + show invite notice.
+  if (_inviteCompany) {
+    const c = document.getElementById("authCompany");
+    if (c) c.value = _inviteCompany;
+    document.querySelectorAll("#authStep4 .employment-pill").forEach(p => {
+      p.classList.toggle("active-pill", p.dataset.status === "employed");
+    });
+  }
+  if (_invitedBy) {
+    const inviteBanner = document.getElementById("authInviteBanner");
+    if (inviteBanner) inviteBanner.classList.remove("hidden");
+  }
+  if (done) done();
 }
 
 async function loadAuthCompanyList() {
@@ -241,7 +260,15 @@ async function authRegister() {
   try {
     const r = await fetch("/api/auth/register", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: _authEmail, name, company, position, linkedin_url: linkedin }),
+      body: JSON.stringify({
+        email: _authEmail,
+        name,
+        company,
+        position,
+        linkedin_url: linkedin,
+        refer_opt_in: document.getElementById("authReferOptIn")?.checked ? 1 : 0,
+        invited_by: _invitedBy || "",
+      }),
     });
     const d = await r.json();
     if (!d.ok) {
@@ -255,7 +282,11 @@ async function authRegister() {
     document.getElementById("authStep4").classList.add("hidden");
     closeAuthModal();
     window.loadProfile();
-    showToast("Profile complete!");
+    if (d.user && d.user.email && _invitedBy) {
+      showToast("Welcome! You're now available for referrals — +5 credits earned");
+    } else {
+      showToast("Profile complete!");
+    }
   } catch (e) {
     errEl.textContent = "Network error. Try again.";
     errEl.classList.remove("hidden");
@@ -272,6 +303,7 @@ if (!window.closeAuthModal) window.closeAuthModal = closeAuthModal;
 if (!window.showAuthModal) window.showAuthModal = showAuthModal;
 window.verifyCode = verifyCode;
 if (!window.selectEmploymentStatus) window.selectEmploymentStatus = selectEmploymentStatus;
+if (!window.prefillInviteDetails) window.prefillInviteDetails = prefillInviteDetails;
 if (!window.filterCompanyDropdown) window.filterCompanyDropdown = filterCompanyDropdown;
 if (!window.addCustomCompany) window.addCustomCompany = addCustomCompany;
 if (!window.selectCompany) window.selectCompany = selectCompany;

@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import os, time
 
-from db import get_user, update_user_name, update_user_profile, get_saved_jobs_status_counts
+from db import get_user, update_user_name, update_user_profile, update_user_refer_opt_in, get_saved_jobs_status_counts
 
 _RESUME_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
 os.makedirs(_RESUME_DIR, exist_ok=True)
@@ -22,6 +22,7 @@ class UpdateProfileRequest(BaseModel):
     company: str | None = None
     position: str | None = None
     linkedin_url: str | None = None
+    refer_opt_in: int | None = None
 
 
 @router.get("")
@@ -40,6 +41,7 @@ async def profile_get(email: str = Query("")):
         "linkedin_url": user.get("linkedin_url", ""),
         "resume_filename": user.get("resume_filename", ""),
         "referral_credits": user.get("referral_credits", 0),
+        "refer_opt_in": user.get("refer_opt_in", 0),
         "created_at": user["created_at"],
         "status_counts": status_counts,
     }
@@ -51,6 +53,12 @@ async def profile_update_name(req: UpdateNameRequest):
     return {"ok": True, "email": req.email, "name": req.name}
 
 
+@router.put("/refer-opt-in")
+async def profile_update_refer_opt_in(req: UpdateProfileRequest):
+    update_user_refer_opt_in(req.email, bool(req.refer_opt_in))
+    return {"ok": True, "refer_opt_in": 1 if req.refer_opt_in else 0}
+
+
 @router.put("")
 async def profile_update(req: UpdateProfileRequest):
     update_user_profile(
@@ -60,6 +68,8 @@ async def profile_update(req: UpdateProfileRequest):
         position=req.position,
         linkedin_url=req.linkedin_url,
     )
+    if req.refer_opt_in is not None:
+        update_user_refer_opt_in(req.email, bool(req.refer_opt_in))
     user = get_user(req.email)
     return {"ok": True, "user": user}
 

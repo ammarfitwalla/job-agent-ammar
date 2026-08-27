@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from api.routes import jobs, scrape, email, resume, roles, states, events, leads, admin, auth, profile, saved_jobs, visits, users, referrals, stats
+from api.routes import jobs, scrape, email, resume, roles, states, events, leads, admin, auth, profile, saved_jobs, visits, users, referrals, stats, joblink
 import json
 from db import init_db
 
@@ -82,6 +82,7 @@ app.include_router(saved_jobs.router)
 app.include_router(visits.router)
 app.include_router(users.router)
 app.include_router(referrals.router)
+app.include_router(joblink.router)
 app.include_router(stats.router)
 
 

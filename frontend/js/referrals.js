@@ -81,6 +81,157 @@ function refreshReferralRemaining() {
     }).catch(() => {});
 }
 
+// ── "Got a job link? Get referred" URL modal ──
+
+function openReferralUrlModal() {
+  const modal = document.getElementById("referralUrlModal");
+  if (!modal) return;
+  const step1 = document.getElementById("referralUrlStep1");
+  const step2 = document.getElementById("referralUrlStep2");
+  if (step1) step1.classList.remove("hidden");
+  if (step2) step2.classList.add("hidden");
+  const input = document.getElementById("referralUrlInput");
+  if (input) { input.value = ""; setTimeout(() => input.focus(), 50); }
+  if (step2) {
+    const c = document.getElementById("referralUrlCompany");
+    if (c) c.value = "";
+    const t = document.getElementById("referralUrlTitle");
+    if (t) t.value = "";
+    const dd = document.getElementById("referralUrlCandidates");
+    if (dd) dd.classList.add("hidden");
+  }
+  modal.classList.remove("hidden");
+  modal.classList.add("flex");
+}
+
+function closeReferralUrlModal() {
+  const modal = document.getElementById("referralUrlModal");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.classList.remove("flex");
+}
+
+async function submitReferralUrlResolve() {
+  const input = document.getElementById("referralUrlInput");
+  const errEl = document.getElementById("referralUrlError");
+  const btn = document.getElementById("referralUrlFindBtn");
+  const url = input ? input.value.trim() : "";
+  if (!url) { showToast("Paste a job link first"); return; }
+  if (!/^https?:\/\//i.test(url)) { showToast("Link must start with http:// or https://"); return; }
+  if (errEl) errEl.classList.add("hidden");
+  if (btn) { btn.disabled = true; btn.textContent = "Finding referrers..."; }
+  try {
+    const r = await fetch("/api/referrals/resolve-url", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    if (r.status === 429) { showToast("Too many requests. Try again in a minute."); return; }
+    const d = await r.json();
+    if (!d.ok) { showToast(d.detail || "Could not read that link"); return; }
+    window._referralJobUrl = d.url || url;
+    window._referralJobTitle = d.job_title || "";
+    const company = d.company || "";
+    const candidates = d.company_candidates || [];
+
+    const step1 = document.getElementById("referralUrlStep1");
+    const step2 = document.getElementById("referralUrlStep2");
+    if (step1) step1.classList.add("hidden");
+    if (step2) step2.classList.remove("hidden");
+
+    const c = document.getElementById("referralUrlCompany");
+    if (c) c.value = company;
+    const t = document.getElementById("referralUrlTitle");
+    if (t) t.value = d.job_title || "";
+    const hint = document.getElementById("referralUrlHint");
+    if (hint) {
+      hint.innerHTML = d.company
+        ? `<span class="text-emerald-600 font-medium">We found the company automatically.</span> Fix it if it looks wrong.`
+        : `<span class="text-amber-600 font-medium">We couldn't detect the company — type it below.</span>`;
+    }
+
+    const dd = document.getElementById("referralUrlCandidates");
+    if (dd) {
+      const unique = [...new Set([...candidates, company].filter(Boolean))];
+      if (unique.length <= 1) {
+        dd.classList.add("hidden");
+      } else {
+        dd.innerHTML = unique.map(cand =>
+          `<button type="button" onclick="document.getElementById('referralUrlCompany').value='${htmlEscape(cand.replace(/'/g, "\\'"))}'"
+             class="block w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg">${htmlEscape(cand)}</button>`).join("");
+        dd.classList.remove("hidden");
+      }
+    }
+  } catch (e) {
+    showToast("Network error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Find referrers"; }
+  }
+}
+
+function proceedFromUrlToReferrers() {
+  const c = document.getElementById("referralUrlCompany");
+  const t = document.getElementById("referralUrlTitle");
+  const company = c ? c.value.trim() : "";
+  if (!company) { showToast("Enter the company name first"); return; }
+  window._referralCompany = company;
+  window._referralJobTitle = (t && t.value.trim()) || window._referralJobTitle || "";
+  closeReferralUrlModal();
+  showReferralUsers(company);
+}
+
+// ── Empty-state viral loop: invite a friend / get notified ──
+
+function getShareLink(company) {
+  const profile = getProfile();
+  if (!profile || !profile.email) return "";
+  let link = `${window.location.origin}/app?ref=${encodeURIComponent(profile.email)}`;
+  if (company) link += `&company=${encodeURIComponent(company)}`;
+  return link;
+}
+
+async function inviteReferrer(company) {
+  const profile = getProfile();
+  if (!profile) { closeReferralModal(); window.showAuthModal(); return; }
+  const link = getShareLink(company);
+  try {
+    const r = await fetch("/api/referrals/invite", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: profile.email, company: company || "" }),
+    });
+    const d = await r.json();
+    if (!d.ok && d.error) { showToast(d.error); return; }
+  } catch {}
+  const shareText = `I'm looking for referrals on Career Hub — use this link to join and earn referral credits: ${link}`;
+  if (navigator.share && navigator.canShare) {
+    try {
+      await navigator.share({ title: "Join Career Hub", text: shareText, url: link });
+      return;
+    } catch (e) { /* fall through to clipboard */ }
+  }
+  try {
+    await navigator.clipboard.writeText(link);
+    showToast("Invite link copied! Share it and you both earn referral credits");
+  } catch {
+    showToast(`Share this link: ${link}`);
+  }
+}
+
+async function notifyWhenAvailable(company) {
+  const profile = getProfile();
+  if (!profile) { closeReferralModal(); window.showAuthModal(); return; }
+  if (!company) { showToast("No company selected"); return; }
+  try {
+    const r = await fetch("/api/referrals/notify", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: profile.email, company }),
+    });
+    const d = await r.json();
+    showToast(d.ok ? `We'll notify you when a referrer at ${company} joins` : (d.error || "Could not save that"));
+  } catch {
+    showToast("Network error");
+  }
+}
+
 async function showReferralUsers(company) {
   if (!_companyUserCache[company]) {
     try {
@@ -139,7 +290,18 @@ async function showReferralUsers(company) {
       <div class="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-3">
         <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
       </div>
-      <p class="text-sm font-medium text-slate-600">No one from ${htmlEscape(company)} on the platform yet</p>
+      <p class="text-sm font-medium text-slate-600">No referrers at ${htmlEscape(company)} yet</p>
+      <p class="text-xs text-slate-400 mt-1">Be the first to open the door — invite an insider or get notified.</p>
+      <div class="mt-4 space-y-2 max-w-xs mx-auto">
+        <button onclick="inviteReferrer('${htmlEscape(company.replace(/'/g, "\\'"))}')" class="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-700 hover:to-brand-700 px-4 py-2.5 rounded-xl transition-all shadow-sm shadow-brand-500/20">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>
+          Invite a friend at ${htmlEscape(company)} — earn credits
+        </button>
+        <button onclick="notifyWhenAvailable('${htmlEscape(company.replace(/'/g, "\\'"))}')" class="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/60 px-4 py-2.5 rounded-xl transition-colors">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0M3.124 7.5A8.969 8.969 0 015.292 3m13.416 0a8.969 8.969 0 012.168 4.5"/></svg>
+          Notify me when a referrer joins
+        </button>
+      </div>
     </div>`;
     modal.classList.remove("hidden");
     modal.classList.add("flex");
@@ -911,5 +1073,11 @@ window.copyRefEmail = copyRefEmail;
 window.loadCompanyUserCounts = loadCompanyUserCounts;
 window.refreshCompanyUser = refreshCompanyUser;
 window.checkReferralNotifications = checkReferralNotifications;
+window.openReferralUrlModal = openReferralUrlModal;
+window.closeReferralUrlModal = closeReferralUrlModal;
+window.submitReferralUrlResolve = submitReferralUrlResolve;
+window.proceedFromUrlToReferrers = proceedFromUrlToReferrers;
+window.inviteReferrer = inviteReferrer;
+window.notifyWhenAvailable = notifyWhenAvailable;
 
 export { loadReferrals, refreshReferralRemaining, loadCompanyUserCounts, refreshCompanyUser, checkReferralNotifications };

@@ -144,6 +144,14 @@
       <div class="flex items-center gap-4">
         <button id="howItWorksBtn" class="hidden sm:flex text-sm font-semibold text-slate-500 hover:text-brand-600 transition-colors items-center gap-1.5">How it Works</button>
 
+        <button onclick="openReferralUrlModal()" id="referralUrlCta" class="hidden sm:inline-flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-700 hover:to-brand-700 px-3.5 py-2 rounded-xl transition-all shadow-sm shadow-brand-500/20">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/></svg>
+          Got a job link? Get referred
+        </button>
+        <button onclick="openReferralUrlModal()" id="referralUrlCtaMobile" class="sm:hidden w-9 h-9 rounded-full flex items-center justify-center text-brand-600 bg-brand-50 border border-brand-200 hover:bg-brand-100 transition-colors" title="Get referred from a job link">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/></svg>
+        </button>
+
         <div class="h-4 w-px bg-slate-200 hidden sm:block"></div>
 
         <a href="/profile.html" class="relative w-10 h-10 rounded-full flex items-center justify-center text-slate-600 hover:text-brand-600 hover:bg-brand-50 bg-slate-100 border border-slate-200 transition-all shadow-sm" id="profileLink" title="Your Profile">
@@ -420,6 +428,10 @@
           <button type="button" onclick="selectEmploymentStatus('career_break')" class="employment-pill" data-status="career_break">Career Break</button>
         </div>
         <div class="space-y-3 mt-4">
+          <div id="authInviteBanner" class="hidden items-center gap-2.5 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2.5">
+            <svg class="w-5 h-5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>
+            <p class="text-xs text-emerald-700 font-medium">You were invited! Complete your profile and you'll be set up as a referrer (+5 credits for you and your friend).</p>
+          </div>
           <input id="authName" type="text" placeholder="Your name" class="premium-input-field">
           <div id="authCompanyGroup" class="relative">
             <input id="authCompany" type="text" placeholder="Company (type to search)" autocomplete="off" class="premium-input-field" oninput="filterCompanyDropdown()" onfocus="filterCompanyDropdown()">
@@ -427,6 +439,13 @@
           </div>
           <input id="authPosition" type="text" placeholder="Your position (e.g. Senior Frontend Engineer)" class="premium-input-field">
           <input id="authLinkedin" type="url" placeholder="LinkedIn URL (optional)" class="premium-input-field">
+          <label for="authReferOptIn" class="flex items-start gap-2.5 p-3 rounded-xl bg-indigo-50/70 border border-indigo-100 cursor-pointer select-none group">
+            <input id="authReferOptIn" type="checkbox" class="w-4 h-4 mt-0.5 accent-indigo-600 rounded" ${_invitedBy ? "checked" : ""}>
+            <span class="text-xs text-slate-600 leading-relaxed">
+              <span class="font-semibold text-slate-800">Earn referral credits by referring others</span>
+              <span class="block text-slate-500">Show me as "available for referrals" at my company so seekers can request referrals from me.</span>
+            </span>
+          </label>
           <div class="mt-1">
             <label class="block text-xs text-slate-500 mb-1">Resume (optional — PDF, DOCX, TXT)</label>
             <input id="authResume" type="file" accept=".pdf,.docx,.txt" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 file:cursor-pointer">
@@ -437,6 +456,50 @@
           Complete Profile
         </button>
 
+      </div>
+    </div>
+  </div>
+
+  <!-- Referral URL Modal -->
+  <div id="referralUrlModal" class="hidden fixed inset-0 z-[55] items-center justify-center bg-black/40" onclick="if (event.target === this) closeReferralUrlModal()">
+    <div class="bg-white rounded-2xl p-6 shadow-xl w-full max-w-lg mx-4 space-y-4" onclick="event.stopPropagation()">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/></svg>
+            Get referred from any job link
+          </div>
+          <p class="text-sm text-slate-500 mt-0.5">We find the company and match you with referrers.</p>
+        </div>
+        <button onclick="closeReferralUrlModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <!-- Step 1: paste URL -->
+      <div id="referralUrlStep1" class="space-y-3">
+        <input id="referralUrlInput" type="url" placeholder="Paste the job link (LinkedIn, Naukri, company site...)" class="premium-input-field" onkeydown="if (event.key === 'Enter') submitReferralUrlResolve()">
+        <button id="referralUrlFindBtn" onclick="submitReferralUrlResolve()" class="premium-btn premium-btn-primary w-full font-bold">
+          Find referrers
+        </button>
+      </div>
+
+      <!-- Step 2: confirm company + title -->
+      <div id="referralUrlStep2" class="hidden space-y-3">
+        <p id="referralUrlHint" class="text-sm text-slate-500"></p>
+        <div class="relative" id="referralUrlCompanyGroup">
+          <label class="block text-xs font-semibold text-slate-500 mb-1">Company</label>
+          <input id="referralUrlCompany" type="text" placeholder="Company name" class="premium-input-field" oninput="document.getElementById('referralUrlCandidates').classList.add('hidden')">
+          <div id="referralUrlCandidates" class="hidden absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-auto"></div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1">Job title <span class="font-normal text-slate-400">(optional)</span></label>
+          <input id="referralUrlTitle" type="text" placeholder="e.g. Senior Software Engineer" class="premium-input-field">
+        </div>
+        <button onclick="proceedFromUrlToReferrers()" class="premium-btn premium-btn-primary w-full font-bold">
+          See available referrers
+        </button>
+        <button onclick="closeReferralUrlModal()" class="w-full text-sm text-slate-400 hover:text-slate-600 py-1 transition-colors">Cancel</button>
       </div>
     </div>
   </div>
@@ -545,10 +608,10 @@
     </div>
   </div>
 
-  <script type="module" src="/js/constants.js?v=13"></script>
-  <script type="module" src="/js/utils.js?v=13"></script>
-  <script type="module" src="/js/auth.js?v=13"></script>
-  <script type="module" src="/js/referrals.js?v=13"></script>
-  <script src="/js/search.js?v=13"></script>
+  <script type="module" src="/js/constants.js?v=14"></script>
+  <script type="module" src="/js/utils.js?v=14"></script>
+  <script type="module" src="/js/auth.js?v=14"></script>
+  <script type="module" src="/js/referrals.js?v=14"></script>
+  <script src="/js/search.js?v=14"></script>
 </body>
 </html>

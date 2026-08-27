@@ -58,6 +58,9 @@ function renderProfile(data) {
   const creditText = document.getElementById("profileCreditsText");
   if (creditText) creditText.textContent = credits + " referral credits";
 
+  const referBadge = document.getElementById("profileReferBadge");
+  if (referBadge) referBadge.classList.toggle("hidden", !data.refer_opt_in);
+
   const company = data.company || "";
   const position = data.position || "";
   const linkedin = data.linkedin_url || "";
@@ -195,6 +198,8 @@ function enableProfileEdit() {
   document.getElementById("editRole").value = profile.position || "";
   const linkedinEl = document.getElementById("profileLinkedin");
   document.getElementById("editLinkedin").value = linkedinEl.classList.contains("hidden") ? "" : linkedinEl.href;
+  const referOptIn = document.getElementById("editReferOptIn");
+  if (referOptIn) referOptIn.checked = !!profile.refer_opt_in;
   document.getElementById("editName").focus();
 }
 
@@ -228,7 +233,7 @@ async function saveProfile() {
   try {
     const r = await fetch("/api/profile", {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: profile.email, company, position, linkedin_url: linkedin }),
+      body: JSON.stringify({ email: profile.email, company, position, linkedin_url: linkedin, refer_opt_in: document.getElementById("editReferOptIn")?.checked ? 1 : 0 }),
     });
     const d = await r.json();
     if (d.ok) {

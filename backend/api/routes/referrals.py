@@ -12,6 +12,7 @@ from db import (
     update_referral_status, get_referral_request, get_user, confirm_referral,
     get_pending_referral, get_monthly_sent_count,
     get_referral_score, upsert_referral_score,
+    add_referral_notify, get_referral_notifies,
 )
 from utils.rate_limiter import check_rate_limit
 
@@ -249,3 +250,43 @@ async def referral_remaining(email: str = ""):
     sent_count = get_monthly_sent_count(email)
     remaining = max(0, _MONTHLY_LIMIT - sent_count)
     return {"remaining": remaining, "limit": _MONTHLY_LIMIT}
+
+
+class NotifyRequest(BaseModel):
+    email: str
+    company: str = ""
+
+
+@router.post("/notify")
+async def referral_notify(req: NotifyRequest):
+    if not req.email or not req.company:
+        return {"ok": False, "error": "email and company are required"}
+    if not check_rate_limit(f"referral_notify:{req.email}", 5, 60):
+        return JSONResponse(status_code=429, content={"ok": False, "error": "Too many requests. Try again later."})
+    added = add_referral_notify(req.email.strip(), req.company.strip())
+    return {"ok": True, "new": added}
+
+
+class InviteRequest(BaseModel):
+    email: str
+    company: str = ""
+
+
+@router.post("/invite")
+async def referral_invite(req: InviteRequest):
+    """Generate a shareable invite link that auto-opts the invitee in as a referrer."""
+    if not req.email:
+        return {"ok": False, "error": "email is required"}
+    user = get_user(req.email)
+    if not user:
+        return {"ok": False, "error": "User not found"}
+    base = "/app?ref="
+    link = f"{base}{req.email}"
+    if req.company:
+        link += f"&company={req.company}"
+    return {"ok": True, "link": link, "from_email": req.email}
+
+
+@router.get("/notifies")
+async def referral_notifies_list(company: str = ""):
+    return {"notifies": get_referral_notifies(company=company)}

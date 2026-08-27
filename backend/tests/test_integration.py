@@ -33,9 +33,19 @@ def _init_test_db():
             position TEXT DEFAULT '',
             linkedin_url TEXT DEFAULT '',
             referral_credits INTEGER DEFAULT 0,
+            refer_opt_in INTEGER DEFAULT 0,
+            invited_by TEXT DEFAULT '',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS referral_notifies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            company TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(email, company)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ref_notifies_company ON referral_notifies(company);
         CREATE TABLE IF NOT EXISTS verification_codes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL,
@@ -469,6 +479,151 @@ class TestIntegrationReferralFlow(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertTrue(data["ok"])
+
+
+class TestIntegrationReferralNetworkFlow(unittest.TestCase):
+    def setUp(self):
+        _init_test_db()
+        conn, cur = _fresh_conn()
+        cur.execute("DELETE FROM referral_requests")
+        cur.execute("DELETE FROM referral_notifies")
+        conn.commit()
+        conn.close()
+
+        self._conn_patcher = patch("db._get_conn", _make_conn_patch())
+        self._conn_patcher.start()
+
+        self._dev_mode_patcher = patch("api.routes.auth.DEV_MODE", True)
+        self._dev_mode_patcher.start()
+        self._db_dev_mode_patcher = patch("db.DEV_MODE", True)
+        self._db_dev_mode_patcher.start()
+
+        from utils.rate_limiter import _limits
+        _limits.clear()
+
+        from fastapi.testclient import TestClient
+        from api.main import app
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        self._conn_patcher.stop()
+        self._dev_mode_patcher.stop()
+        self._db_dev_mode_patcher.stop()
+
+    def _register(self, email, name, company="", refer_opt_in=0, invited_by=""):
+        r = self.client.post("/api/auth/verify-code", json={"email": email, "code": "123456"})
+        self.assertEqual(r.status_code, 200)
+        return self.client.post("/api/auth/register", json={
+            "email": email, "name": name, "company": company,
+            "refer_opt_in": refer_opt_in, "invited_by": invited_by,
+        })
+
+    def test_01_opt_in_gating_at_company(self):
+        self._register("seeker@example.com", "Seeker", "Google")           # not opted in
+        self._register("ref1@example.com", "Referrer One", "Google", 1)    # opted in
+
+        r = self.client.get("/api/users/at-company?company=Google")
+        self.assertEqual(r.status_code, 200)
+        emails = [u["email"] for u in r.json()["users"]]
+        self.assertIn("ref1@example.com", emails)
+        self.assertNotIn("seeker@example.com", emails)
+
+    def test_02_company_counts_opt_in_only(self):
+        self._register("counta@example.com", "Count A", "Meta", 1)
+        self._register("countb@example.com", "Count B", "Meta")            # not opted in
+        r = self.client.get("/api/users/company-counts?companies=Meta")
+        self.assertEqual(r.json()["counts"]["Meta"], 1)
+
+    def test_03_refer_opt_in_toggle(self):
+        self._register("toggle@example.com", "Toggler", "Amazon")
+        r = self.client.put("/api/profile/refer-opt-in", json={"email": "toggle@example.com", "refer_opt_in": 1})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["ok"], True)
+        r2 = self.client.get("/api/profile?email=toggle@example.com")
+        self.assertEqual(r2.json()["refer_opt_in"], 1)
+
+        r3 = self.client.put("/api/profile", json={
+            "email": "toggle@example.com", "name": "Toggler", "refer_opt_in": 0,
+        })
+        self.assertTrue(r3.json()["ok"])
+        r4 = self.client.get("/api/profile?email=toggle@example.com")
+        self.assertEqual(r4.json()["refer_opt_in"], 0)
+
+    def test_04_referrer_directory(self):
+        self._register("dir1@example.com", "Dir One", "Netflix", 1)
+        self._register("dir2@example.com", "Dir Two", "Netflix")           # not opted in
+        r = self.client.get("/api/users/referrer-directory")
+        self.assertEqual(r.status_code, 200)
+        companies = [c["company"] for c in r.json()["companies"]]
+        self.assertIn("Netflix", companies)
+
+    def test_05_invite_bonus_credits(self):
+        self._register("inviter@example.com", "Inviter", "Apple", 1)
+        r = self._register("invitee@example.com", "Invitee", "Apple", invited_by="inviter@example.com")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["user"]["refer_opt_in"], 1)
+
+        inviter = self.client.get("/api/profile?email=inviter@example.com").json()
+        invitee = self.client.get("/api/profile?email=invitee@example.com").json()
+        self.assertEqual(inviter["referral_credits"], 5)
+        self.assertEqual(invitee["referral_credits"], 5)
+
+        conn, cur = _fresh_conn()
+        cur.execute("SELECT invited_by FROM users WHERE email = 'invitee@example.com'")
+        self.assertEqual(cur.fetchone()[0], "inviter@example.com")
+        conn.close()
+
+    def test_06_invite_self_blocked(self):
+        self._register("selfie@example.com", "Selfie", "Uber")
+        r = self._register("selfie@example.com", "Selfie", "Uber", invited_by="selfie@example.com")
+        self.assertTrue(r.json()["ok"])
+        conn, cur = _fresh_conn()
+        cur.execute("SELECT invited_by, referral_credits FROM users WHERE email = 'selfie@example.com'")
+        row = cur.fetchone()
+        conn.close()
+        self.assertEqual(row[0], "")
+        self.assertEqual(row[1], 0)
+
+    def test_07_notify_stores_intent(self):
+        self._register("notifier@example.com", "Notifier", "Stripe")
+        r = self.client.post("/api/referrals/notify", json={"email": "notifier@example.com", "company": "Stripe"})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["ok"])
+        r2 = self.client.post("/api/referrals/notify", json={"email": "notifier@example.com", "company": "Stripe"})
+        self.assertTrue(r2.json()["ok"])
+
+        conn, cur = _fresh_conn()
+        cur.execute("SELECT COUNT(*) FROM referral_notifies WHERE email='notifier@example.com' AND company='Stripe'")
+        self.assertEqual(cur.fetchone()[0], 1)
+        conn.close()
+
+    def test_08_notifies_getter(self):
+        self._register("notifyb@example.com", "Notify B", "Square")
+        self.client.post("/api/referrals/notify", json={"email": "notifyb@example.com", "company": "Square"})
+        r = self.client.get("/api/referrals/notifies?company=Square")
+        emails = [n["email"] for n in r.json().get("notifies", [])]
+        self.assertIn("notifyb@example.com", emails)
+
+    def test_09_resolve_url_domain_map(self):
+        r = self.client.post("/api/referrals/resolve-url", json={"url": "https://careers.google.com/jobs/software-engineer"})
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["company"], "Google")
+
+    def test_10_resolve_url_org_slug(self):
+        r = self.client.post("/api/referrals/resolve-url", json={"url": "https://boards.greenhouse.io/tcs/jobs/123456"})
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertEqual(data["company"], "Tata Consultancy Services")
+
+    def test_11_resolve_url_invalid(self):
+        r = self.client.post("/api/referrals/resolve-url", json={"url": "not-a-url"})
+        self.assertEqual(r.status_code, 400)
+        r2 = self.client.post("/api/referrals/resolve-url", json={"url": ""})
+        self.assertEqual(r2.status_code, 400)
 
 
 class TestIntegrationCompanyHarvest(unittest.TestCase):
