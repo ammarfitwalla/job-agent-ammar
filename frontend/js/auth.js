@@ -67,12 +67,11 @@ function promptSendCode() {
           passcode: d.code,
         }).then(emailRes => {
           if (!emailRes.ok) {
-            errEl.textContent = emailRes.error || "Failed to send email.";
-            errEl.classList.remove("hidden");
-            btn.disabled = false;
-            text.textContent = "Send Code";
-            spinner.classList.add("hidden");
-            return;
+            const fc = document.getElementById("authFallbackCode");
+            if (fc) {
+              fc.textContent = `Email couldn't be sent (${emailRes.error}) — your code: ${d.code}`;
+              fc.classList.remove("hidden");
+            }
           }
           document.getElementById("modalEmail").textContent = email;
           document.getElementById("authModal").style.display = "flex";

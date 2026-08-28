@@ -376,11 +376,11 @@ async function authSendCode() {
         passcode: d.code,
       });
       if (!emailRes.ok) {
-        errEl.textContent = emailRes.error || "Failed to send email. Try again.";
-        errEl.classList.remove("hidden");
-        btn.disabled = false;
-        btn.textContent = "Send Code";
-        return;
+        const fc = document.getElementById("authFallbackCode");
+        if (fc) {
+          fc.textContent = `Email couldn't be sent (${emailRes.error}) — your code: ${d.code}`;
+          fc.classList.remove("hidden");
+        }
       }
     }
     _authEmail = email;
