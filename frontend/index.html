@@ -352,7 +352,7 @@
   <!-- Auth Modal -->
   <div id="authModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40" onclick="if (event.target === this) closeAuthModal()">
     <div class="bg-white rounded-2xl p-6 shadow-xl w-full max-w-sm mx-4 space-y-4" onclick="event.stopPropagation()">
-      <div id="authStep1">
+      <div id="authStepEmail">
         <div class="flex items-start justify-between">
           <div>
             <div class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
@@ -371,7 +371,7 @@
         </button>
         <p id="authSendError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center font-medium mt-2"></p>
       </div>
-      <div id="authStep2" class="hidden">
+      <div id="authStepCode" class="hidden">
         <div class="flex items-start justify-between">
           <div>
             <div class="text-sm font-semibold text-slate-800">Check your inbox</div>
@@ -609,10 +609,10 @@
     </div>
   </div>
 
-  <script type="module" src="/js/constants.js?v=17"></script>
-  <script type="module" src="/js/utils.js?v=17"></script>
-  <script type="module" src="/js/auth.js?v=17"></script>
-  <script type="module" src="/js/referrals.js?v=17"></script>
-  <script src="/js/search.js?v=17"></script>
+  <script type="module" src="/js/constants.js?v=18"></script>
+  <script type="module" src="/js/utils.js?v=18"></script>
+  <script type="module" src="/js/auth.js?v=18"></script>
+  <script type="module" src="/js/referrals.js?v=18"></script>
+  <script src="/js/search.js?v=18"></script>
 </body>
 </html>

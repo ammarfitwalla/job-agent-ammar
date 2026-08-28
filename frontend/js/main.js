@@ -41,10 +41,6 @@ async function loadStatsBar() {
 // ── Event Listeners ──
 
 document.addEventListener("click", function (e) {
-  const dd = document.getElementById("companyDropdown");
-  if (dd && !e.target.closest("#authCompany") && !e.target.closest("#companyDropdown")) {
-    dd.classList.add("hidden");
-  }
   const pdd = document.getElementById("profileCompanyDropdown");
   if (pdd && !e.target.closest("#profileCompany") && !e.target.closest("#profileCompanyDropdown")) {
     pdd.classList.add("hidden");
@@ -56,30 +52,6 @@ document.addEventListener("click", function (e) {
 document.addEventListener("DOMContentLoaded", function () {
   loadStatsBar();
   loadAuthCompanyList();
-
-  document.querySelectorAll("#authModal .code-digit").forEach(inp => {
-    inp.addEventListener("input", function () {
-      if (this.value && this.dataset.idx < "5") {
-        const next = document.querySelector(`#authModal .code-digit[data-idx="${parseInt(this.dataset.idx) + 1}"]`);
-        if (next) next.focus();
-      }
-    });
-    inp.addEventListener("keydown", function (e) {
-      if ((e.key === "Backspace" || e.key === "Backward") && !this.value && this.dataset.idx > "0") {
-        const prev = document.querySelector(`#authModal .code-digit[data-idx="${parseInt(this.dataset.idx) - 1}"]`);
-        if (prev) { prev.focus(); prev.value = ""; }
-      }
-      if (e.key === "Enter") window.verifyCode();
-    });
-    inp.addEventListener("paste", function (e) {
-      e.preventDefault();
-      const text = (e.clipboardData || window.clipboardData).getData("text").replace(/\D/g, "");
-      if (text.length !== 6) return;
-      const inputs = document.querySelectorAll("#authModal .code-digit");
-      inputs.forEach((input, i) => { input.value = text[i] || ""; });
-      inputs[5].focus();
-    });
-  });
 
   initEmailJS();
   updateNavIcon();

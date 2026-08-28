@@ -57,7 +57,6 @@ let _searchStart = 0;
 let _searchComplete = false;
 let _pendingSaveJob = null;
 let _uploadedFilename = "";
-let _authEmail = "";
 let _referralCounts = {};
 let _refreshCooldown = false;
 let _currentPage = 1;
@@ -137,358 +136,23 @@ if (typeof window.showToast !== "function") {
 }
 
 // ===== AUTH =====
-function showAuthModal() {
-  document.getElementById("authStep1").classList.remove("hidden");
-  document.getElementById("authStep2").classList.add("hidden");
-  document.getElementById("authStep3").classList.add("hidden");
-  document.getElementById("authStep4").classList.add("hidden");
-  document.getElementById("authEmail").value = "";
-  document.getElementById("authSendError").classList.add("hidden");
-  document.getElementById("authCodeError").classList.add("hidden");
-  document.getElementById("authRegisterError").classList.add("hidden");
-  document.getElementById("authEmail").focus();
-  document.getElementById("authModal").classList.remove("hidden");
-  loadCompanyList();
-}
+// ===== AUTH (unified flow lives in auth.js; search.js keeps only callbacks) =====
 let _pendingAuthRefresh = false;
-let _invitedBy = new URLSearchParams(window.location.search).get("ref") || "";
-let _inviteCompany = new URLSearchParams(window.location.search).get("company") || "";
 
-function prefillInviteDetails() {
-  if (_inviteCompany) {
-    const c = document.getElementById("authCompany");
-    if (c) c.value = _inviteCompany;
-    document.querySelectorAll(".employment-pill").forEach(p => {
-      p.classList.toggle("active-pill", p.dataset.status === "employed");
-    });
-    const group = document.getElementById("authCompanyGroup");
-    if (group) group.classList.remove("hidden");
-    window.selectCompany(_inviteCompany);
+window.afterAuthConnected = function () {
+  _pendingAuthRefresh = true;
+  if (_pendingSaveJob) {
+    try { doSaveJob(_pendingSaveJob); } catch (e) {}
+    _pendingSaveJob = null;
   }
-  if (_invitedBy) {
-    const inviteBanner = document.getElementById("authInviteBanner");
-    if (inviteBanner) inviteBanner.classList.remove("hidden");
-  }
-}
+};
 
-function closeAuthModal() {
-  document.getElementById("authModal").classList.add("hidden");
+window.onAuthModalClosed = function () {
   if (_pendingAuthRefresh) {
     _pendingAuthRefresh = false;
     applyThreshold();
   }
-}
-function authGoBack() {
-  document.getElementById("authStep1").classList.remove("hidden");
-  document.getElementById("authStep2").classList.add("hidden");
-  document.getElementById("authStep4").classList.add("hidden");
-  document.getElementById("authSendError").classList.add("hidden");
-}
-
-let _companyList = [];
-
-async function loadCompanyList() {
-  if (_companyList.length > 0) return;
-  try {
-    const r = await fetch("/api/auth/companies");
-    const d = await r.json();
-    _companyList = d.companies || [];
-  } catch {}
-}
-
-function filterCompanyDropdown() {
-  const input = document.getElementById("authCompany");
-  const dropdown = document.getElementById("companyDropdown");
-  const val = input.value.toLowerCase().trim();
-  const matches = val ? _companyList.filter(c => c.toLowerCase().includes(val)) : _companyList;
-  let html = matches.slice(0, 30).map(c =>
-    `<div class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 transition-colors company-option" data-company="${_esc(c)}">${_esc(c)}</div>`
-  ).join("");
-  if (val && !_companyList.some(c => c.toLowerCase() === val)) {
-    html += `<div class="px-3 py-2 text-sm cursor-pointer text-indigo-600 border-t border-slate-100 hover:bg-indigo-50 transition-colors font-medium add-custom-company" data-company="${_esc(val)}" data-display="${_esc(input.value.trim())}">+ Add "${_esc(input.value.trim())}"</div>`;
-  }
-  if (!html) {
-    dropdown.classList.add("hidden");
-    return;
-  }
-  dropdown.innerHTML = html;
-  dropdown.classList.remove("hidden");
-}
-
-let _lastCustomCompany = "";
-function addCustomCompany(name, event) {
-  if (event && typeof event.stopPropagation === "function") event.stopPropagation();
-  selectCompany(name);
-  if (_lastCustomCompany !== name) {
-    _lastCustomCompany = name;
-    if (typeof showToast === "function") showToast(`Company set to ${name}`);
-    fetch("/api/auth/companies", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ name }),
-    }).catch(() => {});
-  }
-  if (!_companyList.includes(name)) {
-    _companyList.push(name);
-    _companyList.sort();
-  }
-}
-
-function selectCompany(name) {
-  document.getElementById("authCompany").value = name;
-  document.getElementById("companyDropdown").classList.add("hidden");
-}
-
-document.addEventListener("click", function(e) {
-  const dd = document.getElementById("companyDropdown");
-  if (dd && !e.target.closest("#authCompany") && !e.target.closest("#companyDropdown")) {
-    dd.classList.add("hidden");
-    return;
-  }
-  const opt = e.target.closest(".company-option");
-  if (opt) { selectCompany(opt.dataset.company); return; }
-  const addBtn = e.target.closest(".add-custom-company");
-  if (addBtn) { addCustomCompany(addBtn.dataset.company, new Event("click")); }
-});
-
-function selectEmploymentStatus(status) {
-  document.querySelectorAll(".employment-pill").forEach(p => p.classList.remove("active-pill"));
-  const pill = document.querySelector(`.employment-pill[data-status="${status}"]`);
-  if (pill) pill.classList.add("active-pill");
-  const group = document.getElementById("authCompanyGroup");
-  if (group) {
-    group.classList.toggle("hidden", status !== "employed");
-    if (status !== "employed") {
-      document.getElementById("authCompany").value = "";
-    }
-  }
-}
-
-async function authRegister() {
-  if (!_authEmail) {
-    const errEl = document.getElementById("authRegisterError");
-    if (errEl) {
-      errEl.textContent = "Session expired — please request a new code.";
-      errEl.classList.remove("hidden");
-    }
-    return;
-  }
-  const status = document.querySelector(".employment-pill.active-pill")?.dataset?.status || "employed";
-  const name = document.getElementById("authName").value.trim();
-  const position = document.getElementById("authPosition").value.trim();
-  const linkedin = document.getElementById("authLinkedin").value.trim();
-  const btn = document.getElementById("authRegisterBtn");
-  const errEl = document.getElementById("authRegisterError");
-  if (!name) {
-    errEl.textContent = "Please enter your name.";
-    errEl.classList.remove("hidden");
-    return;
-  }
-  let company;
-  if (status === "employed") {
-    company = document.getElementById("authCompany").value.trim();
-    if (!company) {
-      errEl.textContent = "Please enter your company.";
-      errEl.classList.remove("hidden");
-      return;
-    }
-  } else {
-    company = window._EMPLOYMENT_LABELS[status] || "";
-  }
-  errEl.classList.add("hidden");
-  btn.disabled = true;
-  btn.textContent = "Saving...";
-  try {
-    let searchId = "";
-    try {
-      const raw = localStorage.getItem(SEARCH_CACHE_KEY);
-      if (raw) { const s = JSON.parse(raw); if (s?.searchId) searchId = s.searchId; }
-    } catch {}
-    const r = await fetch("/api/auth/register", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ email: _authEmail, name, company, position, linkedin_url: linkedin, search_id: searchId, refer_opt_in: document.getElementById("authReferOptIn")?.checked ? 1 : 0, invited_by: _invitedBy || "" }),
-    });
-    const d = await r.json();
-    if (!d.ok) {
-      errEl.textContent = d.error || "Failed to save profile.";
-      errEl.classList.remove("hidden");
-      btn.disabled = false;
-      btn.textContent = "Complete Profile";
-      return;
-    }
-    window.setProfile(d.user);
-    if (_invitedBy) showToast("Welcome! You're now available for referrals — +5 credits earned");
-    const resumeFile = document.getElementById("authResume")?.files?.[0];
-    if (resumeFile) {
-      try {
-        const fd = new FormData();
-        fd.append("file", resumeFile);
-        await fetch(`/api/profile/resume?email=${encodeURIComponent(_authEmail)}`, { method: "POST", body: fd });
-      } catch {}
-    }
-    document.getElementById("authStep4").classList.add("hidden");
-    document.getElementById("authStep3").classList.remove("hidden");
-    window.updateProfileIcon();
-    refreshProfileResumeBtn();
-    setTimeout(() => {
-      closeAuthModal();
-      _pendingAuthRefresh = true;
-      if (_pendingSaveJob) {
-        doSaveJob(_pendingSaveJob);
-        _pendingSaveJob = null;
-      }
-    }, 1000);
-  } catch {
-    errEl.textContent = "Network error. Try again.";
-    errEl.classList.remove("hidden");
-  }
-  btn.disabled = false;
-  btn.textContent = "Complete Profile";
-}
-
-async function authSendCode() {
-  const email = document.getElementById("authEmail").value.trim();
-  const btn = document.getElementById("authSendBtn");
-  const errEl = document.getElementById("authSendError");
-  if (!email || !email.includes("@")) {
-    errEl.textContent = "Please enter a valid email address.";
-    errEl.classList.remove("hidden");
-    return;
-  }
-  errEl.classList.add("hidden");
-  btn.disabled = true;
-  btn.textContent = "Sending...";
-  try {
-    const r = await fetch("/api/auth/send-code", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ email }),
-    });
-    const d = await r.json();
-    if (!d.ok) {
-      errEl.textContent = d.error || "Failed to send code. Try again.";
-      errEl.classList.remove("hidden");
-      btn.disabled = false;
-      btn.textContent = "Send Code";
-      return;
-    }
-    _authEmail = email;
-    if (window.DEV_MODE) {
-      document.getElementById("authSentEmail").textContent = email;
-      document.getElementById("authStep1").classList.add("hidden");
-      document.getElementById("authStep2").classList.remove("hidden");
-      document.querySelectorAll(".code-digit").forEach(inp => { inp.value = ""; });
-      document.querySelector(".code-digit").focus();
-      btn.disabled = false;
-      btn.textContent = "Send Code";
-      return;
-    }
-    if (d.fallback && d.code) {
-      const emailRes = await window.sendEmailJS({
-        email: email,
-        subject: "Your Job Agent verification code",
-        passcode: d.code,
-      });
-      if (!emailRes.ok) {
-        const fc = document.getElementById("authFallbackCode");
-        if (fc) {
-          fc.textContent = `Email couldn't be sent (${emailRes.error}) — your code: ${d.code}`;
-          fc.classList.remove("hidden");
-        }
-      }
-    }
-    _authEmail = email;
-    document.getElementById("authSentEmail").textContent = email;
-    document.getElementById("authStep1").classList.add("hidden");
-    document.getElementById("authStep2").classList.remove("hidden");
-    document.querySelectorAll(".code-digit").forEach(inp => { inp.value = ""; });
-    document.querySelector(".code-digit").focus();
-  } catch (e) {
-    errEl.textContent = "Network error. Try again.";
-    errEl.classList.remove("hidden");
-  }
-  btn.disabled = false;
-  btn.textContent = "Send Code";
-}
-
-async function authVerifyCode() {
-  const digits = document.querySelectorAll(".code-digit");
-  const code = Array.from(digits).map(d => d.value).join("");
-  const btn = document.getElementById("authVerifyBtn");
-  const errEl = document.getElementById("authCodeError");
-  if (code.length !== 6) {
-    errEl.textContent = "Enter the full 6-digit code.";
-    errEl.classList.remove("hidden");
-    return;
-  }
-  errEl.classList.add("hidden");
-  btn.disabled = true;
-  btn.textContent = "Verifying...";
-  try {
-    const r = await fetch("/api/auth/verify-code", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ email: _authEmail, code }),
-    });
-    const d = await r.json();
-    if (!d.ok) {
-      errEl.textContent = d.error || "Invalid code. Try again.";
-      errEl.classList.remove("hidden");
-      btn.disabled = false;
-      btn.textContent = "Verify";
-      return;
-    }
-    document.getElementById("authStep2").classList.add("hidden");
-    if (d.user.company) {
-      window.setProfile({ email: d.user.email, name: d.user.name || d.user.email.split("@")[0], company: d.user.company, position: d.user.position || "", linkedin_url: d.user.linkedin_url || "", referral_credits: d.user.referral_credits || 0 });
-      document.getElementById("authStep3").classList.remove("hidden");
-      window.updateProfileIcon();
-      refreshProfileResumeBtn();
-      setTimeout(() => closeAuthModal(), 500);
-      _pendingAuthRefresh = true;
-    } else {
-      document.getElementById("authStep4").classList.remove("hidden");
-      document.getElementById("authName").value = d.user.name || d.user.email.split("@")[0];
-      document.getElementById("authName").focus();
-      prefillInviteDetails();
-    }
-  } catch (e) {
-    errEl.textContent = "Network error. Try again.";
-    errEl.classList.remove("hidden");
-  }
-  btn.disabled = false;
-  btn.textContent = "Verify";
-}
-
-function authResendCode() {
-  document.getElementById("authCodeError").classList.add("hidden");
-  authSendCode();
-}
-
-function setupCodeInputs() {
-  document.querySelectorAll(".code-digit").forEach(inp => {
-    inp.addEventListener("input", function () {
-      if (this.value && this.dataset.idx < "5") {
-        const next = document.querySelector(`.code-digit[data-idx="${parseInt(this.dataset.idx) + 1}"]`);
-        if (next) next.focus();
-      }
-    });
-    inp.addEventListener("keydown", function (e) {
-      if (e.key === "Backward" || e.key === "Backspace") {
-        if (!this.value && this.dataset.idx > "0") {
-          const prev = document.querySelector(`.code-digit[data-idx="${parseInt(this.dataset.idx) - 1}"]`);
-          if (prev) { prev.focus(); prev.value = ""; }
-        }
-      }
-      if (e.key === "Enter") authVerifyCode();
-    });
-    inp.addEventListener("paste", function(e) {
-      e.preventDefault();
-      const text = (e.clipboardData || window.clipboardData).getData("text").replace(/\D/g, "");
-      if (text.length !== 6) return;
-      const inputs = document.querySelectorAll(".code-digit");
-      inputs.forEach((input, i) => { input.value = text[i] || ""; });
-      inputs[5].focus();
-    });
-  });
-}
+};
 async function refreshProfileResumeBtn() {
   const btn = document.getElementById("useProfileResume");
   if (!btn) return;
@@ -531,7 +195,6 @@ async function useProfileResume() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  setupCodeInputs();
   window.fetchProfile().then(() => { window.updateProfileIcon(); refreshProfileResumeBtn(); });
   if (new URLSearchParams(window.location.search).get("refurl")) {
     setTimeout(() => window.openReferralUrlModal && window.openReferralUrlModal(), 400);
@@ -2360,20 +2023,8 @@ function closeHowItWorks() {
   m.classList.remove('flex');
 }
 
-window.showAuthModal = showAuthModal;
-window.closeAuthModal = closeAuthModal;
-window.prefillInviteDetails = prefillInviteDetails;
-window.authGoBack = authGoBack;
-window.selectEmploymentStatus = selectEmploymentStatus;
-window.filterCompanyDropdown = filterCompanyDropdown;
-window.addCustomCompany = addCustomCompany;
-window.selectCompany = selectCompany;
-window.authRegister = authRegister;
-window.authSendCode = authSendCode;
-window.authVerifyCode = authVerifyCode;
 window.useProfileResume = useProfileResume;
 window.refreshProfileResumeBtn = refreshProfileResumeBtn;
-window.authResendCode = authResendCode;
 window.toggleSaveJob = toggleSaveJob;
 window.checkRelevance = checkRelevance;
 window.switchTab = switchTab;
