@@ -135,7 +135,6 @@ if (typeof window.showToast !== "function") {
   }
 }
 
-// ===== AUTH =====
 // ===== AUTH (unified flow lives in auth.js; search.js keeps only callbacks) =====
 let _pendingAuthRefresh = false;
 
