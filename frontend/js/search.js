@@ -215,17 +215,22 @@ function filterCompanyDropdown() {
   dropdown.classList.remove("hidden");
 }
 
-async function addCustomCompany(name, event) {
-  event.stopPropagation();
-  const r = await fetch("/api/auth/companies", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ name }),
-  });
+let _lastCustomCompany = "";
+function addCustomCompany(name, event) {
+  if (event && typeof event.stopPropagation === "function") event.stopPropagation();
+  selectCompany(name);
+  if (_lastCustomCompany !== name) {
+    _lastCustomCompany = name;
+    if (typeof showToast === "function") showToast(`Company set to ${name}`);
+    fetch("/api/auth/companies", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ name }),
+    }).catch(() => {});
+  }
   if (!_companyList.includes(name)) {
     _companyList.push(name);
     _companyList.sort();
   }
-  selectCompany(name);
 }
 
 function selectCompany(name) {
@@ -259,7 +264,14 @@ function selectEmploymentStatus(status) {
 }
 
 async function authRegister() {
-  if (!_authEmail) return;
+  if (!_authEmail) {
+    const errEl = document.getElementById("authRegisterError");
+    if (errEl) {
+      errEl.textContent = "Session expired — please request a new code.";
+      errEl.classList.remove("hidden");
+    }
+    return;
+  }
   const status = document.querySelector(".employment-pill.active-pill")?.dataset?.status || "employed";
   const name = document.getElementById("authName").value.trim();
   const position = document.getElementById("authPosition").value.trim();
