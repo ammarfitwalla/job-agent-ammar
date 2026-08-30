@@ -1791,10 +1791,10 @@ function renderAllJobs(jobs) {
   let yoeFilterHtml = "";
   if (yoeBuckets.length >= 2) {
     const yoeLabel = _activeYoeFilters.size === 0
-      ? "All buckets"
+      ? "All experience"
       : _activeYoeFilters.size === 1
-        ? [..._activeYoeFilters][0]
-        : `${_activeYoeFilters.size} buckets`;
+        ? yoeLabelOf([..._activeYoeFilters][0])
+        : `${_activeYoeFilters.size} selected`;
     const sortedYoe = [...yoeBuckets].sort((a, b) => YOE_BUCKET_ORDER.indexOf(a) - YOE_BUCKET_ORDER.indexOf(b));
     yoeFilterHtml = `<div id="yoeFilterWrap" class="relative" data-yoe-filter-wrap>
       <button id="yoeFilterBtn" type="button" data-yoe-toggle class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -1805,13 +1805,13 @@ function renderAllJobs(jobs) {
       <div id="yoeFilterPanel" class="hidden absolute right-0 top-full z-30 mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 max-h-72 overflow-y-auto">
         <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer select-none ${_activeYoeFilters.size === 0 ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50'}">
           <input type="checkbox" class="yoe-filter-option shrink-0" value="__all__" ${_activeYoeFilters.size === 0 ? 'checked' : ''}>
-          <span>All Buckets</span>
+          <span>All Experience</span>
         </label>
         <div class="h-px bg-slate-100 my-1"></div>
         ${sortedYoe.map(b => {
           const count = boardScope.filter(j => yoeBucketOf(j) === b).length;
           const on = _activeYoeFilters.has(b);
-          const label = b === 'not_specified' ? 'Not specified' : b;
+          const label = yoeLabelOf(b);
           return `<label class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer select-none ${on ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50'}">
             <input type="checkbox" class="yoe-filter-option shrink-0" value="${_esc(b)}" ${on ? 'checked' : ''}>
             <span class="truncate">${_esc(label)}</span>
@@ -1973,6 +1973,9 @@ let _activeYoeFilters = new Set();
 const YOE_BUCKET_ORDER = ["0-2", "2-4", "4-7", "7-10", "10+", "not_specified"];
 function yoeBucketOf(j) {
   return (j && j.yoe_bucket) || "not_specified";
+}
+function yoeLabelOf(b) {
+  return b === 'not_specified' ? 'Not specified' : `${b} yrs`;
 }
 // Generic dropdown viewport-fit: keeps any absolutely-positioned dropdown
 // inside the viewport at any screen size (mobile/tablet/desktop). Call it
