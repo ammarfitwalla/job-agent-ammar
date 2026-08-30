@@ -63,6 +63,22 @@ app.add_middleware(
 )
 
 
+# Force revalidation for the HTML/JS/CSS so deployed frontend changes
+# reach users without manual ?v= cache-busting bumps.
+@app.middleware("http")
+async def no_cache_frontend(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if (
+        path.startswith("/js/")
+        or path.endswith(".css")
+        or path.endswith(".html")
+        or path in ("/", "/app", "/admin")
+    ):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 # Visit logging is handled client-side via the frontend beacon (/api/visit/start, /api/visit/end)
 # which captures device type, duration, path, and referer accurately.
 
