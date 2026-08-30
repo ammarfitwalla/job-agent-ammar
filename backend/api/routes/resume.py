@@ -3,6 +3,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from utils.json_parser import extract_json
+from utils.pii import sanitize_resume_text
 from llm.llm_client import LLMClient
 from config import TARGET_ROLES
 
@@ -111,7 +112,7 @@ async def extract_keywords(req: ResumeKeywordsRequest):
     suggested = []
     for attempt in range(2):
         try:
-            prompt = EXTRACT_PROMPT.format(available_roles=json.dumps(TARGET_ROLES), resume=req.resume_text)
+            prompt = EXTRACT_PROMPT.format(available_roles=json.dumps(TARGET_ROLES), resume=sanitize_resume_text(req.resume_text))
             print(f"[KEYWORDS] Calling LLM attempt {attempt+1}/2 (prompt_len={len(prompt)})")
             response = LLMClient.keyword_chat(prompt, max_tokens=4000)
             print(f"[KEYWORDS] LLM response received ({len(response)} chars)")

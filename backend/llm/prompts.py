@@ -2,6 +2,7 @@
 import re
 from match_engine import resume_data as _resume_data
 from utils.logger import log
+from utils.pii import sanitize_resume_text
 
 
 SKILL_SECTIONS = [
@@ -48,7 +49,7 @@ def _extract_relevant(text: str, max_chars: int = 0) -> str:
 
 
 def _extract_resume(resume: str) -> str:
-    return resume
+    return sanitize_resume_text(resume)
 
 
 # ================
@@ -234,7 +235,7 @@ def cover_letter_prompt(company: str, role: str, jd: str):
 Write a concise 120–180 word cover letter.
 
 Candidate Resume:
-{_resume_data.RESUME_TEXT}
+{sanitize_resume_text(_resume_data.RESUME_TEXT)}
 
 Job Role: {role}
 Company: {company}
