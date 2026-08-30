@@ -12,6 +12,18 @@ let _companyUserCache = {};
 let _referralTab = "incoming";
 let _referralNotifTimer = null;
 
+// "Notify me when a referrer joins" subscriptions (per-session UI state)
+let _notifiedCompanies = new Set();
+try { _notifiedCompanies = new Set((sessionStorage.getItem("referralNotified") || "").split(",").filter(Boolean)); } catch (e) {}
+
+const NOTIFY_CHECK_SVG = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>';
+const NOTIFY_SAVED_CLASSES = "w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-4 py-2.5 rounded-xl cursor-default";
+const NOTIFY_SAVED_LABEL = "You're on the list — we'll notify you";
+
+function _persistNotifiedCompanies() {
+  try { sessionStorage.setItem("referralNotified", [..._notifiedCompanies].join(",")); } catch (e) {}
+}
+
 async function loadCompanyUserCounts(companies) {
   const unique = [...new Set(companies.filter(Boolean))];
   const needed = unique.filter(c => !(c in _companyUserCache));
@@ -220,15 +232,33 @@ async function notifyWhenAvailable(company) {
   const profile = getProfile();
   if (!profile) { closeReferralModal(); window.showAuthModal(); return; }
   if (!company) { showToast("No company selected"); return; }
+  if (_notifiedCompanies.has(company.toLowerCase())) { showToast("You're already on the list"); return; }
+  const btn = document.getElementById("notifyWhenAvailableBtn");
+  if (btn) { btn.disabled = true; btn.classList.add("opacity-60", "cursor-wait"); }
   try {
     const r = await fetch("/api/referrals/notify", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: profile.email, company }),
     });
     const d = await r.json();
-    showToast(d.ok ? `We'll notify you when a referrer at ${company} joins` : (d.error || "Could not save that"));
+    if (d.ok) {
+      _notifiedCompanies.add(company.toLowerCase());
+      _persistNotifiedCompanies();
+      if (btn) {
+        btn.type = "button";
+        btn.disabled = true;
+        btn.onclick = null;
+        btn.className = NOTIFY_SAVED_CLASSES;
+        btn.innerHTML = `${NOTIFY_CHECK_SVG} ${NOTIFY_SAVED_LABEL}`;
+      }
+      showToast(`We'll notify you when a referrer at ${company} joins`);
+    } else {
+      showToast(d.error || "Could not save that");
+      if (btn) { btn.disabled = false; btn.classList.remove("opacity-60", "cursor-wait"); }
+    }
   } catch {
     showToast("Network error");
+    if (btn) { btn.disabled = false; btn.classList.remove("opacity-60", "cursor-wait"); }
   }
 }
 
@@ -293,14 +323,16 @@ async function showReferralUsers(company) {
       <p class="text-sm font-medium text-slate-600">No referrers at ${htmlEscape(company)} yet</p>
       <p class="text-xs text-slate-400 mt-1">Be the first to open the door — invite an insider or get notified.</p>
       <div class="mt-4 space-y-2 max-w-xs mx-auto">
-        <button onclick="inviteReferrer('${htmlEscape(company.replace(/'/g, "\\'"))}')" class="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-700 hover:to-brand-700 px-4 py-2.5 rounded-xl transition-all shadow-sm shadow-brand-500/20">
+        <!-- <button onclick="inviteReferrer('${htmlEscape(company.replace(/'/g, "\\'"))}')" class="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 px-4 py-2.5 rounded-xl transition-colors">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>
           Invite a friend at ${htmlEscape(company)} — earn credits
-        </button>
-        <button onclick="notifyWhenAvailable('${htmlEscape(company.replace(/'/g, "\\'"))}')" class="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/60 px-4 py-2.5 rounded-xl transition-colors">
+        </button> -->
+        ${_notifiedCompanies.has(company.toLowerCase())
+          ? `<button type="button" disabled class="${NOTIFY_SAVED_CLASSES}">${NOTIFY_CHECK_SVG} ${NOTIFY_SAVED_LABEL}</button>`
+          : `<button id="notifyWhenAvailableBtn" onclick="notifyWhenAvailable('${htmlEscape(company.replace(/'/g, "\\'"))}')" class="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/60 px-4 py-2.5 rounded-xl transition-colors">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0M3.124 7.5A8.969 8.969 0 015.292 3m13.416 0a8.969 8.969 0 012.168 4.5"/></svg>
           Notify me when a referrer joins
-        </button>
+        </button>`}
       </div>
     </div>`;
     modal.classList.remove("hidden");
