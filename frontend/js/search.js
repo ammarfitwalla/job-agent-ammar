@@ -913,6 +913,8 @@ function clearSearchState() {
   _currentPage = 1;
   _activeSubFilterRole = 'all';
   _activeLevelFilter = 'all';
+  _activeBoardFilters.clear();
+  _activeYoeFilters.clear();
   document.getElementById("results").innerHTML = `
     <div class="premium-card min-h-[400px] flex flex-col items-center justify-center text-center p-8">
       <div class="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center mb-5 border border-slate-100">
@@ -1569,6 +1571,8 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   currentSort = 'relevant';
   _activeSubFilterRole = 'all';
   _activeLevelFilter = 'all';
+  _activeBoardFilters.clear();
+  _activeYoeFilters.clear();
   document.getElementById("filterBar").classList.add("hidden");
 
   document.title = "Searching... - AI Job Agent";
@@ -1730,6 +1734,15 @@ function renderAllJobs(jobs) {
   const c = document.getElementById("results");
   _relevanceUsed = loadRelevanceUsed();
   let displayJobs = jobs || allJobs;
+  const baseTabBar = document.getElementById('tabBar');
+  const isTabs = baseTabBar && !baseTabBar.classList.contains('hidden');
+  const baseScope = isTabs ? (activeTab === 'custom' ? customJobs : aiJobs) : allJobs;
+  const baseBoards = [...new Set(baseScope.map(j => siteFromUrl(j.url)).filter(Boolean))].sort();
+  for (const b of [..._activeBoardFilters]) if (!baseBoards.includes(b)) _activeBoardFilters.delete(b);
+  const boardScope = _activeBoardFilters.size ? baseScope.filter(j => _activeBoardFilters.has(siteFromUrl(j.url))) : baseScope;
+  const yoeBuckets = [...new Set(boardScope.map(yoeBucketOf))];
+  for (const y of [..._activeYoeFilters]) if (!yoeBuckets.includes(y)) _activeYoeFilters.delete(y);
+  const yoeScope = _activeYoeFilters.size ? boardScope.filter(j => _activeYoeFilters.has(yoeBucketOf(j))) : boardScope;
   if (!internshipMode) {
     displayJobs = displayJobs.filter(j => {
       if (j.experience_level === "entry_level" || j.experience_level === "internship") return false;
@@ -1739,6 +1752,12 @@ function renderAllJobs(jobs) {
   }
   if (_activeLevelFilter !== 'all') {
     displayJobs = displayJobs.filter(j => j.experience_level === _activeLevelFilter);
+  }
+  if (_activeBoardFilters.size) {
+    displayJobs = displayJobs.filter(j => _activeBoardFilters.has(siteFromUrl(j.url)));
+  }
+  if (_activeYoeFilters.size) {
+    displayJobs = displayJobs.filter(j => _activeYoeFilters.has(yoeBucketOf(j)));
   }
   if (currentSort === 'recent') {
     displayJobs = [...displayJobs].sort((a, b) => {
@@ -1756,30 +1775,91 @@ function renderAllJobs(jobs) {
   }
   // Sub-filter pills — always show if the base scope has multiple roles
   let subFilterHtml = "";
-  const tabBar = document.getElementById('tabBar');
-  const isTabs = tabBar && !tabBar.classList.contains('hidden');
-  const baseScope = isTabs ? (activeTab === 'custom' ? customJobs : aiJobs) : allJobs;
   const baseRoles = [...new Set(baseScope.map(j => j._matched_role).filter(Boolean))];
-  subFilterHtml = `<div id="subFilters" class="mb-4"><div class="flex flex-wrap items-center justify-between gap-2">`;
+  subFilterHtml = `<div id="subFilters" class="relative z-50 mb-4"><div class="flex flex-wrap items-center justify-between gap-2">`;
   if (baseRoles.length >= 1) {
     const allActive = _activeSubFilterRole === 'all';
     subFilterHtml += `<div class="flex flex-wrap gap-2">
-      <span class="cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${allActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-role-filter="all">All (${baseScope.length})</span>`;
+      <span class="cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${allActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-role-filter="all">All (${yoeScope.length})</span>`;
     for (const role of baseRoles) {
-      const count = baseScope.filter(j => j._matched_role === role).length;
+      const count = yoeScope.filter(j => j._matched_role === role).length;
       const isActive = _activeSubFilterRole === role;
       subFilterHtml += `<span class="cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${isActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}" data-role-filter="${role}">${role} (${count})</span>`;
     }
     subFilterHtml += `</div>`;
   }
-  subFilterHtml += `<span class="flex items-center gap-1.5 text-xs text-slate-400 ml-auto"><span>Sort:</span>
+  let yoeFilterHtml = "";
+  if (yoeBuckets.length >= 2) {
+    const yoeLabel = _activeYoeFilters.size === 0
+      ? "All buckets"
+      : _activeYoeFilters.size === 1
+        ? [..._activeYoeFilters][0]
+        : `${_activeYoeFilters.size} buckets`;
+    const sortedYoe = [...yoeBuckets].sort((a, b) => YOE_BUCKET_ORDER.indexOf(a) - YOE_BUCKET_ORDER.indexOf(b));
+    yoeFilterHtml = `<div id="yoeFilterWrap" class="relative" data-yoe-filter-wrap>
+      <button id="yoeFilterBtn" type="button" data-yoe-toggle class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5M12 21a9 9 0 100-18 9 9 0 000 18z"/></svg>
+        <span data-yoe-label>${_esc(yoeLabel)}</span>
+        <svg class="w-3 h-3 text-slate-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </button>
+      <div id="yoeFilterPanel" class="hidden absolute right-0 top-full z-30 mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 max-h-72 overflow-y-auto">
+        <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer select-none ${_activeYoeFilters.size === 0 ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50'}">
+          <input type="checkbox" class="yoe-filter-option shrink-0" value="__all__" ${_activeYoeFilters.size === 0 ? 'checked' : ''}>
+          <span>All Buckets</span>
+        </label>
+        <div class="h-px bg-slate-100 my-1"></div>
+        ${sortedYoe.map(b => {
+          const count = boardScope.filter(j => yoeBucketOf(j) === b).length;
+          const on = _activeYoeFilters.has(b);
+          const label = b === 'not_specified' ? 'Not specified' : b;
+          return `<label class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer select-none ${on ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50'}">
+            <input type="checkbox" class="yoe-filter-option shrink-0" value="${_esc(b)}" ${on ? 'checked' : ''}>
+            <span class="truncate">${_esc(label)}</span>
+            <span class="ml-auto text-[10px] text-slate-400">${count}</span>
+          </label>`;
+        }).join("")}
+      </div>
+    </div>`;
+  }
+  let boardFilterHtml = "";
+  if (baseBoards.length >= 2) {
+    const boardLabel = _activeBoardFilters.size === 0
+      ? "All boards"
+      : _activeBoardFilters.size === 1
+        ? [..._activeBoardFilters][0]
+        : `${_activeBoardFilters.size} boards`;
+    boardFilterHtml = `<div id="boardFilterWrap" class="relative" data-board-filter-wrap>
+      <button id="boardFilterBtn" type="button" data-board-toggle class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16"/></svg>
+        <span data-board-label>${_esc(boardLabel)}</span>
+        <svg class="w-3 h-3 text-slate-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </button>
+      <div id="boardFilterPanel" class="hidden absolute right-0 top-full z-30 mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 max-h-72 overflow-y-auto">
+        <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer select-none ${_activeBoardFilters.size === 0 ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50'}">
+          <input type="checkbox" class="board-filter-option shrink-0" value="__all__" ${_activeBoardFilters.size === 0 ? 'checked' : ''}>
+          <span>All Boards</span>
+        </label>
+        <div class="h-px bg-slate-100 my-1"></div>
+        ${baseBoards.map(b => {
+          const count = baseScope.filter(j => siteFromUrl(j.url) === b).length;
+          const on = _activeBoardFilters.has(b);
+          return `<label class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer select-none ${on ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50'}">
+            <input type="checkbox" class="board-filter-option shrink-0" value="${_esc(b)}" ${on ? 'checked' : ''}>
+            <span class="truncate">${_esc(b)}</span>
+            <span class="ml-auto text-[10px] text-slate-400">${count}</span>
+          </label>`;
+        }).join("")}
+      </div>
+    </div>`;
+  }
+  subFilterHtml += `<span class="flex items-center gap-2 text-xs text-slate-400 ml-auto">${yoeFilterHtml}${boardFilterHtml}<span class="flex items-center gap-1.5"><span>Sort:</span>
     <select id="sortSelect" class="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
       <option value="relevant" ${currentSort === 'relevant' ? 'selected' : ''}>Most Relevant</option>
       <option value="recent" ${currentSort === 'recent' ? 'selected' : ''}>Most Recent</option>
       <option value="referral" ${currentSort === 'referral' ? 'selected' : ''}>Most Referrals</option>
-    </select></span>
+    </select></span></span>
   </div>`;
-  const roleScope = _activeSubFilterRole !== 'all' ? baseScope.filter(j => j._matched_role === _activeSubFilterRole) : baseScope;
+  const roleScope = _activeSubFilterRole !== 'all' ? yoeScope.filter(j => j._matched_role === _activeSubFilterRole) : yoeScope;
   const levelScope = internshipMode ? roleScope : roleScope.filter(j => {
     if (j.experience_level === 'entry_level' || j.experience_level === 'internship') return false;
     const jl = (j.job_level || '').toLowerCase();
@@ -1888,6 +1968,42 @@ function renderAllJobs(jobs) {
   // Sub-filter event delegation (single handler, survives re-renders)
 let _activeSubFilterRole = 'all';
 let _activeLevelFilter = 'all';
+let _activeBoardFilters = new Set();
+let _activeYoeFilters = new Set();
+const YOE_BUCKET_ORDER = ["0-2", "2-4", "4-7", "7-10", "10+", "not_specified"];
+function yoeBucketOf(j) {
+  return (j && j.yoe_bucket) || "not_specified";
+}
+// Generic dropdown viewport-fit: keeps any absolutely-positioned dropdown
+// inside the viewport at any screen size (mobile/tablet/desktop). Call it
+// right after unhiding a panel; inline styles override the Tailwind anchor
+// classes (`right-0`, `top-full`) so the default anchor is unchanged.
+function _fitDropdownInViewport(panel) {
+  panel.style.top = '';
+  panel.style.bottom = '';
+  panel.style.left = '';
+  panel.style.right = '';
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const MARGIN = 8;
+  const r = panel.getBoundingClientRect();
+  if (r.left < MARGIN) {
+    panel.style.left = `${MARGIN}px`;
+    panel.style.right = 'auto';
+  } else if (r.right > vw - MARGIN) {
+    panel.style.right = `${MARGIN}px`;
+    panel.style.left = 'auto';
+  }
+  if (r.bottom > vh - MARGIN) {
+    panel.style.top = 'auto';
+    panel.style.bottom = '100%';
+    const newTop = panel.getBoundingClientRect().top;
+    if (newTop < MARGIN) {
+      panel.style.top = '';
+      panel.style.bottom = '';
+    }
+  }
+}
 document.addEventListener('click', (e) => {
   const el = e.target.closest('#subFilters [data-role-filter]');
   if (!el) return;
@@ -1900,6 +2016,82 @@ document.addEventListener('click', (e) => {
   if (!el) return;
   _activeLevelFilter = el.dataset.levelFilter;
   applyThreshold();
+});
+
+// Board multiselect filter (survives re-renders, closes on outside/Escape)
+document.addEventListener('click', (e) => {
+  const toggleBtn = e.target.closest('#subFilters [data-board-toggle]');
+  if (toggleBtn) {
+    const panel = document.getElementById('boardFilterPanel');
+    if (panel) {
+      const wasHidden = panel.classList.contains('hidden');
+      panel.classList.toggle('hidden');
+      if (wasHidden) _fitDropdownInViewport(panel);
+    }
+    return;
+  }
+  const opt = e.target.closest('#subFilters .board-filter-option');
+  if (opt) {
+    const value = opt.value;
+    if (value === '__all__') _activeBoardFilters.clear();
+    else {
+      if (_activeBoardFilters.has(value)) _activeBoardFilters.delete(value);
+      else _activeBoardFilters.add(value);
+    }
+    applyThreshold();
+    const panel = document.getElementById('boardFilterPanel');
+    if (panel) {
+      panel.classList.remove('hidden');
+      _fitDropdownInViewport(panel);
+    }
+    return;
+  }
+  const panel = document.getElementById('boardFilterPanel');
+  if (panel && !panel.classList.contains('hidden') && !e.target.closest('#boardFilterPanel')) {
+    panel.classList.add('hidden');
+  }
+});
+
+// YOE bucket multiselect filter (mirrors the board filter)
+document.addEventListener('click', (e) => {
+  const toggleBtn = e.target.closest('#subFilters [data-yoe-toggle]');
+  if (toggleBtn) {
+    const panel = document.getElementById('yoeFilterPanel');
+    if (panel) {
+      const wasHidden = panel.classList.contains('hidden');
+      panel.classList.toggle('hidden');
+      if (wasHidden) _fitDropdownInViewport(panel);
+    }
+    return;
+  }
+  const opt = e.target.closest('#subFilters .yoe-filter-option');
+  if (opt) {
+    const value = opt.value;
+    if (value === '__all__') _activeYoeFilters.clear();
+    else {
+      if (_activeYoeFilters.has(value)) _activeYoeFilters.delete(value);
+      else _activeYoeFilters.add(value);
+    }
+    applyThreshold();
+    const panel = document.getElementById('yoeFilterPanel');
+    if (panel) {
+      panel.classList.remove('hidden');
+      _fitDropdownInViewport(panel);
+    }
+    return;
+  }
+  const panel = document.getElementById('yoeFilterPanel');
+  if (panel && !panel.classList.contains('hidden') && !e.target.closest('#yoeFilterPanel')) {
+    panel.classList.add('hidden');
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const panel = document.getElementById('boardFilterPanel');
+  if (panel) panel.classList.add('hidden');
+  const yoePanel = document.getElementById('yoeFilterPanel');
+  if (yoePanel) yoePanel.classList.add('hidden');
 });
 
 function getFilteredBaseJobs() {

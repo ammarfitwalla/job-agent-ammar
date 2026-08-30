@@ -390,6 +390,10 @@ def init_db():
             cur.execute("ALTER TABLE jobs ADD COLUMN matched_role TEXT DEFAULT ''")
         except Exception:
             pass
+        try:
+            cur.execute("ALTER TABLE jobs ADD COLUMN yoe_bucket TEXT DEFAULT ''")
+        except Exception:
+            pass
         conn.commit()
         try:
             cur.execute("ALTER TABLE sessions ADD COLUMN elapsed_seconds REAL DEFAULT 0")
@@ -872,6 +876,7 @@ def _job_to_row(sid: str, job: dict) -> dict:
         "date_posted": job.get("posted_at", job.get("date_posted", "")),
         "company_url": job.get("company_url", ""),
         "job_level": job.get("job_level", ""),
+        "yoe_bucket": job.get("yoe_bucket", ""),
         "created_at": _now(),
     }
 
@@ -883,8 +888,8 @@ def set_filtered_jobs(sid: str, jobs: list):
             rows = [_job_to_row(sid, j) for j in jobs]
             if rows:
                 cur.executemany("""INSERT INTO jobs
-                    (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, date_posted, company_url, job_level, created_at)
-                    VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :date_posted, :company_url, :job_level, :created_at)""", rows)
+                    (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, date_posted, company_url, job_level, yoe_bucket, created_at)
+                    VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :date_posted, :company_url, :job_level, :yoe_bucket, :created_at)""", rows)
             conn.commit()
             _job_count_cache.pop(sid, None)
 
@@ -894,8 +899,8 @@ def add_filtered_job(sid: str, job: dict):
         with _get_conn() as (conn, cur):
             row = _job_to_row(sid, job)
             cur.execute("""INSERT INTO jobs
-                (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, date_posted, company_url, job_level, created_at)
-                VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :date_posted, :company_url, :job_level, :created_at)""", row)
+                (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, date_posted, company_url, job_level, yoe_bucket, created_at)
+                VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :date_posted, :company_url, :job_level, :yoe_bucket, :created_at)""", row)
             conn.commit()
             _job_count_cache.pop(sid, None)
 
@@ -971,6 +976,7 @@ def set_raw_jobs(sid: str, jobs: list):
                     "date_posted": job.get("posted_at", job.get("date_posted", "")),
                     "company_url": job.get("company_url", ""),
                     "job_level": job.get("job_level", ""),
+                    "yoe_bucket": job.get("yoe_bucket", ""),
                     "matched_role": job.get("_matched_role", ""),
                     "created_at": _now(),
                 })
@@ -978,10 +984,10 @@ def set_raw_jobs(sid: str, jobs: list):
                 cur.executemany("""INSERT INTO jobs
                     (session_id, title, company, location, url, description, tags,
                      ai_score, keyword_score, total_score, reason, salary,
-                     experience_level, is_raw, date_posted, company_url, job_level, matched_role, created_at)
+                     experience_level, is_raw, date_posted, company_url, job_level, yoe_bucket, matched_role, created_at)
                     VALUES (:session_id, :title, :company, :location, :url, :description, :tags,
                             :ai_score, :keyword_score, :total_score, :reason, :salary,
-                            :experience_level, :is_raw, :date_posted, :company_url, :job_level, :matched_role, :created_at)""", rows)
+                            :experience_level, :is_raw, :date_posted, :company_url, :job_level, :yoe_bucket, :matched_role, :created_at)""", rows)
             conn.commit()
 
 

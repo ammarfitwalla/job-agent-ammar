@@ -119,7 +119,7 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
     import importlib
     from match_engine.relevance_engine import role_match_count as _role_match
     from utils.delay import delay as _delay
-    from utils.experience_level import detect_experience_level, level_from_job_level
+    from utils.experience_level import detect_experience_level, level_from_job_level, yoe_bucket_from_job
 
     all_jobs = list(initial_jobs or [])
     seen = set(seen_urls or [])
@@ -232,6 +232,8 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
                         detect_experience_level(j.get("title", ""), j.get("description", ""))
                         or level_from_job_level(j.get("job_level"))
                     )
+                    j["yoe_bucket"] = yoe_bucket_from_job(
+                        j.get("title", ""), j.get("description", ""), j.get("job_level", ""))
 
                 # In internship mode, drop non-entry-level for this combo
                 if internship_mode:
