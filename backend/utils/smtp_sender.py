@@ -10,6 +10,29 @@ import os
 log = logging.getLogger(__name__)
 
 
+def _send_msg_with_retry(msg, to, tries=3, timeout=120):
+    """Send via Gmail SMTP with a generous timeout and retries on drop.
+
+    Large attachments make Gmail occasionally kill the connection mid-upload
+    (SMTPServerDisconnected); a fresh connection on retry resolves it."""
+    from config import EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD
+    if not all([EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD]):
+        log.warning("SMTP config incomplete, skipping")
+        return False
+    for attempt in range(1, tries + 1):
+        try:
+            with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=timeout) as s:
+                s.starttls()
+                s.login(EMAIL_USER, EMAIL_PASSWORD)
+                s.send_message(msg)
+            log.info(f"SMTP email sent to {to}")
+            return True
+        except Exception as e:
+            log.warning(f"SMTP attempt {attempt}/{tries} failed for {to}: {e}")
+    log.warning(f"SMTP failed for {to}")
+    return False
+
+
 def send_email(to: str, subject: str, html_body: str) -> bool:
     """Send email via Gmail SMTP. Returns True on success."""
     try:
@@ -21,12 +44,7 @@ def send_email(to: str, subject: str, html_body: str) -> bool:
         msg["Subject"] = subject
         msg["From"] = EMAIL_USER
         msg["To"] = to
-        with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=10) as s:
-            s.starttls()
-            s.login(EMAIL_USER, EMAIL_PASSWORD)
-            s.send_message(msg)
-        log.info(f"SMTP email sent to {to}")
-        return True
+        return _send_msg_with_retry(msg, to)
     except Exception as e:
         log.warning(f"SMTP failed for {to}: {e}")
         return False
@@ -61,14 +79,9 @@ def send_email_with_attachment(to: str, subject: str, html_body: str, file_path:
             part = MIMEBase("application", "octet-stream")
             part.set_payload(f.read())
         encoders.encode_base64(part)
-        part.add_header("Content-Disposition", f"attachment; filename={filename}")
+        part.add_header("Content-Disposition", f'attachment; filename="{filename}"')
         msg.attach(part)
-        with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=30) as s:
-            s.starttls()
-            s.login(EMAIL_USER, EMAIL_PASSWORD)
-            s.send_message(msg)
-        log.info(f"SMTP email with attachment sent to {to}")
-        return True
+        return _send_msg_with_retry(msg, to)
     except Exception as e:
         log.warning(f"SMTP attachment failed for {to}: {e}")
         return False
