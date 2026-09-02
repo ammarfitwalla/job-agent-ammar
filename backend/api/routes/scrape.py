@@ -12,6 +12,19 @@ router = APIRouter(prefix="/scrape", tags=["scrape"])
 
 _STALE_TIMEOUT_MINUTES = 15
 
+# Per-combo scrape controls (overridable via config module).
+SCRAPE_COMBO_STALL_SECONDS = 60   # cancel a combo if job count hasn't grown for this long
+SCRAPE_GOOD_TARGET_PER_COMBO = 50  # stop a combo once it has collected this many new jobs
+
+
+def _combo_knob(name: str, default):
+    """Read a scrape-control knob from config if defined (avoids touching config.py)."""
+    try:
+        import config
+        return getattr(config, name, default)
+    except Exception:
+        return default
+
 
 def cancel_stale_sessions():
     from db import _get_conn
@@ -117,9 +130,13 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
     sid may be None for background prewarm (skips session writes/cancel checks);
     stagger is the (min, max) sleep between combos."""
     import importlib
+    import time
     from match_engine.relevance_engine import role_match_count as _role_match
     from utils.delay import delay as _delay
     from utils.experience_level import detect_experience_level, level_from_job_level, yoe_bucket_from_job
+
+    stall_seconds = _combo_knob("SCRAPE_COMBO_STALL_SECONDS", SCRAPE_COMBO_STALL_SECONDS)
+    target = _combo_knob("SCRAPE_GOOD_TARGET_PER_COMBO", SCRAPE_GOOD_TARGET_PER_COMBO)
 
     all_jobs = list(initial_jobs or [])
     seen = set(seen_urls or [])
@@ -130,6 +147,10 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
         combo_index += 1
         role = combo["role"]
         site_key = combo["site"]
+        combo_new = 0
+        enough = False
+        stalled = False
+        last_progress_ts = time.time()
         if sid and _is_cancelled(sid):
             log(f"[SCRAPE] Cancelled by user", sid)
             set_raw_jobs(sid, all_jobs)
@@ -170,6 +191,10 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
         for run_i, run in enumerate(runs, 1):
             if sid and _is_cancelled(sid):
                 break
+            if stall_seconds > 0 and time.time() - last_progress_ts > stall_seconds:
+                log(f"[SCRAPE] Stalled — {role} @ {site_key}: no new jobs for {stall_seconds}s, skipping combo", sid)
+                stalled = True
+                break
             log(f"[SCRAPE] {role} @ {site_key} — {run['location']} ({run_i}/{len(runs)})...", sid)
             try:
                 kwargs = {"roles": [role], "location": run["location"],
@@ -204,6 +229,13 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
                     break
 
                 if not jobs_batch:
+                    # Only empty feedback is a possible stall; never discard a
+                    # batch that actually arrived with jobs (sync scrapers can
+                    # block > the window before returning a full list).
+                    if stall_seconds > 0 and time.time() - last_progress_ts > stall_seconds:
+                        log(f"[SCRAPE] Stalled — {role} @ {site_key}: no new jobs for {stall_seconds}s, skipping combo", sid)
+                        stalled = True
+                        break
                     continue
 
                 # Title-filter by this role and tag matching jobs
@@ -343,6 +375,13 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
                 if new_count == 0:
                     continue
 
+                combo_new += new_count
+                last_progress_ts = time.time()
+                if target and combo_new >= target:
+                    log(f"[SCRAPE] Enough relevant ({combo_new}) for {role} @ {site_key}, stopping combo", sid)
+                    enough = True
+                    break
+
                 # Keyword-score all accumulated jobs
                 _score_jobs(all_jobs, keywords)
 
@@ -356,6 +395,11 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
                         on_batch(combo, filtered)
                     except Exception:
                         pass
+
+            if stalled or enough:
+                reason = "stalled — no new jobs" if stalled else f"target reached ({combo_new} jobs)"
+                log(f"[SCRAPE] {role} @ {site_key}: combo ended ({reason})", sid)
+                break
 
             # Pause between city runs to avoid Naukri rate-limiting
             if site_key == "naukri" and run_i < len(runs):

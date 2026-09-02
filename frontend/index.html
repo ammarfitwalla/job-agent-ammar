@@ -99,6 +99,8 @@
     }
     .premium-btn-secondary { background: #fff; color: #475569; border: 1px solid #e2e8f0; }
     .premium-btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
+    .premium-btn-danger { background: #fff0f0; color: #b91c1c; border: 1px solid #fecaca; }
+    .premium-btn-danger:hover { background: #fee2e2; border-color: #fca5a5; box-shadow: 0 4px 14px rgba(185,28,28,0.15); }
     .premium-pill {
       display: inline-flex; align-items: center; gap: 4px;
       font-size: 13px; font-weight: 600; padding: 5px 14px;
@@ -304,10 +306,14 @@
 
 
       <!-- Search Button -->
-      <div class="sticky bottom-4 z-20">
-        <button id="searchBtn" class="premium-btn premium-btn-primary w-full py-4 text-base font-bold shadow-lg shadow-brand-500/20">
+      <div class="sticky bottom-4 z-20 flex gap-2">
+        <button id="searchBtn" class="premium-btn premium-btn-primary flex-1 py-4 text-base font-bold shadow-lg shadow-brand-500/20">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           Start Search
+        </button>
+        <button id="stopSearchBtn" type="button" class="hidden premium-btn premium-btn-danger w-28 py-4 text-base font-bold shrink-0">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 8a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 4a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>
+          Stop
         </button>
       </div>
 

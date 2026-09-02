@@ -871,6 +871,7 @@ function resetSearchBtn() {
   btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Start Search';
   btn.disabled = false;
   document.getElementById("extractBtn").disabled = false;
+  hideElement("stopSearchBtn");
 }
 
 function updateCountBadge(n) {
@@ -892,6 +893,7 @@ function clearTargetRoles() {
 
 function clearSearchState() {
   cancelActiveSearch();
+  hideElement("stopSearchBtn");
   allJobs = [];
   customJobs = [];
   aiJobs = [];
@@ -1562,6 +1564,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Searching Data...';
   btn.disabled = true;
   document.getElementById("extractBtn").disabled = true;
+  showElement("stopSearchBtn");
 
   _searchId = crypto.randomUUID();
   resetRelevanceState();
@@ -1617,6 +1620,32 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
     resetSearchBtn(); showElement("results");
   }
 });
+
+// ===== STOP SEARCH (user-initiated) =====
+function stopSearchNow() {
+  if (_searchComplete) return;
+  cancelActiveSearch();
+  _searchComplete = true;
+  resetSearchBtn();
+  showElement("results");
+  if (_customRoleList.length > 0 && _aiRoleList.length > 0) {
+    showTabBar();
+    switchTab('custom');
+    updateTabCounts();
+    renderActiveTab();
+  } else {
+    hideTabBar();
+    renderAllJobs(allJobs);
+  }
+  const msg = allJobs.length
+    ? `Stopped by you — ${allJobs.length} jobs kept`
+    : "Search stopped — no jobs collected yet. Try broader roles or location.";
+  setStatus(msg, "amber");
+  document.title = `(${allJobs.length}) Jobs - AI Job Agent`;
+  logEvent("scrape_stopped", { jobs: allJobs.length });
+}
+
+document.getElementById("stopSearchBtn").addEventListener("click", stopSearchNow);
 
 // ===== POLL ALL SCRAPES =====
 function pollAllScrapes() {
