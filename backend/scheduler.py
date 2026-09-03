@@ -279,6 +279,10 @@ def run_prewarm() -> int:
     seed_prewarm_queue(_grid_combos())
     db.gc_custom_prewarm()
     db.gc_sessions()
+    db.gc_job_cache(
+        max_age_hours=config.CACHE_MAX_AGE_HOURS,
+        max_entries=config.CACHE_MAX_ENTRIES,
+    )
     queue = get_prewarm_queue()
     limit = config.PREWARM_MAX_COMBOS_PER_RUN
     todo = []

@@ -254,7 +254,7 @@ CACHE_MIN_VOLUME = 10                                     # min jobs for an entr
 CACHE_HOURS_OLD = 168                                     # posting window used by scrapers
 CACHE_PREWARM_LIMIT = 30                                  # prewarm fetch/store per combo
 CACHE_MAX_JOBS_PER_ENTRY = 500                            # live-search cache write cap
-CACHE_MAX_AGE_HOURS = 336                                 # delete cache rows older than 14 days
+CACHE_MAX_AGE_HOURS = 672                                 # delete cache rows older than 28 days
 CACHE_MAX_ENTRIES = 50000                                 # row-count safety cap
 
 CACHE_ROLES = ["Full Stack Developer", "Backend Developer", "Frontend Developer",
@@ -271,11 +271,32 @@ CACHE_INCLUDE_ALL_STATES = True
 # Optional curated states per country (used when CACHE_INCLUDE_ALL_STATES is false)
 CACHE_STATES_OVERRIDE = {}  # e.g. {"us": ["California", "Texas"]}
 # State names excluded from the prewarm grid (military/territory codes with no job market)
+# Plus low-yield Indian states (<~10 jobs statewide) excluded to avoid wasting prewarm passes.
 CACHE_STATES_EXCLUDE = [
     "Armed Forces Europe",
     "Armed Forces of the Americas",
     "Armed Forces Pacific",
     "United States Minor Outlying Islands",
+    # India: near-zero job markets (verified from live cache Aug/Sep 2026)
+    "Andaman and Nicobar Islands",
+    "Arunachal Pradesh",
+    "Assam",
+    "Bihar",
+    "Chhattisgarh",
+    "Goa",
+    "Himachal Pradesh",
+    "Jammu and Kashmir",
+    "Jharkhand",
+    "Ladakh",
+    "Lakshadweep",
+    "Manipur",
+    "Meghalaya",
+    "Mizoram",
+    "Nagaland",
+    "Puducherry",
+    "Sikkim",
+    "Tripura",
+    "Uttarakhand",
 ]
 
 # Naukri matches location tokens by city, not state, so each state combo loops
