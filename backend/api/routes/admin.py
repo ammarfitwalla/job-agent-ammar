@@ -3,12 +3,30 @@ import os
 import platform
 import tempfile
 from datetime import datetime, timedelta
-from fastapi import APIRouter, UploadFile, File, Form
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 ADMIN_EMAIL = "ammarfitwalla@gmail.com"
+
+
+class CreateUserRequest(BaseModel):
+    email: str = ""
+    name: str = ""
+    company: str = ""
+    position: str = ""
+    linkedin_url: str = ""
+
+
+class UpdateUserRequest(BaseModel):
+    name: str | None = None
+    company: str | None = None
+    position: str | None = None
+    linkedin_url: str | None = None
+    referral_credits: int | None = None
+    refer_opt_in: int | None = None
 
 
 def _classify(s):
@@ -323,6 +341,45 @@ async def admin_registrations():
     return {"registrations": get_all_users(limit=500)}
 
 
+def _check_admin(email: str):
+    if email != ADMIN_EMAIL:
+        raise HTTPException(403, "Unauthorized")
+
+
+@router.post("/users")
+async def admin_create_user(req: CreateUserRequest, email: str = ""):
+    _check_admin(email)
+    from db import create_user, get_user
+    if not req.email or not req.email.strip():
+        raise HTTPException(400, "email is required")
+    if not req.name or not req.name.strip():
+        raise HTTPException(400, "name is required")
+    req_email = req.email.strip().lower()
+    if get_user(req_email):
+        raise HTTPException(409, "User already exists")
+    create_user(req_email, req.name.strip(), req.company or "", req.position or "", req.linkedin_url or "")
+    return {"ok": True}
+
+
+@router.patch("/users/{user_email}")
+async def admin_update_user(user_email: str, req: UpdateUserRequest, email: str = ""):
+    _check_admin(email)
+    from db import update_user_admin, get_user
+    target = get_user(user_email)
+    if not target:
+        raise HTTPException(404, "User not found")
+    update_user_admin(
+        user_email,
+        name=req.name,
+        company=req.company,
+        position=req.position,
+        linkedin_url=req.linkedin_url,
+        referral_credits=req.referral_credits,
+        refer_opt_in=req.refer_opt_in,
+    )
+    return {"ok": True}
+
+
 @router.get("/visits")
 async def admin_visits():
     from db import get_visits, get_visit_stats
@@ -491,7 +548,17 @@ async def get_cache_stats():
         sites = [dict(r) for r in cur.fetchall()]
         cur.execute("SELECT COUNT(*) as e, SUM(job_count) as j FROM job_cache")
         total = dict(cur.fetchone())
-    return {"sites": sites, "total_entries": total["e"] or 0, "total_jobs": total["j"] or 0}
+        rows = {}
+        for s in sites:
+            cur.execute(
+                "SELECT id, role, site, city, state, country, internship_mode, "
+                "is_remote, job_count, scraped_at, usage_count, last_used_at "
+                "FROM job_cache WHERE site = ? "
+                "ORDER BY scraped_at DESC, id DESC LIMIT 10",
+                (s["site"],),
+            )
+            rows[s["site"]] = [dict(r) for r in cur.fetchall()]
+    return {"sites": sites, "total_entries": total["e"] or 0, "total_jobs": total["j"] or 0, "rows": rows}
 
 
 @router.delete("/prewarm/custom")

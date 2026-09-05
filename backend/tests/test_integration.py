@@ -64,6 +64,7 @@ def _init_test_db():
             company TEXT DEFAULT '',
             match_score INTEGER DEFAULT 0,
             message TEXT DEFAULT '',
+            resume_filename TEXT DEFAULT '',
             status TEXT DEFAULT 'pending',
             credit_awarded INTEGER DEFAULT 0,
             accepted_at TEXT DEFAULT '',
@@ -350,7 +351,7 @@ class TestIntegrationReferralFlow(unittest.TestCase):
         self._dev_mode_patcher.stop()
         self._db_dev_mode_patcher.stop()
 
-    def _create_referral(self, from_email=None, to_email=None, job_url=None):
+    def _create_referral(self, from_email=None, to_email=None, job_url=None, resume_filename=""):
         return self.client.post("/api/referrals/request", json={
             "from_email": from_email or self.from_email,
             "to_email": to_email or self.to_email,
@@ -359,6 +360,7 @@ class TestIntegrationReferralFlow(unittest.TestCase):
             "company": self.company,
             "match_score": self.match_score,
             "message": self.message,
+            "resume_filename": resume_filename,
         })
 
     def test_01_create_referral(self):
@@ -397,7 +399,33 @@ class TestIntegrationReferralFlow(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertGreaterEqual(len(data.get("requests", [])), 1)
-        self.assertEqual(data["requests"][0]["to_email"], self.to_email)
+        req = data["requests"][0]
+        # Privacy: pending/outgoing requests hide the referrer's identity.
+        self.assertEqual(req["to_email"], "")
+        self.assertEqual(req["to_name"], "")
+        self.assertTrue(req.get("to_referrer_id"))
+        self.assertEqual(req["from_email"], self.from_email)
+
+    def test_05b_resume_filename_persisted(self):
+        self._create_referral(resume_filename="resume.pdf")
+        outgoing = self.client.get(f"/api/referrals/outgoing?email={self.from_email}").json()
+        req = outgoing["requests"][0]
+        self.assertEqual(req.get("resume_filename"), "resume.pdf")
+
+    def test_05c_resume_locked_until_accepted(self):
+        self._create_referral(resume_filename="resume.pdf")
+        outgoing = self.client.get(f"/api/referrals/outgoing?email={self.from_email}").json()
+        rid = outgoing["requests"][0]["id"]
+        r = self.client.get(f"/api/referrals/resume?request_id={rid}")
+        self.assertEqual(r.status_code, 403)
+
+    def test_05d_resume_missing_file_after_accept(self):
+        self._create_referral(resume_filename="does_not_exist.pdf")
+        outgoing = self.client.get(f"/api/referrals/outgoing?email={self.from_email}").json()
+        rid = outgoing["requests"][0]["id"]
+        self.client.put(f"/api/referrals/{rid}/accept", json={"email": self.to_email})
+        r = self.client.get(f"/api/referrals/resume?request_id={rid}")
+        self.assertEqual(r.status_code, 404)
 
     def test_06_accept_referral(self):
         self._create_referral()
@@ -408,6 +436,13 @@ class TestIntegrationReferralFlow(unittest.TestCase):
         data = r.json()
         self.assertTrue(data["ok"])
         self.assertIn("contact", data)
+        after = self.client.get(f"/api/referrals/outgoing?email={self.from_email}").json()
+        a_req = after["requests"][0]
+        # Accepted requests must still expose the opaque referrer key so the
+        # frontend can correlate cards and stop offering "Ask for Referral".
+        self.assertEqual(a_req["status"], "accepted")
+        self.assertTrue(a_req.get("to_referrer_id"))
+        self.assertTrue(a_req.get("to_name"))
 
     def test_07_complete_referral(self):
         self._create_referral()
@@ -524,9 +559,13 @@ class TestIntegrationReferralNetworkFlow(unittest.TestCase):
 
         r = self.client.get("/api/users/at-company?company=Google")
         self.assertEqual(r.status_code, 200)
-        emails = [u["email"] for u in r.json()["users"]]
-        self.assertIn("ref1@example.com", emails)
-        self.assertNotIn("seeker@example.com", emails)
+        users = r.json()["users"]
+        # Privacy: the endpoint returns only an opaque id + position (no PII),
+        # so verify by count rather than email.
+        self.assertEqual(len(users), 1)
+        self.assertEqual(users[0]["position"], "")
+        self.assertTrue(users[0].get("id"))
+        self.assertNotIn("email", users[0])
 
     def test_02_company_counts_opt_in_only(self):
         self._register("counta@example.com", "Count A", "Meta", 1)
@@ -677,6 +716,68 @@ class TestIntegrationCompanyHarvest(unittest.TestCase):
         _harvest_companies(jobs)
         rows = self._get_rows("SELECT name FROM custom_companies")
         self.assertEqual(rows, ["ValidCo"])
+
+
+class TestAdminUserCRU(unittest.TestCase):
+    def setUp(self):
+        _init_test_db()
+        self._conn_patcher = patch("db._get_conn", _make_conn_patch())
+        self._conn_patcher.start()
+
+        from fastapi.testclient import TestClient
+        from api.main import app
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        self._conn_patcher.stop()
+
+    def test_create_read_update_user(self):
+        email = "admincru@example.com"
+        r = self.client.post("/api/admin/users?email=ammarfitwalla@gmail.com", json={
+            "email": email, "name": "Admin CRU", "company": "TCS", "position": "Dev",
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["ok"])
+
+        r = self.client.get("/api/admin/registrations")
+        data = r.json()
+        emails = [u["email"] for u in data["registrations"]]
+        self.assertIn(email, emails)
+
+        r = self.client.patch(f"/api/admin/users/{email}?email=ammarfitwalla@gmail.com", json={
+            "name": "Updated Name", "company": "Wipro", "position": "Senior Dev",
+            "referral_credits": 12, "refer_opt_in": 1,
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["ok"])
+
+        r = self.client.get("/api/admin/registrations")
+        user = [u for u in r.json()["registrations"] if u["email"] == email][0]
+        self.assertEqual(user["name"], "Updated Name")
+        self.assertEqual(user["company"], "Wipro")
+        self.assertEqual(user["referral_credits"], 12)
+        self.assertEqual(user["refer_opt_in"], 1)
+
+    def test_partial_update_keeps_other_fields(self):
+        email = "partial@example.com"
+        self.client.post("/api/admin/users?email=ammarfitwalla@gmail.com", json={
+            "email": email, "name": "Partial", "company": "Accenture", "position": "Analyst",
+        })
+        r = self.client.patch(f"/api/admin/users/{email}?email=ammarfitwalla@gmail.com", json={"position": "Consultant"})
+        self.assertEqual(r.status_code, 200)
+        user = [u for u in self.client.get("/api/admin/registrations").json()["registrations"] if u["email"] == email][0]
+        self.assertEqual(user["position"], "Consultant")
+        self.assertEqual(user["company"], "Accenture")
+
+    def test_update_missing_user_404(self):
+        r = self.client.patch("/api/admin/users/nope@example.com?email=ammarfitwalla@gmail.com", json={"name": "X"})
+        self.assertEqual(r.status_code, 404)
+
+    def test_create_requires_valid_admin(self):
+        r = self.client.post("/api/admin/users?email=hacker@evil.com", json={
+            "email": "h@evil.com", "name": "Hacker",
+        })
+        self.assertEqual(r.status_code, 403)
 
 
 if __name__ == "__main__":

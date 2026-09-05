@@ -349,27 +349,29 @@ async function showReferralUsers(company) {
   }
   list.innerHTML = users.map(u => {
     const existing = outgoingRequests.find(req =>
-      req.to_email === u.email && req.job_url === (window._referralJobUrl || "") && req.company === _referralCompany
+      req.to_referrer_id === u.id && req.job_url === (window._referralJobUrl || "") && req.company === _referralCompany
     );
     let btnHtml = "";
     if (!profile) {
       btnHtml = `<button class="text-xs font-medium text-slate-400 bg-slate-50 px-3 py-1.5 rounded-lg referral-signin-btn">Sign in to ask</button>`;
     } else if (existing && existing.status === "pending") {
-      btnHtml = `<button class="text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors referral-withdraw-btn" data-id="${existing.id}" data-email="${htmlEscape(u.email)}" data-name="${htmlEscape(u.name)}">Withdraw</button>`;
+      btnHtml = `<button class="text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors referral-withdraw-btn" data-id="${existing.id}" data-referrer-id="${htmlEscape(u.id)}">Withdraw</button>`;
     } else if (existing && existing.status === "cancelled") {
-      btnHtml = `<button class="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors referral-ask-btn" data-email="${htmlEscape(u.email)}" data-name="${htmlEscape(u.name)}">Ask for Referral</button>`;
+      btnHtml = `<button class="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors referral-ask-btn" data-referrer-id="${htmlEscape(u.id)}">Ask for Referral</button>`;
     } else if (existing) {
-      btnHtml = `<span class="text-xs font-medium text-slate-400 px-3 py-1.5">${htmlEscape(existing.status)}</span>`;
+      const st = existing.status;
+      const stCls = st === "accepted" ? "bg-emerald-50 text-emerald-700" : st === "declined" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600";
+      btnHtml = `<span class="text-[11px] font-semibold px-3 py-1.5 rounded-lg ${stCls}">${htmlEscape(st.charAt(0).toUpperCase() + st.slice(1))}</span>`;
     } else {
-      btnHtml = `<button class="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors referral-ask-btn" data-email="${htmlEscape(u.email)}" data-name="${htmlEscape(u.name)}">Ask for Referral</button>`;
+      btnHtml = `<button class="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors referral-ask-btn" data-referrer-id="${htmlEscape(u.id)}">Ask for Referral</button>`;
     }
     return `
     <div class="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
       <div class="flex items-center gap-3 min-w-0">
-        <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-bold shrink-0">${htmlEscape(u.name.charAt(0).toUpperCase())}</div>
+        <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-bold shrink-0">?</div>
         <div class="min-w-0">
-          <div class="text-sm font-medium text-slate-900 truncate">${htmlEscape(u.name)}</div>
-          <div class="text-xs text-slate-500 truncate">${htmlEscape(u.position || "Works at " + company)}</div>
+          <div class="text-sm font-medium text-slate-900 truncate">Insider at ${htmlEscape(company)}</div>
+          ${u.position ? `<div class="text-xs text-slate-500 truncate">${htmlEscape(u.position)}</div>` : `<div class="text-xs text-slate-400 truncate">Position not shared</div>`}
         </div>
       </div>
       ${btnHtml}
@@ -403,6 +405,7 @@ async function scoreReferralJob() {
   const description = typeof window.getReferralJobDescription === "function"
     ? (window.getReferralJobDescription(url) || "")
     : (window._referralJobDescription || "");
+  if (!description) return 0;
   try {
     const r = await fetch("/api/referrals/score", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -422,47 +425,108 @@ async function scoreReferralJob() {
   }
 }
 
-async function askReferral(btn, toEmail, toName) {
-  const profile = getProfile();
-  if (!profile) { closeReferralModal(); window.showAuthModal(); return; }
-  if (toEmail === profile.email) {
-    showToast("You can't refer yourself");
-    return;
-  }
+let _referralResumeFilename = "";
+let _referralResumeReady = false;
 
-  let hasDefaultResume = !!(profile.resume_filename || "");
-  if (!profile.resume_filename) {
+async function resolveSessionResume(profile) {
+  const sid = window._searchSessionId || "";
+  if (sid) {
     try {
-      const r = await fetch(`/api/profile?email=${encodeURIComponent(profile.email)}`);
+      const r = await fetch(`/scrape/status?search_id=${encodeURIComponent(sid)}`);
       const d = await r.json();
-      if (d && d.email) {
-        setProfile(d);
-        hasDefaultResume = !!(d.resume_filename || "");
-      }
+      if (d && d.resume_filename) return d.resume_filename;
     } catch {}
   }
-  if (!hasDefaultResume && (isProfilePage() || !getResumeText())) {
-    promptAddResume();
-    return;
+  return (profile && profile.resume_filename) || "";
+}
+
+function referralResumeNote(filename) {
+  return `<div class="text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1.5 inline-flex items-center gap-1.5">
+    <svg class="w-3.5 h-3.5 text-indigo-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+    <span class="min-w-0 truncate"><span class="font-medium text-slate-600">${htmlEscape(filename)}</span> will be sent to the referrer</span>
+  </div>`;
+}
+
+function flashResumeRequired(row) {
+  if (!_referralResumeReady) return;
+  const lbl = row.querySelector(".ref-resume-upload-lbl");
+  if (lbl) {
+    const label = lbl.closest("label");
+    if (label) {
+      label.className = "inline-flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-300 px-3 py-1.5 rounded-lg transition-colors";
+    }
+    lbl.textContent = "Upload your resume to send";
   }
+  let err = row.querySelector(".ref-resume-error");
+  if (!err) {
+    err = document.createElement("p");
+    err.className = "ref-resume-error text-[11px] text-red-500 font-medium mt-1.5 pl-0.5";
+    err.textContent = "Please upload your resume before sending your request.";
+    row.appendChild(err);
+  }
+}
+
+function setupReferralResumeRow(row, profile) {
+  resolveSessionResume(profile).then(fname => {
+    _referralResumeFilename = fname;
+    _referralResumeReady = true;
+    if (fname) {
+      row.innerHTML = referralResumeNote(fname);
+      return;
+    }
+    row.innerHTML = `
+      <label class="inline-flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/60 px-3 py-1.5 rounded-lg transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+        <span class="ref-resume-upload-lbl">Upload resume (required)</span>
+        <input type="file" accept=".pdf,.docx,.txt" class="hidden ref-resume-file">
+      </label>
+      <p class="text-[10px] text-slate-400 mt-1 pl-0.5">Your resume is shown to the referrer only after they accept your request.</p>`;
+    const input = row.querySelector(".ref-resume-file");
+    input.addEventListener("change", async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const lbl = row.querySelector(".ref-resume-upload-lbl");
+      lbl.textContent = "Uploading...";
+      const fd = new FormData();
+      fd.append("file", file);
+      try {
+        const r = await fetch(`/api/profile/resume?email=${encodeURIComponent(profile.email)}`, { method: "POST", body: fd });
+        const d = await r.json();
+        if (d.ok && d.filename) {
+          _referralResumeFilename = d.filename;
+          const p = getProfile();
+          setProfile({ ...p, resume_filename: d.filename });
+          if (typeof window.refreshProfileResumeBtn === "function") window.refreshProfileResumeBtn();
+          showToast("Resume saved as your default resume");
+          row.innerHTML = referralResumeNote(d.filename);
+        } else {
+          lbl.textContent = "Upload failed. Try again.";
+          showToast("Could not read that file. Use a PDF, DOCX, or TXT resume.");
+        }
+      } catch {
+        lbl.textContent = "Upload failed. Try again.";
+        showToast("Resume upload failed. Check your connection.");
+      }
+      input.value = "";
+    });
+  });
+}
+
+async function askReferral(btn, referrerId, toName) {
+  const profile = getProfile();
+  if (!profile) { closeReferralModal(); window.showAuthModal(); return; }
 
   const card = btn.closest(".flex.items-center.justify-between");
   if (!card) return;
-  const existing = card.querySelector(".referral-msg-box");
+  const existing = card.parentElement.querySelector(".referral-msg-box");
   if (existing) { existing.remove(); return; }
 
-  btn.disabled = true;
-  const origText = btn.textContent;
-  btn.textContent = "Scoring job...";
-  const score = await scoreReferralJob();
-  window._referralMatchScore = score;
-  btn.disabled = false;
-  btn.textContent = origText;
-
+  _referralResumeFilename = "";
+  _referralResumeReady = false;
   const msgBox = document.createElement("div");
   msgBox.className = "referral-msg-box w-full mt-2 pt-2 border-t border-slate-100";
   msgBox.innerHTML = `
-    ${score > 0 ? `<div class="text-xs font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-1.5 mb-2">✨ AI Match: ${Math.round(score)}% against your resume</div>` : ""}
+    <div class="ref-resume-row mb-2"></div>
     <textarea class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:bg-white focus:border-indigo-300 resize-none transition-colors" rows="2" placeholder="Add a message (optional)..." maxlength="500"></textarea>
     <div class="flex gap-2 mt-2">
       <button class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 rounded-lg text-xs font-semibold transition-colors referral-send-btn">Send Request</button>
@@ -470,140 +534,22 @@ async function askReferral(btn, toEmail, toName) {
     </div>`;
   card.parentElement.appendChild(msgBox);
   msgBox.querySelector(".referral-send-btn").onclick = function () {
+    if (!_referralResumeFilename) {
+      flashResumeRequired(msgBox.querySelector(".ref-resume-row"));
+      return;
+    }
     const message = msgBox.querySelector("textarea").value.trim();
-    sendReferralRequest(btn, toEmail, toName, message, msgBox);
+    sendReferralRequest(btn, referrerId, toName, message, msgBox);
   };
   msgBox.querySelector(".referral-cancel-btn").onclick = function () { msgBox.remove(); };
   msgBox.querySelector("textarea").focus();
+
+  setupReferralResumeRow(msgBox.querySelector(".ref-resume-row"), profile);
+  scoreReferralJob().then(score => { window._referralMatchScore = score; });
 }
 
-let _resumePromptResolve = null;
-
-function closeResumePromptModal() {
-  const modal = document.getElementById("resumePromptModal");
-  if (modal) {
-    modal.classList.add("hidden");
-    modal.classList.remove("flex");
-  }
-  const r = _resumePromptResolve;
-  _resumePromptResolve = null;
-  if (r) r(false);
-}
-
-function setDefaultResumeChoice(choice) {
-  const modal = document.getElementById("resumePromptModal");
-  if (modal) {
-    modal.classList.add("hidden");
-    modal.classList.remove("flex");
-  }
-  const r = _resumePromptResolve;
-  _resumePromptResolve = null;
-  if (r) r(choice);
-}
-
-function openResumePromptModal() {
-  return new Promise((resolve) => {
-    const modal = document.getElementById("resumePromptModal");
-    _resumePromptResolve = resolve;
-    modal.classList.remove("hidden");
-    modal.classList.add("flex");
-  });
-}
-
-async function uploadDefaultResume(resumeText) {
+async function sendReferralRequest(btn, referrerId, toName, message, msgBox) {
   const profile = getProfile();
-  if (!profile || !resumeText) return false;
-  const file = new File([resumeText], "resume.txt", { type: "text/plain" });
-  const fd = new FormData();
-  fd.append("file", file);
-  try {
-    const r = await fetch(`/api/profile/resume?email=${encodeURIComponent(profile.email)}`, { method: "POST", body: fd });
-    const d = await r.json();
-    if (d.ok && d.filename) {
-      const p = getProfile();
-      setProfile({ ...p, resume_filename: d.filename });
-      if (typeof window.refreshProfileResumeBtn === "function") window.refreshProfileResumeBtn();
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-function isProfilePage() {
-  return !!document.getElementById("editResumeFile");
-}
-
-function promptAddResume() {
-  closeReferralModal();
-  const msgEl = document.getElementById("addResumeMsg");
-  if (msgEl) {
-    msgEl.textContent = isProfilePage()
-      ? "Please edit your profile and upload a resume before sending a referral request."
-      : "Please upload a resume on your Profile page before sending a referral request.";
-  }
-  openAddResumeModal();
-}
-
-function openAddResumeModal() {
-  const modal = document.getElementById("addResumeModal");
-  if (modal) {
-    modal.classList.remove("hidden");
-    modal.classList.add("flex");
-  }
-}
-
-function closeAddResumeModal() {
-  const modal = document.getElementById("addResumeModal");
-  if (modal) {
-    modal.classList.add("hidden");
-    modal.classList.remove("flex");
-  }
-}
-
-function addResumePrimaryAction() {
-  closeAddResumeModal();
-  if (typeof window.enableProfileEdit === "function") {
-    window.enableProfileEdit();
-  } else {
-    window.location.href = "profile.html";
-  }
-}
-
-async function sendReferralRequest(btn, toEmail, toName, message, msgBox) {
-  const profile = getProfile();
-
-  let hasDefaultResume = true;
-  try {
-    const r = await fetch(`/api/profile?email=${encodeURIComponent(profile.email)}`);
-    const d = await r.json();
-    if (d && d.email) {
-      setProfile(d);
-      hasDefaultResume = !!(d.resume_filename || "");
-    }
-  } catch {
-    hasDefaultResume = true;
-  }
-
-  if (!hasDefaultResume) {
-    const resumeText = getResumeText();
-    if (isProfilePage() || !resumeText) {
-      promptAddResume();
-      return;
-    }
-    const useIt = await openResumePromptModal();
-    if (!useIt) {
-      promptAddResume();
-      return;
-    }
-    const uploaded = await uploadDefaultResume(resumeText);
-    if (!uploaded) {
-      showToast("Failed to set your default resume. Please try again.");
-      return;
-    }
-    showToast("Default resume set");
-  }
 
   btn.disabled = true;
   btn.textContent = "Sending...";
@@ -611,12 +557,13 @@ async function sendReferralRequest(btn, toEmail, toName, message, msgBox) {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       from_email: profile.email,
-      to_email: toEmail,
+      referrer_id: referrerId,
       job_url: window._referralJobUrl || "",
       job_title: window._referralJobTitle || "",
       company: _referralCompany,
       match_score: window._referralMatchScore || 0,
       message: message,
+      resume_filename: _referralResumeFilename || "",
       job_description: typeof window.getReferralJobDescription === "function"
         ? (window.getReferralJobDescription(window._referralJobUrl || "") || "")
         : (window._referralJobDescription || ""),
@@ -626,7 +573,7 @@ async function sendReferralRequest(btn, toEmail, toName, message, msgBox) {
     if (d.ok) {
       showToast(`Referral request sent to ${toName}!`);
       btn.textContent = "Withdraw";
-      btn.onclick = function () { withdrawReferralRequest(d.id, btn, toEmail, toName); };
+      btn.onclick = function () { withdrawReferralRequest(d.id, btn, referrerId, toName); };
       btn.disabled = false;
       btn.className = "text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors";
       if (msgBox) msgBox.remove();
@@ -783,7 +730,15 @@ async function loadReferrals() {
 
     const buildCard = (r) => {
       const isIncoming = _referralTab === "incoming" || r._direction === "from";
-      const name = isIncoming ? (r.from_name || "Unknown") : (r.to_name || "Unknown");
+      // Privacy: for outgoing requests, a referrer's identity is hidden until accepted.
+      let name;
+      if (isIncoming) {
+        name = r.from_name || "Unknown";
+      } else if (r.status === "accepted") {
+        name = r.to_name || "Insider at " + r.company;
+      } else {
+        name = r.to_position ? `Insider at ${r.company} — ${r.to_position}` : `Insider at ${r.company || "Company"}`;
+      }
       const nc = nameColors[name.length % nameColors.length];
       const sm = STATUS_META[r.status] || { label: r.status, cls: "bg-slate-100 text-slate-600" };
       const dirCls = isIncoming ? "bg-indigo-50 text-indigo-600" : "bg-slate-100 text-slate-600";
@@ -808,9 +763,9 @@ async function loadReferrals() {
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
           Withdraw request
         </button>`;
-      } else if (_referralTab === "outgoing" && r.status === "cancelled") {
+} else if (_referralTab === "outgoing" && r.status === "cancelled") {
         _referralCompany = r.company || "";
-        actions = `<button class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors referral-ask-btn" data-email="${htmlEscape(r.to_email || '')}" data-name="${htmlEscape(r.to_name || '')}" data-job-url="${htmlEscape(r.job_url || '')}" data-job-title="${htmlEscape(r.job_title || '')}" data-company="${htmlEscape(r.company || '')}">
+        actions = `<button class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors referral-ask-btn" data-to-referrer-id="${htmlEscape(r.to_referrer_id || '')}" data-to-name="${htmlEscape((r.to_position ? `Insider at ${r.company} — ${r.to_position}` : `Insider at ${r.company}`) || '')}" data-job-url="${htmlEscape(r.job_url || '')}" data-job-title="${htmlEscape(r.job_title || '')}" data-company="${htmlEscape(r.company || '')}">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
           Ask again
         </button>`;
@@ -860,7 +815,7 @@ async function loadReferrals() {
             ${r.from_company || r.from_position ? `<p class="text-xs text-slate-500">${[r.from_position, r.from_company].filter(Boolean).join(" at ")}</p>` : ""}
             <div class="flex flex-wrap gap-3 pt-1">
               ${r.from_linkedin_url ? `<a href="${htmlEscape(r.from_linkedin_url)}" target="_blank" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>LinkedIn</a>` : ""}
-              ${r.from_resume_filename ? `<a href="/api/profile/resume?email=${encodeURIComponent(r.from_email)}" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Resume</a>` : ""}
+              ${r.resume_filename ? `<a href="/api/referrals/resume?request_id=${r.id}" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Resume</a>` : ""}
             </div>` : `
             <div class="flex flex-wrap items-center gap-2">
               <span class="text-sm font-medium text-slate-700">${htmlEscape(r.to_email)}</span>
@@ -1054,8 +1009,10 @@ async function withdrawReferral(id) {
   }
 }
 
-// ── Event delegation for data-attribute buttons ──
-document.addEventListener("click", (e) => {
+// ── Event delegation for data-attribute buttons (capture phase) ──
+// Must be capture phase because the referral modal inner div has
+// onclick="event.stopPropagation()" which blocks bubble-phase delegation.
+document.addEventListener("click", (e) => {  // capture phase — see note above
   const signinBtn = e.target.closest(".referral-signin-btn");
   if (signinBtn) { closeReferralModal(); window.showAuthModal(); return; }
   const askBtn = e.target.closest(".referral-ask-btn");
@@ -1066,11 +1023,19 @@ document.addEventListener("click", (e) => {
     if (askBtn.dataset.company) _referralCompany = askBtn.dataset.company;
     window._referralMatchScore = 0;
     window._referralJobDescription = '';
-    askReferral(askBtn, askBtn.dataset.email, askBtn.dataset.name);
+    const rid = askBtn.dataset.referrerId || "";
+    const toName = askBtn.dataset.toName || "";
+    if (rid) {
+      askReferral(askBtn, rid, toName);
+    } else if (askBtn.dataset.toReferrerId) {
+      askReferral(askBtn, askBtn.dataset.toReferrerId, toName);
+    } else {
+      askReferral(askBtn, askBtn.dataset.email, toName);
+    }
     return;
   }
   const withdrawBtn = e.target.closest(".referral-withdraw-btn");
-  if (withdrawBtn) { withdrawReferralRequest(parseInt(withdrawBtn.dataset.id), withdrawBtn, withdrawBtn.dataset.email, withdrawBtn.dataset.name); return; }
+  if (withdrawBtn) { withdrawReferralRequest(parseInt(withdrawBtn.dataset.id), withdrawBtn, withdrawBtn.dataset.referrerId || withdrawBtn.dataset.toReferrerId || "", withdrawBtn.dataset.toName || ""); return; }
   const acceptBtn = e.target.closest(".accept-referral-btn");
   if (acceptBtn) { acceptReferral(parseInt(acceptBtn.dataset.id)); return; }
   const declineBtn = e.target.closest(".decline-referral-btn");
@@ -1083,15 +1048,12 @@ document.addEventListener("click", (e) => {
   if (senderBtn) { senderConfirmReferral(parseInt(senderBtn.dataset.id)); return; }
   const copyBtn = e.target.closest(".copy-ref-email-btn");
   if (copyBtn) { copyRefEmail(copyBtn, copyBtn.dataset.email); return; }
-});
+}, true);
 
 window.closeReferralModal = closeReferralModal;
-window.closeResumePromptModal = closeResumePromptModal;
-window.setDefaultResumeChoice = setDefaultResumeChoice;
-window.closeAddResumeModal = closeAddResumeModal;
-window.addResumePrimaryAction = addResumePrimaryAction;
 window.refreshReferralRemaining = refreshReferralRemaining;
 window.showReferralUsers = showReferralUsers;
+
 window.askReferral = askReferral;
 window.withdrawReferralRequest = withdrawReferralRequest;
 window.switchReferralTab = switchReferralTab;

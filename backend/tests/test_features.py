@@ -72,6 +72,7 @@ def _make_test_db():
             company TEXT DEFAULT '',
             match_score INTEGER DEFAULT 0,
             message TEXT DEFAULT '',
+            resume_filename TEXT DEFAULT '',
             status TEXT DEFAULT 'pending',
             credit_awarded INTEGER DEFAULT 0,
             created_at TEXT NOT NULL,

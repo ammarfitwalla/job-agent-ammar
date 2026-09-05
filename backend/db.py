@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import json
+import hashlib
 import threading
 import time
 import contextlib
@@ -230,6 +231,7 @@ def init_db():
                 accepted_at TEXT DEFAULT '',
                 receiver_confirmed INTEGER DEFAULT 0,
                 sender_confirmed INTEGER DEFAULT 0,
+                resume_filename TEXT DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -373,6 +375,11 @@ def init_db():
                 cur.execute(f"ALTER TABLE referral_requests ADD COLUMN {col}")
             except Exception:
                 pass
+        # Migrate existing referral_requests table — add resume_filename
+        try:
+            cur.execute("ALTER TABLE referral_requests ADD COLUMN resume_filename TEXT DEFAULT ''")
+        except Exception:
+            pass
         # Migrate jobs table — add date_posted column
         try:
             cur.execute("ALTER TABLE jobs ADD COLUMN date_posted TEXT DEFAULT ''")
@@ -1182,6 +1189,40 @@ def get_referrers_by_company(company: str) -> list[dict]:
         return [dict(r) for r in cur.fetchall()]
 
 
+_REFERRER_KEY_SALT = "ja-referrer-v1"
+
+
+def referrer_key(email: str) -> str:
+    """Opaque, non-reversible identifier for a referrer used to protect their
+    identity from seekers until they accept a referral request."""
+    if not email:
+        return ""
+    return hashlib.sha256(f"{_REFERRER_KEY_SALT}:{email}".encode("utf-8")).hexdigest()
+
+
+def get_anonymous_referrers_by_company(company: str) -> list[dict]:
+    """Opted-in referrers at a company exposed to seekers without any PII.
+    Each entry is {id, position} where id is an opaque key (not the email)."""
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            "SELECT email, position FROM users "
+            "WHERE LOWER(company) = LOWER(?) AND refer_opt_in = 1",
+            (company,))
+        return [{"id": referrer_key(r["email"]), "position": r["position"]} for r in cur.fetchall()]
+
+
+def get_user_by_referrer_key(key: str) -> Optional[dict]:
+    """Resolve an opaque referrer key back to the full user row (internal use)."""
+    if not key:
+        return None
+    with _get_conn() as (conn, cur):
+        cur.execute("SELECT * FROM users")
+        for row in cur.fetchall():
+            if referrer_key(row["email"]) == key:
+                return dict(row)
+        return None
+
+
 def get_company_referrer_counts(companies: list[str], exclude_email: str = None) -> dict[str, int]:
     """Returns dict of {lowercased_company: opted-in referrer count}, optionally excluding a user."""
     if not companies:
@@ -1224,6 +1265,41 @@ def update_user_refer_opt_in(email: str, value: int) -> bool:
         with _get_conn() as (conn, cur):
             cur.execute("UPDATE users SET refer_opt_in = ?, updated_at = ? WHERE email = ?",
                          (1 if value else 0, _now(), email))
+            conn.commit()
+            return cur.rowcount > 0
+
+
+def update_user_admin(email: str, name: str = None, company: str = None, position: str = None,
+                      linkedin_url: str = None, referral_credits: int = None, refer_opt_in: int = None):
+    """Admin-only full user update. Only provided fields are changed."""
+    fields = []
+    values = []
+    if name is not None:
+        fields.append("name = ?")
+        values.append(name)
+    if company is not None:
+        fields.append("company = ?")
+        values.append(company)
+    if position is not None:
+        fields.append("position = ?")
+        values.append(position)
+    if linkedin_url is not None:
+        fields.append("linkedin_url = ?")
+        values.append(linkedin_url)
+    if referral_credits is not None:
+        fields.append("referral_credits = ?")
+        values.append(referral_credits)
+    if refer_opt_in is not None:
+        fields.append("refer_opt_in = ?")
+        values.append(1 if refer_opt_in else 0)
+    if not fields:
+        return False
+    fields.append("updated_at = ?")
+    values.append(_now())
+    values.append(email)
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute(f"UPDATE users SET {', '.join(fields)} WHERE email = ?", values)
             conn.commit()
             return cur.rowcount > 0
 
@@ -1654,13 +1730,13 @@ def get_latest_referral_scores(email: str) -> dict:
 
 
 def create_referral_request(from_email: str, to_email: str, job_url: str, job_title: str,
-                            company: str, match_score: int = 0, message: str = "") -> Optional[int]:
+                            company: str, match_score: int = 0, message: str = "", resume_filename: str = "") -> Optional[int]:
     now = _now()
     with _write_lock:
         with _get_conn() as (conn, cur):
             cur.execute(
-                "INSERT INTO referral_requests (from_email, to_email, job_url, job_title, company, match_score, message, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
-                (from_email, to_email, job_url, job_title, company, match_score, message, now, now))
+                "INSERT INTO referral_requests (from_email, to_email, job_url, job_title, company, match_score, message, resume_filename, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
+                (from_email, to_email, job_url, job_title, company, match_score, message, resume_filename, now, now))
             conn.commit()
             return cur.lastrowid
 

@@ -913,5 +913,6 @@ async def scrape_status(search_id: str = Query("")):
         "last_scrape_relevant": raw_count,
         "queue_position": s.get("queue_position", 0),
         "elapsed": s.get("elapsed_seconds", 0),
+        "resume_filename": s.get("resume_filename", ""),
         "logs": get_events(search_id, limit=50),
     }

@@ -49,6 +49,8 @@ let internshipMode = false;
 let activeFilters = { site: '', experience_level: '' };
 let currentSort = 'relevant';
 let _searchId = crypto.randomUUID();
+function syncSearchSessionId() { window._searchSessionId = _searchId; }
+syncSearchSessionId();
 let _relevanceUsed = 0;
 let _relevanceScoring = new Set();
 
@@ -904,6 +906,7 @@ function clearSearchState() {
   searchMode = 'current';
   _searchComplete = false;
   _searchId = crypto.randomUUID();
+  syncSearchSessionId();
   resetRelevanceState();
   _uploadedFilename = "";
   lastRenderedCount = 0;
@@ -1567,6 +1570,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   showElement("stopSearchBtn");
 
   _searchId = crypto.randomUUID();
+  syncSearchSessionId();
   resetRelevanceState();
   _searchComplete = false;
   lastRenderedCount = 0;
@@ -2188,6 +2192,7 @@ document.addEventListener('click', (e) => {
       const sid = searchIds[0];
       if (!sid) return;
       _searchId = sid;
+      syncSearchSessionId();
       _relevanceUsed = loadRelevanceUsed();
 
       const r = await fetch(`/scrape/status?search_id=${sid}`);

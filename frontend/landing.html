@@ -119,15 +119,21 @@
           </h1>
           
           <p class="text-lg text-slate-600 mb-10 leading-relaxed max-w-xl mx-auto lg:mx-0">
-            AI scrapes LinkedIn, Indeed, and Naukri for you. Scores every job against your resume. You only apply to the ones that fit. 
+            AI scans multi job boards and scores every job against your resume — so you only apply to the ones that fit. 
             <strong class="text-slate-900 font-bold">Get referred</strong> by insiders at top companies.
           </p>
           
-          <div class="flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start">
-            <a href="/app" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-base font-bold bg-brand-600 text-white hover:bg-brand-700 hover:shadow-2xl hover:shadow-brand-500/30 hover:-translate-y-1 transition-all">
-              Start Searching — It's Free
-              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
-            </a>
+          <div class="flex flex-col gap-4 items-center lg:items-start">
+            <div class="flex flex-col items-center gap-4 w-full sm:w-auto">
+              <a href="/app" class="w-full sm:w-80 inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-base font-bold bg-brand-600 text-white hover:bg-brand-700 hover:shadow-2xl hover:shadow-brand-500/30 hover:-translate-y-1 transition-all">
+                Start Searching — It's Free
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+              </a>
+              <a href="/app?refurl=1" class="w-full sm:w-80 inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-base font-bold bg-white text-slate-800 border-2 border-slate-200 hover:border-brand-500 hover:text-brand-600 hover:shadow-lg hover:-translate-y-1 transition-all">
+                Got a job link? Find referrers
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+              </a>
+            </div>
             <p class="text-sm text-slate-500 font-medium">No credit card required</p>
           </div>
 
@@ -138,7 +144,7 @@
             </div>
             <div>
               <div class="text-3xl font-extrabold text-slate-900 tracking-tight"><span class="stat-counter" data-key="total_scraped">0</span></div>
-              <div class="text-sm font-semibold text-slate-500 mt-1">Jobs Scraped</div>
+              <div class="text-sm font-semibold text-slate-500 mt-1">Jobs Live</div>
             </div>
             <div>
               <div class="text-3xl font-extrabold text-slate-900 tracking-tight"><span class="stat-counter" data-key="total_users">0</span>+</div>
@@ -178,7 +184,7 @@
                 </div>
                 <div class="flex-1 min-w-0">
                   <h4 class="font-bold text-slate-900 truncate text-sm sm:text-base">Senior Software Engineer</h4>
-                  <p class="text-xs sm:text-sm font-medium text-slate-500 truncate mt-0.5">Google • Bangalore</p>
+                  <p class="text-xs sm:text-sm font-medium text-slate-500 truncate mt-0.5">Cognizant • Bangalore</p>
                   <div class="flex flex-wrap gap-2 mt-3">
                     <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-green-50 text-green-700 border border-green-100 flex items-center gap-1">
                       <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
@@ -195,8 +201,8 @@
                   88
                 </div>
                 <div class="flex-1 min-w-0">
-                  <h4 class="font-bold text-slate-900 truncate text-sm sm:text-base">Full Stack Developer</h4>
-                  <p class="text-xs sm:text-sm font-medium text-slate-500 truncate mt-0.5">Microsoft • Hyderabad</p>
+                  <h4 class="font-bold text-slate-900 truncate text-sm sm:text-base">Media Strategist</h4>
+                  <p class="text-xs sm:text-sm font-medium text-slate-500 truncate mt-0.5">WPP Media • Hyderabad</p>
                   <div class="flex flex-wrap gap-2 mt-3">
                     <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-green-50 text-green-700 border border-green-100">AI Match</span>
                     <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">Indeed</span>
@@ -210,8 +216,8 @@
                   71
                 </div>
                 <div class="flex-1 min-w-0">
-                  <h4 class="font-bold text-slate-900 truncate text-sm sm:text-base">Backend Engineer</h4>
-                  <p class="text-xs sm:text-sm font-medium text-slate-500 truncate mt-0.5">Amazon • Chennai</p>
+                  <h4 class="font-bold text-slate-900 truncate text-sm sm:text-base">Civil Engineer</h4>
+                  <p class="text-xs sm:text-sm font-medium text-slate-500 truncate mt-0.5">L&T • Chennai</p>
                   <div class="flex flex-wrap gap-2 mt-3">
                     <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">Naukri</span>
                   </div>
@@ -231,11 +237,8 @@
       <div class="flex flex-wrap justify-center items-center gap-x-12 gap-y-8 opacity-60 grayscale hover:grayscale-0 transition-all duration-500">
         <!-- Using text placeholders styled nicely as logos -->
         <div class="flex items-center gap-2 text-xl font-black text-slate-700"><div class="w-8 h-8 bg-blue-600 text-white rounded flex items-center justify-center text-xs">CO</div> Cognizant</div>
-        <div class="flex items-center gap-2 text-xl font-black text-slate-700"><div class="w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center text-xs">W</div> WPP</div>
-        <div class="flex items-center gap-2 text-xl font-black text-slate-700"><div class="w-8 h-8 bg-slate-900 text-white rounded-lg flex items-center justify-center text-xs">M</div> Media</div>
-        <div class="flex items-center gap-2 text-xl font-black text-slate-700">Google</div>
-        <div class="flex items-center gap-2 text-xl font-black text-slate-700">Amazon</div>
-        <div class="flex items-center gap-2 text-xl font-black text-slate-700">Microsoft</div>
+        <div class="flex items-center gap-2 text-xl font-black text-slate-700"><div class="w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center text-xs">W</div> WPP Media</div>
+        <div class="flex items-center gap-2 text-xl font-black text-slate-700"><div class="w-8 h-8 bg-sky-600 text-white rounded flex items-center justify-center text-xs">TC</div> TCS</div>
       </div>
     </div>
   </section>
@@ -417,7 +420,7 @@
             <div class="flex-1">
               <h4 class="text-lg font-bold text-slate-900 flex items-center gap-2">Priya Nair <svg class="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg></h4>
               <p class="text-slate-600 font-medium">Product Manager</p>
-              <p class="text-sm text-slate-400 mt-1">Google • Referred 24 people</p>
+              <p class="text-sm text-slate-400 mt-1">TCS • Referred 24 people</p>
             </div>
             <div class="flex items-center gap-6 mt-4 sm:mt-0">
               <button class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-100 text-slate-900 border border-slate-200 font-bold hover:bg-slate-200 transition-all">Request Referral</button>

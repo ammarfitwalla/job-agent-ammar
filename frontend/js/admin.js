@@ -264,6 +264,33 @@ async function loadCacheStats() {
       <td>${formatRelative(newest)}</td>
     </tr>` : "";
     document.getElementById("cacheBody").innerHTML = rows ? rows + totalRow : '<tr><td colspan="4" class="empty">No cached jobs</td></tr>';
+
+    const rowMap = d.rows || {};
+    const siteRows = sites.map(s => {
+      const list = rowMap[s.site] || [];
+      const body = list.length ? list.map(x => `<tr>
+        <td style="white-space:nowrap">${x.id}</td>
+        <td>${_esc(x.role) || "\u2014"}</td>
+        <td>${_esc(x.city) || "\u2014"}</td>
+        <td>${_esc(x.state) || "\u2014"}</td>
+        <td>${_esc(x.country) || "\u2014"}</td>
+        <td style="text-align:center">${x.internship_mode ? "Yes" : "\u2014"}</td>
+        <td style="text-align:center">${x.is_remote ? "Yes" : "\u2014"}</td>
+        <td style="text-align:center">${x.job_count ?? 0}</td>
+        <td style="white-space:nowrap">${x.scraped_at ? formatRelative(x.scraped_at) : "\u2014"}</td>
+        <td style="text-align:center">${x.usage_count ?? 0}</td>
+        <td style="white-space:nowrap">${x.last_used_at ? formatRelative(x.last_used_at) : "\u2014"}</td>
+      </tr>`).join("") : '<tr><td colspan="11" class="empty">No cached rows</td></tr>';
+      return `<div class="chart-box db-card" style="max-width:100%;margin-top:16px">
+        <h3>${_esc(s.site || "Unknown")} &mdash; Top 10 Cached Jobs</h3>
+        <div class="table-wrap"><table><thead><tr>
+          <th>ID</th><th>Role</th><th>City</th><th>State</th><th>Country</th><th>Intern</th>
+          <th>Remote</th><th>Jobs</th><th>Scraped</th><th>Used</th><th>Last Used</th>
+        </tr></thead><tbody>${body}</tbody></table></div>
+      </div>`;
+    }).join("");
+    const container = document.getElementById("cacheSiteRows");
+    if (container) container.innerHTML = siteRows;
   } catch {}
 }
 
@@ -455,7 +482,7 @@ async function loadRegistrations() {
     }
 
     if (!regs.length) {
-      document.getElementById("registrationBody").innerHTML = '<tr><td colspan="9"><div class="empty">No registrations yet</div></td></tr>';
+      document.getElementById("registrationBody").innerHTML = '<tr><td colspan="10"><div class="empty">No registrations yet</div></td></tr>';
       return;
     }
 
@@ -464,20 +491,25 @@ async function loadRegistrations() {
     function renderRow(u, i) {
       const status = deriveStatus(u.company);
       const jobsLabel = u.company ? "View" : "\u2014";
+      const esc = _esc;
       return `
-        <tr class="reg-row" data-idx="${i}">
-          <td style="text-align:center">${u.company ? `<button class="pill-btn jobs-toggle" data-email="${u.email}" data-idx="${i}">${jobsLabel}</button>` : ""}</td>
+        <tr class="reg-row" data-idx="${i}" data-email="${esc(u.email)}">
+          <td style="text-align:center;white-space:nowrap">
+            ${u.company ? `<button class="pill-btn jobs-toggle" data-email="${esc(u.email)}" data-idx="${i}">${jobsLabel}</button>` : ""}
+            <button class="pill-btn edit-user-btn" data-email="${esc(u.email)}" style="margin-left:6px;color:#4f46e5;border-color:#c7d2fe">Edit</button>
+          </td>
           <td style="white-space:nowrap">${u.created_at ? formatDate(u.created_at) : "\u2014"}</td>
-          <td>${u.name || "\u2014"}</td>
-          <td>${u.email}</td>
+          <td>${esc(u.name) || "\u2014"}</td>
+          <td>${esc(u.email)}</td>
           <td>${status}</td>
-          <td>${u.company || "\u2014"}</td>
-          <td>${u.position || "\u2014"}</td>
-          <td class="jobs-count" data-email="${u.email}">...</td>
+          <td>${esc(u.company) || "\u2014"}</td>
+          <td>${esc(u.position) || "\u2014"}</td>
+          <td class="jobs-count" data-email="${esc(u.email)}">...</td>
+          <td style="text-align:center">${u.referral_credits ?? 0}</td>
           <td style="white-space:nowrap">${u.updated_at ? formatDate(u.updated_at) : "\u2014"}</td>
         </tr>
         <tr class="jobs-detail-row" id="jobs-detail-${i}" style="display:none">
-          <td colspan="9" style="padding:0"><div class="jobs-detail-cell"><div class="jobs-loading">Loading...</div></div></td>
+          <td colspan="10" style="padding:0"><div class="jobs-detail-cell"><div class="jobs-loading">Loading...</div></div></td>
         </tr>`;
     }
 
@@ -494,6 +526,13 @@ async function loadRegistrations() {
 
     // Toggle saved jobs detail on button click
     document.getElementById("registrationBody").addEventListener("click", async (e) => {
+      const editBtn = e.target.closest(".edit-user-btn");
+      if (editBtn) {
+        const email = editBtn.dataset.email;
+        const user = regs.find(x => x.email === email);
+        if (user) openUserModal(user);
+        return;
+      }
       const btn = e.target.closest(".jobs-toggle");
       if (!btn) return;
       const idx = btn.dataset.idx;
@@ -526,6 +565,92 @@ async function loadRegistrations() {
       </tbody></table>`;
     });
   } catch {}
+}
+
+// ── User Create/Edit (CRU) ──
+let _editingUserEmail = null;
+
+function _userModalError(msg, show = true) {
+  const el = document.getElementById("userModalError");
+  if (!el) return;
+  el.textContent = msg || "";
+  el.style.display = show && msg ? "block" : "none";
+}
+
+function openUserModal(user) {
+  _editingUserEmail = user ? user.email : null;
+  const title = document.getElementById("userModalTitle");
+  title.textContent = user ? "Edit User" : "Add User";
+  document.getElementById("userEmailInput").value = user ? user.email : "";
+  document.getElementById("userEmailInput").disabled = !!user;
+  document.getElementById("userNameInput").value = user ? (user.name || "") : "";
+  document.getElementById("userCompanyInput").value = user ? (user.company || "") : "";
+  document.getElementById("userPositionInput").value = user ? (user.position || "") : "";
+  document.getElementById("userLinkedinInput").value = user ? (user.linkedin_url || "") : "";
+  document.getElementById("userCreditsInput").value = user ? (user.referral_credits ?? 0) : "";
+  document.getElementById("userOptInWrap").style.display = user ? "flex" : "none";
+  document.getElementById("userOptInInput").checked = user ? !!user.refer_opt_in : false;
+  _userModalError("");
+  const modal = document.getElementById("userModal");
+  modal.style.display = "flex";
+}
+
+function closeUserModal() {
+  document.getElementById("userModal").style.display = "none";
+}
+
+async function saveUser() {
+  const emailInput = document.getElementById("userEmailInput");
+  const nameInput = document.getElementById("userNameInput");
+  const email = emailInput.value.trim();
+  const name = nameInput.value.trim();
+  if (!email || !name) {
+    _userModalError("Email and name are required.");
+    return;
+  }
+  const payload = {
+    name,
+    company: document.getElementById("userCompanyInput").value.trim(),
+    position: document.getElementById("userPositionInput").value.trim(),
+    linkedin_url: document.getElementById("userLinkedinInput").value.trim(),
+  };
+
+  const btn = document.getElementById("userSaveBtn");
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-spinner"></span> Saving...';
+  _userModalError("");
+  try {
+    let r, d;
+    if (_editingUserEmail) {
+      payload.referral_credits = parseInt(document.getElementById("userCreditsInput").value, 10) || 0;
+      payload.refer_opt_in = document.getElementById("userOptInInput").checked ? 1 : 0;
+      r = await fetch(`/api/admin/users/${encodeURIComponent(_editingUserEmail)}?email=${encodeURIComponent(_adminEmail)}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+      });
+      d = await r.json();
+    } else {
+      payload.email = email;
+      r = await fetch(`/api/admin/users?email=${encodeURIComponent(_adminEmail)}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+      });
+      d = await r.json();
+    }
+    if (!r.ok || !d.ok) {
+      _userModalError(d.detail || d.error || "Failed to save user.");
+      btn.disabled = false;
+      btn.innerHTML = orig;
+      return;
+    }
+    closeUserModal();
+    loadRegistrations();
+    loadStats();
+    loadDbInfo();
+  } catch {
+    _userModalError("Network error.");
+  }
+  btn.disabled = false;
+  btn.innerHTML = orig;
 }
 
 // ── Tabs ──
@@ -681,6 +806,9 @@ window.filterSessions = filterSessions;
 window.toggleDetail = toggleDetail;
 window.loadVisits = loadVisits;
 window.loadRegistrations = loadRegistrations;
+window.openUserModal = openUserModal;
+window.closeUserModal = closeUserModal;
+window.saveUser = saveUser;
 window.loadCacheStats = loadCacheStats;
 window.loadServerStats = loadServerStats;
 window.switchTab = switchTab;
