@@ -103,6 +103,32 @@ def _init_test_db():
             name TEXT NOT NULL UNIQUE,
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS leads (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id      TEXT,
+            email           TEXT NOT NULL,
+            name            TEXT DEFAULT '',
+            roles           TEXT DEFAULT '[]',
+            location        TEXT DEFAULT '',
+            keywords        TEXT DEFAULT '[]',
+            internship_mode INTEGER DEFAULT 0,
+            resume_snippet  TEXT DEFAULT '',
+            source          TEXT DEFAULT 'web',
+            created_at      TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            event TEXT NOT NULL,
+            data TEXT DEFAULT '{}',
+            elapsed_seconds INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS custom_roles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            created_at TEXT NOT NULL
+        );
     """)
     conn.executescript("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
     conn.close()
@@ -216,6 +242,70 @@ class TestIntegrationAuthFlow(unittest.TestCase):
         for i in range(5):
             r = self._verify_code(email, "000000")
         r = self._verify_code(email, "000000")
+        self.assertEqual(r.status_code, 429)
+
+
+class TestIntegrationRateLimits(unittest.TestCase):
+    def setUp(self):
+        _init_test_db()
+        self._conn_patcher = patch("db._get_conn", _make_conn_patch())
+        self._conn_patcher.start()
+
+        from fastapi.testclient import TestClient
+        from api.main import app
+        self.client = TestClient(app)
+
+        from utils.rate_limiter import _limits
+        _limits.clear()
+
+    def tearDown(self):
+        self._conn_patcher.stop()
+        conn = sqlite3.connect(_TEST_DB_PATH)
+        try:
+            conn.execute("DELETE FROM custom_companies WHERE name LIKE 'RateLimitCo%'")
+            conn.execute("DELETE FROM custom_roles WHERE name LIKE 'RateLimitRole%'")
+            conn.execute("DELETE FROM leads WHERE email LIKE 'leadrl%' OR email = 'leadspam@example.com'")
+            conn.commit()
+        finally:
+            conn.close()
+
+    def test_lead_rate_limited_per_ip(self):
+        for i in range(5):
+            r = self.client.post("/api/lead", json={"email": f"leadrl{i}@example.com", "name": "A"})
+            self.assertEqual(r.status_code, 200)
+        r = self.client.post("/api/lead", json={"email": "leadspam@example.com"})
+        self.assertEqual(r.status_code, 429)
+
+    def test_add_company_rate_limited_per_ip(self):
+        for i in range(5):
+            r = self.client.post("/api/auth/companies", json={"name": f"RateLimitCo{i}"})
+            self.assertEqual(r.status_code, 200)
+        r = self.client.post("/api/auth/companies", json={"name": "RateLimitCoLast"})
+        self.assertEqual(r.status_code, 429)
+
+    def test_custom_role_rate_limited_per_ip(self):
+        for i in range(10):
+            r = self.client.post("/roles/custom", json={"name": f"RateLimitRole{i}"})
+            self.assertEqual(r.status_code, 200)
+        r = self.client.post("/roles/custom", json={"name": "RateLimitRoleLast"})
+        self.assertEqual(r.status_code, 429)
+
+    def test_scrape_rate_limited_per_ip(self):
+        with patch("api.routes.scrape.log", return_value=None), \
+             patch("api.routes.scrape._cache_lookup", return_value=([], [], False)), \
+             patch("api.routes.scrape.run_scrape", return_value=None):
+            for i in range(6):
+                r = self.client.post("/scrape", json={"search_id": f"rl{i}"})
+                self.assertEqual(r.status_code, 200)
+            r = self.client.post("/scrape", json={"search_id": "rl-spam"})
+        self.assertEqual(r.status_code, 429)
+
+    def test_visit_rate_limited_per_ip(self):
+        with patch("db.update_visit_ping", return_value=None):
+            for i in range(120):
+                r = self.client.post("/api/visit/ping", json={"visit_id": f"v{i}"})
+                self.assertNotEqual(r.status_code, 429)
+            r = self.client.post("/api/visit/ping", json={"visit_id": "v-spam"})
         self.assertEqual(r.status_code, 429)
 
 

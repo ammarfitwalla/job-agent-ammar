@@ -469,11 +469,17 @@ async function loadVisits() {
 }
 
 const _STATUS_LABELS = { Student: "student", Graduate: "graduate", "Laid Off": "laid_off", "Career Break": "career_break" };
+const _STATUS_TO_LABEL = { student: "Student", graduate: "Graduate", laid_off: "Laid Off", career_break: "Career Break" };
 
 function deriveStatus(company) {
   if (!company) return "\u2014";
   const s = _STATUS_LABELS[company];
   return s ? s.replace("_", " ") : "Employed";
+}
+
+function _statusFromCompany(company) {
+  if (!company) return "not_specified";
+  return _STATUS_LABELS[company] || "employed";
 }
 
 async function loadRegistrations() {
@@ -578,6 +584,7 @@ async function loadRegistrations() {
 
 // ── User Create/Edit (CRU) ──
 let _editingUserEmail = null;
+let _editingUser = null;
 
 function _userModalError(msg, show = true) {
   const el = document.getElementById("userModalError");
@@ -588,12 +595,16 @@ function _userModalError(msg, show = true) {
 
 function openUserModal(user) {
   _editingUserEmail = user ? user.email : null;
+  _editingUser = user || null;
   const title = document.getElementById("userModalTitle");
   title.textContent = user ? "Edit User" : "Add User";
+  const status = user ? _statusFromCompany(user.company) : "not_specified";
   document.getElementById("userEmailInput").value = user ? user.email : "";
   document.getElementById("userEmailInput").disabled = !!user;
   document.getElementById("userNameInput").value = user ? (user.name || "") : "";
-  document.getElementById("userCompanyInput").value = user ? (user.company || "") : "";
+  document.querySelectorAll("#userStatusPills .employment-pill").forEach(p => p.classList.toggle("active-pill", p.dataset.status === status));
+  document.getElementById("userCompanyGroup").style.display = status === "employed" ? "block" : "none";
+  document.getElementById("userCompanyInput").value = user && status === "employed" ? (user.company || "") : "";
   document.getElementById("userPositionInput").value = user ? (user.position || "") : "";
   document.getElementById("userLinkedinInput").value = user ? (user.linkedin_url || "") : "";
   document.getElementById("userCreditsInput").value = user ? (user.referral_credits ?? 0) : "";
@@ -602,6 +613,12 @@ function openUserModal(user) {
   _userModalError("");
   const modal = document.getElementById("userModal");
   modal.style.display = "flex";
+}
+
+function selectUserStatus(status) {
+  document.querySelectorAll("#userStatusPills .employment-pill").forEach(p => p.classList.toggle("active-pill", p.dataset.status === status));
+  document.getElementById("userCompanyGroup").style.display = status === "employed" ? "block" : "none";
+  _userModalError("");
 }
 
 function closeUserModal() {
@@ -617,12 +634,16 @@ async function saveUser() {
     _userModalError("Email and name are required.");
     return;
   }
-  const payload = {
-    name,
-    company: document.getElementById("userCompanyInput").value.trim(),
-    position: document.getElementById("userPositionInput").value.trim(),
-    linkedin_url: document.getElementById("userLinkedinInput").value.trim(),
-  };
+  const selectedStatus = document.querySelector("#userStatusPills .employment-pill.active-pill")?.dataset?.status || "not_specified";
+  const companyText = document.getElementById("userCompanyInput").value.trim();
+  if (selectedStatus === "employed" && !companyText) {
+    _userModalError("Enter a company name, or choose a different status.");
+    return;
+  }
+  const company = selectedStatus === "not_specified" ? "" : (selectedStatus === "employed" ? companyText : _STATUS_TO_LABEL[selectedStatus] || companyText);
+  const position = document.getElementById("userPositionInput").value.trim();
+  const linkedin_url = document.getElementById("userLinkedinInput").value.trim();
+  const base = { name, company, position, linkedin_url };
 
   const btn = document.getElementById("userSaveBtn");
   const orig = btn.innerHTML;
@@ -632,14 +653,31 @@ async function saveUser() {
   try {
     let r, d;
     if (_editingUserEmail) {
-      payload.referral_credits = parseInt(document.getElementById("userCreditsInput").value, 10) || 0;
-      payload.refer_opt_in = document.getElementById("userOptInInput").checked ? 1 : 0;
+      const credits = parseInt(document.getElementById("userCreditsInput").value, 10) || 0;
+      const optIn = document.getElementById("userOptInInput").checked ? 1 : 0;
+      const payload = {};
+      const origUser = _editingUser || {};
+      if (name !== (origUser.name || "")) payload.name = name;
+      if (company !== (origUser.company || "")) payload.company = company;
+      if (position !== (origUser.position || "")) payload.position = position;
+      if (linkedin_url !== (origUser.linkedin_url || "")) payload.linkedin_url = linkedin_url;
+      if (credits !== (origUser.referral_credits ?? 0)) payload.referral_credits = credits;
+      if (optIn !== (origUser.refer_opt_in ? 1 : 0)) payload.refer_opt_in = optIn;
+      if (Object.keys(payload).length === 0) {
+        closeUserModal();
+        loadRegistrations();
+        loadStats();
+        loadDbInfo();
+        btn.disabled = false;
+        btn.innerHTML = orig;
+        return;
+      }
       r = await fetch(`/api/admin/users/${encodeURIComponent(_editingUserEmail)}?email=${encodeURIComponent(_adminEmail)}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
       d = await r.json();
     } else {
-      payload.email = email;
+      const payload = Object.assign({ email }, base);
       r = await fetch(`/api/admin/users?email=${encodeURIComponent(_adminEmail)}`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
@@ -818,6 +856,7 @@ window.loadRegistrations = loadRegistrations;
 window.openUserModal = openUserModal;
 window.closeUserModal = closeUserModal;
 window.saveUser = saveUser;
+window.selectUserStatus = selectUserStatus;
 window.loadCacheStats = loadCacheStats;
 window.toggleCacheUsed = toggleCacheUsed;
 window.loadServerStats = loadServerStats;

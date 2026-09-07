@@ -1,8 +1,15 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 import asyncio
 
+from utils.client_ip import get_client_ip
+from utils.rate_limiter import check_rate_limit
+
 router = APIRouter(prefix="/api/visit", tags=["visits"])
+
+# Heartbeat writes — cap per IP to prevent DB growth spam (generous vs real pings).
+_VISIT_RATE = 120
+_VISIT_WINDOW = 60
 
 
 class VisitStart(BaseModel):
@@ -26,6 +33,9 @@ class VisitEnd(BaseModel):
 
 @router.post("/start")
 async def visit_start(body: VisitStart, request: Request):
+    client_ip = get_client_ip(request)
+    if client_ip and not check_rate_limit(f"visit:{client_ip}", _VISIT_RATE, _VISIT_WINDOW):
+        raise HTTPException(429, "Too many requests. Try again later.")
     from db import log_visit_start, _store_geo
 
     ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
@@ -47,7 +57,10 @@ async def visit_start(body: VisitStart, request: Request):
 
 
 @router.post("/ping")
-async def visit_ping(body: VisitPing):
+async def visit_ping(body: VisitPing, request: Request = None):
+    client_ip = get_client_ip(request)
+    if client_ip and not check_rate_limit(f"visit:{client_ip}", _VISIT_RATE, _VISIT_WINDOW):
+        raise HTTPException(429, "Too many requests. Try again later.")
     from db import update_visit_ping
 
     update_visit_ping(body.visit_id, body.elapsed_seconds)
@@ -55,7 +68,10 @@ async def visit_ping(body: VisitPing):
 
 
 @router.post("/end")
-async def visit_end(body: VisitEnd):
+async def visit_end(body: VisitEnd, request: Request = None):
+    client_ip = get_client_ip(request)
+    if client_ip and not check_rate_limit(f"visit:{client_ip}", _VISIT_RATE, _VISIT_WINDOW):
+        raise HTTPException(429, "Too many requests. Try again later.")
     from db import finalize_visit
 
     finalize_visit(body.visit_id, body.total_duration)

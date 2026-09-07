@@ -1,8 +1,15 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 
+from utils.client_ip import get_client_ip
+from utils.rate_limiter import check_rate_limit
+
 router = APIRouter(prefix="/api", tags=["leads"])
+
+# Public lead-capture form — cap per IP to prevent DB fill.
+_LEAD_RATE = 5
+_LEAD_WINDOW = 60
 
 
 class LeadRequest(BaseModel):
@@ -17,7 +24,10 @@ class LeadRequest(BaseModel):
 
 
 @router.post("/lead")
-async def create_lead(req: LeadRequest):
+async def create_lead(req: LeadRequest, request: Request = None):
+    client_ip = get_client_ip(request)
+    if client_ip and not check_rate_limit(f"lead:{client_ip}", _LEAD_RATE, _LEAD_WINDOW):
+        raise HTTPException(429, "Too many requests. Try again later.")
     from email_validator import validate_email, EmailNotValidError
 
     try:

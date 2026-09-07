@@ -44,6 +44,21 @@ class TestRateLimiter(unittest.TestCase):
         self.assertTrue(check_rate_limit("key_b", 3, 60))
         self.assertFalse(check_rate_limit("key_a", 3, 60))
 
+    def test_idle_keys_evicted_by_sweep(self):
+        import utils.rate_limiter as rl
+        from utils.rate_limiter import check_rate_limit, _limits
+        rl._sweep_at = 0.0  # force a sweep on the next call
+        now = time.time()
+        _limits.clear()
+        _limits["stale_a"] = [now - 700]
+        _limits["stale_b"] = [now - 900]
+        _limits["recent_key"] = [now - 1]
+        self.assertTrue(check_rate_limit("fresh_key", 3, 60))
+        self.assertNotIn("stale_a", _limits)
+        self.assertNotIn("stale_b", _limits)
+        self.assertIn("fresh_key", _limits)
+        self.assertIn("recent_key", _limits)
+
 
 # ── 2. DB Functions ──
 

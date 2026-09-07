@@ -1,9 +1,15 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request, HTTPException
 from pydantic import BaseModel
 from config import ROLES_BY_CATEGORY
+from utils.client_ip import get_client_ip
+from utils.rate_limiter import check_rate_limit
 import db
 
 router = APIRouter(prefix="/roles", tags=["roles"])
+
+# Public custom role writes — cap per IP.
+_CUSTOM_ROLE_RATE = 10
+_CUSTOM_ROLE_WINDOW = 60
 
 
 class RoleName(BaseModel):
@@ -27,7 +33,10 @@ async def get_roles():
 
 
 @router.post("/custom")
-async def add_custom_role(body: RoleName):
+async def add_custom_role(body: RoleName, request: Request = None):
+    client_ip = get_client_ip(request)
+    if client_ip and not check_rate_limit(f"custom_role:{client_ip}", _CUSTOM_ROLE_RATE, _CUSTOM_ROLE_WINDOW):
+        raise HTTPException(429, "Too many requests. Try again later.")
     role_name = body.name.strip()
     if not role_name:
         return {"ok": False, "error": "missing name"}
@@ -36,6 +45,9 @@ async def add_custom_role(body: RoleName):
 
 
 @router.delete("/custom")
-async def delete_custom_role(name: str = Query(...)):
+async def delete_custom_role(name: str = Query(...), request: Request = None):
+    client_ip = get_client_ip(request)
+    if client_ip and not check_rate_limit(f"custom_role:{client_ip}", _CUSTOM_ROLE_RATE, _CUSTOM_ROLE_WINDOW):
+        raise HTTPException(429, "Too many requests. Try again later.")
     db.delete_custom_role(name)
     return {"ok": True, "categories": _merged_roles()}

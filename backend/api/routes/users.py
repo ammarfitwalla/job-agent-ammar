@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Query, Request, HTTPException
 
 from db import get_anonymous_referrers_by_company, get_company_referrer_counts, get_company_directory
+from utils.client_ip import get_client_ip
 from utils.rate_limiter import check_rate_limit
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -14,7 +15,7 @@ _AT_COMPANY_WINDOW = 60
 async def users_at_company(company: str = Query(""), request: Request = None):
     if not company:
         return {"users": [], "count": 0}
-    client_ip = request.client.host if request else ""
+    client_ip = get_client_ip(request)
     if client_ip and not check_rate_limit(f"users_at_company:{client_ip}", _AT_COMPANY_RATE, _AT_COMPANY_WINDOW):
         raise HTTPException(429, "Too many requests. Try again later.")
     # Privacy: return only an opaque id + position (no email/name/linkedin_url).

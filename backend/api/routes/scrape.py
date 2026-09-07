@@ -3,14 +3,21 @@ import threading
 import types
 from typing import Optional
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from api.schemas import ScrapeRequest
 from utils.logger import log
+from utils.client_ip import get_client_ip
+from utils.rate_limiter import check_rate_limit
 from db import create_session, update_session, get_session, set_raw_jobs, get_events, _get_conn
 
 router = APIRouter(prefix="/scrape", tags=["scrape"])
 
 _STALE_TIMEOUT_MINUTES = 15
+
+# Each triggered scrape spawns a thread that hits job sites and LLM-scoring;
+# cap starts per IP to protect quota and fork-bombs.
+_SCRAPE_RATE = 6
+_SCRAPE_WINDOW = 60
 
 # Per-combo scrape controls (overridable via config module).
 SCRAPE_COMBO_STALL_SECONDS = 60   # cancel a combo if job count hasn't grown for this long
@@ -842,9 +849,12 @@ def _resolve_request_location(req):
 
 
 @router.post("")
-async def trigger_scrape(req: ScrapeRequest):
+async def trigger_scrape(req: ScrapeRequest, request: Request = None):
     if not req.search_id:
         return {"message": "Missing search_id", "status": "error"}
+    client_ip = get_client_ip(request)
+    if client_ip and not check_rate_limit(f"scrape:{client_ip}", _SCRAPE_RATE, _SCRAPE_WINDOW):
+        raise HTTPException(429, "Too many requests. Try again later.")
     sid = req.search_id
     _resolve_request_location(req)
     log(f"[SCRAPE] Search triggered — sites={req.sites}, "

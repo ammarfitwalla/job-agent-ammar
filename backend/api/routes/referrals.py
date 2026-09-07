@@ -1,7 +1,7 @@
 import hashlib
 import os
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 
@@ -15,9 +15,14 @@ from db import (
     add_referral_notify, get_referral_notifies,
     get_user_by_referrer_key, referrer_key,
 )
+from utils.client_ip import get_client_ip
 from utils.rate_limiter import check_rate_limit
 
 _MONTHLY_LIMIT = 5
+
+# LLM job scoring per request — cap per IP since from_email is user-supplied.
+_SCORE_RATE = 15
+_SCORE_WINDOW = 60
 
 router = APIRouter(prefix="/api/referrals", tags=["referrals"])
 
@@ -108,7 +113,10 @@ class ReferralScoreRequest(BaseModel):
 
 
 @router.post("/score")
-async def referral_score(req: ReferralScoreRequest):
+async def referral_score(req: ReferralScoreRequest, request: Request = None):
+    client_ip = get_client_ip(request)
+    if client_ip and not check_rate_limit(f"referral_score:{client_ip}", _SCORE_RATE, _SCORE_WINDOW):
+        return JSONResponse(status_code=429, content={"ok": False, "error": "Too many requests. Try again later."})
     score = _get_or_score_referral_job(req.from_email, req.job_url, req.job_title, req.company,
                                        req.job_description, req.resume_text)
     return {"ok": True, "score": score}

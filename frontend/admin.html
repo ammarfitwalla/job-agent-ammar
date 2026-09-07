@@ -442,6 +442,33 @@ tr.clickable:hover td { background: #f8fafc; }
   .skel-cards { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .skel-card { height: 80px; border-radius: 12px; }
 }
+
+/* ── Employment status pills (user modal) ── */
+.employment-pill {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.employment-pill:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+.employment-pill.active-pill {
+  background: linear-gradient(135deg, #4f46e5, #4338ca);
+  color: #ffffff;
+  border-color: #4f46e5;
+  box-shadow: 0 2px 8px rgba(79,70,229,0.2);
+}
+.employment-pill.active-pill:hover {
+  background: linear-gradient(135deg, #4338ca, #3730a3);
+  border-color: #4338ca;
+}
 </style>
 </head>
 <body>
@@ -610,12 +637,23 @@ tr.clickable:hover td { background: #f8fafc; }
       <h3 id="userModalTitle" style="margin:0;font-size:16px;font-weight:800;color:#1e293b">Add User</h3>
       <button onclick="closeUserModal()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer;line-height:1">&times;</button>
     </div>
-    <input id="userEmailInput" type="email" placeholder="Email (required)" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
-    <input id="userNameInput" type="text" placeholder="Name (required)" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
-    <input id="userCompanyInput" type="text" placeholder="Company" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
-    <input id="userPositionInput" type="text" placeholder="Position" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
-    <input id="userLinkedinInput" type="text" placeholder="LinkedIn URL" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
-    <input id="userCreditsInput" type="number" min="0" placeholder="Referral credits" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
+    <input id="userEmailInput" type="email" placeholder="Email (required)" autocomplete="off" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
+    <input id="userNameInput" type="text" placeholder="Name (required)" autocomplete="off" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
+    <div id="userStatusPills" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <button type="button" onclick="selectUserStatus('not_specified')" class="employment-pill active-pill" data-status="not_specified">Not specified</button>
+      <button type="button" onclick="selectUserStatus('employed')" class="employment-pill" data-status="employed">Employed</button>
+      <button type="button" onclick="selectUserStatus('student')" class="employment-pill" data-status="student">Student</button>
+      <button type="button" onclick="selectUserStatus('graduate')" class="employment-pill" data-status="graduate">Graduate</button>
+      <button type="button" onclick="selectUserStatus('laid_off')" class="employment-pill" data-status="laid_off">Laid Off</button>
+      <button type="button" onclick="selectUserStatus('career_break')" class="employment-pill" data-status="career_break">Career Break</button>
+    </div>
+    <div id="userCompanyGroup" style="display:none;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px">Company <span style="font-weight:600;color:#94a3b8">(required when status is Employed)</span></div>
+      <input id="userCompanyInput" type="text" placeholder="Company" autocomplete="off" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;box-sizing:border-box">
+    </div>
+    <input id="userPositionInput" type="text" placeholder="Position" autocomplete="off" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
+    <input id="userLinkedinInput" type="text" placeholder="LinkedIn URL" autocomplete="off" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
+    <input id="userCreditsInput" type="number" min="0" placeholder="Referral credits" autocomplete="off" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
     <label id="userOptInWrap" style="display:flex;align-items:center;gap:10px;padding:12px 0;font-size:14px;font-weight:600;color:#334155;cursor:pointer">
       <input id="userOptInInput" type="checkbox" style="width:16px;height:16px;accent-color:#4f46e5"> Referral opt-in
     </label>

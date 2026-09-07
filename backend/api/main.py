@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from api.routes import jobs, scrape, email, resume, roles, states, events, leads, admin, auth, profile, saved_jobs, visits, users, referrals, stats, joblink
+from api.routes import jobs, scrape, resume, roles, states, events, leads, admin, auth, profile, saved_jobs, visits, users, referrals, stats, joblink
 import json
 from db import init_db
 
@@ -85,7 +85,6 @@ async def no_cache_frontend(request, call_next):
 
 app.include_router(jobs.router)
 app.include_router(scrape.router)
-app.include_router(email.router)
 app.include_router(resume.router)
 app.include_router(roles.router)
 app.include_router(states.router)

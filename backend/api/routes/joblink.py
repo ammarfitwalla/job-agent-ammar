@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from db import get_distinct_companies, get_referrers_by_company
+from utils.client_ip import get_client_ip
 from utils.rate_limiter import check_rate_limit
 
 router = APIRouter(prefix="/api/referrals", tags=["referrals"])
@@ -336,8 +337,8 @@ async def resolve_url(req: ResolveUrlRequest, request: Request):
     if not re.match(r"^https?://", url, re.IGNORECASE):
         raise HTTPException(400, "URL must start with http:// or https://")
 
-    client_ip = request.client.host if request.client else ""
-    if not check_rate_limit(f"resolve_url:{client_ip}", _RESOLVE_RATE, _RESOLVE_WINDOW):
+    client_ip = get_client_ip(request)
+    if client_ip and not check_rate_limit(f"resolve_url:{client_ip}", _RESOLVE_RATE, _RESOLVE_WINDOW):
         raise HTTPException(429, "Too many requests. Try again later.")
 
     result = resolve_company_from_url(url)

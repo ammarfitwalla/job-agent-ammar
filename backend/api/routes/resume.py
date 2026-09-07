@@ -1,9 +1,11 @@
 import os, shutil, zipfile, io, time, json
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from utils.json_parser import extract_json
 from utils.pii import sanitize_resume_text
+from utils.client_ip import get_client_ip
+from utils.rate_limiter import check_rate_limit
 from llm.llm_client import LLMClient
 from config import TARGET_ROLES
 
@@ -11,6 +13,15 @@ router = APIRouter(prefix="/resume", tags=["resume"])
 
 RESUME_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
 os.makedirs(RESUME_DIR, exist_ok=True)
+
+# LLM keyword extraction is the costliest public call — cap per IP.
+_KEYWORDS_RATE = 10
+_KEYWORDS_WINDOW = 60
+
+# File uploads are write-path abuse vectors — cap per IP and reject oversized files.
+_UPLOAD_RATE = 10
+_UPLOAD_WINDOW = 60
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 class ResumeKeywordsRequest(BaseModel):
@@ -62,8 +73,13 @@ def _extract_text(filepath: str) -> str:
 
 
 @router.post("/upload")
-async def upload_resume(file: UploadFile = File(...)):
+async def upload_resume(file: UploadFile = File(...), request: Request = None):
     os.makedirs(RESUME_DIR, exist_ok=True)
+    client_ip = get_client_ip(request)
+    if client_ip and not check_rate_limit(f"resume_upload:{client_ip}", _UPLOAD_RATE, _UPLOAD_WINDOW):
+        raise HTTPException(429, "Too many requests. Try again later.")
+    if file.size and file.size > _MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "File too large (max 10 MB)")
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in (".pdf", ".docx", ".txt"):
         raise HTTPException(400, "Only PDF, DOCX, and TXT files are supported")
@@ -107,7 +123,10 @@ async def delete_resumes():
 
 
 @router.post("/keywords", response_model=ResumeKeywordsResponse)
-async def extract_keywords(req: ResumeKeywordsRequest):
+async def extract_keywords(req: ResumeKeywordsRequest, request: Request = None):
+    client_ip = get_client_ip(request)
+    if client_ip and not check_rate_limit(f"resume_keywords:{client_ip}", _KEYWORDS_RATE, _KEYWORDS_WINDOW):
+        raise HTTPException(429, "Too many requests. Try again later.")
     words = []
     suggested = []
     for attempt in range(2):

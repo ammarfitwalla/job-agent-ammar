@@ -113,7 +113,6 @@ job-agent-ammar/
 │   │   └── remoteok_apply.py    # RemoteOK auto-apply
 │   ├── utils/
 │   │   ├── delay.py             # Random sleep (anti-detection)
-│   │   ├── emailer.py           # Brevo SMTP email sending
 │   │   ├── experience_level.py  # Job level detection (intern/entry/senior)
 │   │   ├── json_parser.py       # Extract JSON from LLM responses
 │   │   ├── logger.py            # File + console logging
@@ -334,7 +333,6 @@ SITE_MAP = {
 | File | Prefix | Endpoints |
 |------|--------|-----------|
 | `jobs.py` | `/jobs` | `GET /jobs` (list scored jobs for session), `GET /jobs/{index}` (single job) |
-| `email.py` | `/email` | `POST /email/report` (send job batch email) |
 | `resume.py` | `/resume` | `POST /resume/upload`, `GET /resume/download` (ZIP), `DELETE /resume/storage`, `POST /resume/keywords` (LLM extraction) |
 | `roles.py` | `/roles` | `GET /roles` (returns categorized role lists) |
 | `states.py` | `/states` | `GET /states` (country/state data with caching) |
@@ -452,7 +450,6 @@ Pipeline:
 | File | Lines | Purpose |
 |------|-------|---------|
 | `delay.py` | 7 | `delay(min, max)` — random sleep for anti-detection |
-| `emailer.py` | 42 | Brevo SMTP API email sending (HTML format) |
 | `experience_level.py` | 81 | Classifies jobs as `internship`, `entry_level`, or `None` using regex patterns and YOE parsing |
 | `json_parser.py` | 23 | `extract_json()` — strips markdown code fences and parses JSON from LLM responses |
 | `logger.py` | — | File + console logging |

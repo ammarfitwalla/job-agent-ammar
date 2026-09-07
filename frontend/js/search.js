@@ -607,8 +607,12 @@ function cancelActiveSearch() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = null;
 }
-window.addEventListener("beforeunload", cancelActiveSearch);
-window.addEventListener("pagehide", cancelActiveSearch);
+function handlePageExit() {
+  cancelActiveSearch();
+  _cacheSearchState();
+}
+window.addEventListener("beforeunload", handlePageExit);
+window.addEventListener("pagehide", handlePageExit);
 
 function getFilteredJobs() {
   let jobs = allJobs;
@@ -1626,6 +1630,27 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
 });
 
 // ===== STOP SEARCH (user-initiated) =====
+function _cacheSearchState() {
+  const ids = searchIds.length > 0 ? searchIds : (_searchId ? [_searchId] : []);
+  if (!ids.length) return;
+  try {
+    localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify({
+      searchIds: ids,
+      _customRoleList,
+      _aiRoleList,
+      searchMode: (customJobs.length > 0 && aiJobs.length > 0) ? 'tabs' : 'single',
+      timestamp: Date.now(),
+      params: {
+        sites: getSelectedSites ? getSelectedSites() : [],
+        keywords: getSelectedKeywords ? getSelectedKeywords() : [],
+        roles: getSelectedRoles ? getSelectedRoles() : [],
+        location: document.getElementById("locationInput")?.value || "",
+        internshipMode: internshipMode,
+      },
+    }));
+  } catch {}
+}
+
 function stopSearchNow() {
   if (_searchComplete) return;
   cancelActiveSearch();
@@ -1647,6 +1672,7 @@ function stopSearchNow() {
   setStatus(msg, "amber");
   document.title = `(${allJobs.length}) Jobs - JobAwn`;
   logEvent("scrape_stopped", { jobs: allJobs.length });
+  _cacheSearchState();
 }
 
 document.getElementById("stopSearchBtn").addEventListener("click", stopSearchNow);
@@ -1742,20 +1768,7 @@ function pollAllScrapes() {
       logEvent("scrape_done", { roles: _customRoleList.concat(_aiRoleList), jobs: totalJobs });
       resetSearchBtn();
       // Cache
-      localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify({
-        searchIds,
-        _customRoleList,
-        _aiRoleList,
-        searchMode: (customJobs.length > 0 && aiJobs.length > 0) ? 'tabs' : 'single',
-        timestamp: Date.now(),
-        params: {
-          sites: getSelectedSites ? getSelectedSites() : [],
-          keywords: getSelectedKeywords ? getSelectedKeywords() : [],
-          roles: getSelectedRoles ? getSelectedRoles() : [],
-          location: document.getElementById("locationInput")?.value || "",
-          internshipMode: internshipMode,
-        },
-      }));
+      _cacheSearchState();
     }
   };
   tick();
@@ -1926,6 +1939,7 @@ function renderAllJobs(jobs) {
   }
 
   const totalPages = Math.ceil(displayJobs.length / _pageSize);
+  if (_currentPage > totalPages) _currentPage = Math.max(totalPages, 1);
   const start = (_currentPage - 1) * _pageSize;
   const pageJobs = displayJobs.slice(start, start + _pageSize);
   const profile = window.getProfile();
@@ -1933,10 +1947,26 @@ function renderAllJobs(jobs) {
   function paginationBarHtml(tp) {
     if (tp <= 1) return '';
     const p = _currentPage;
-    let html = `<div class="flex items-center justify-center gap-2 mt-6">`;
+    let nums;
+    if (tp <= 5) {
+      nums = [];
+      for (let i = 1; i <= tp; i++) nums.push(i);
+    } else if (p <= 3) {
+      nums = [1, 2, 3, 4, tp];
+    } else if (p >= tp - 2) {
+      nums = [1, tp - 2, tp - 1, tp];
+    } else {
+      nums = [1, p - 1, p, p + 1, tp];
+    }
+    let html = `<div class="flex flex-wrap items-center justify-center gap-2 mt-6">`;
     html += `<button class="page-btn text-xs font-medium px-3 py-1.5 rounded-lg border ${p <= 1 ? 'text-slate-300 border-slate-100 cursor-not-allowed' : 'text-slate-600 border-slate-200 hover:bg-slate-50 cursor-pointer'}" data-page="${p - 1}" ${p <= 1 ? 'disabled' : ''}>Prev</button>`;
-    for (let i = 1; i <= tp; i++) {
+    let prevNum = null;
+    for (const i of nums) {
+      if (prevNum !== null && i - prevNum > 1) {
+        html += `<span class="px-0.5 text-slate-400 select-none">&#8230;</span>`;
+      }
       html += `<button class="page-btn text-xs font-medium px-3 py-1.5 rounded-lg border ${i === p ? 'bg-slate-800 text-white border-slate-800 cursor-default' : (profile ? 'text-slate-600 border-slate-200 hover:bg-slate-50 cursor-pointer' : 'text-slate-400 border-slate-100 cursor-pointer')}" data-page="${i}">${i}</button>`;
+      prevNum = i;
     }
     html += `<button class="page-btn text-xs font-medium px-3 py-1.5 rounded-lg border ${p >= tp ? 'text-slate-300 border-slate-100 cursor-not-allowed' : 'text-slate-600 border-slate-200 hover:bg-slate-50 cursor-pointer'}" data-page="${p + 1}" ${p >= tp ? 'disabled' : ''}>Next</button>`;
     html += `</div>`;

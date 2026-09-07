@@ -3,16 +3,21 @@ import string
 import os
 import shutil
 from datetime import datetime, timedelta
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from db import get_user, create_user, save_verification_code, verify_code, get_custom_companies, add_custom_company
 from db import update_user_refer_opt_in, set_user_invited_by, credit_invite_bonus
 from config import COMPANIES
+from utils.client_ip import get_client_ip
 from utils.rate_limiter import check_rate_limit
 
 DEV_MODE = False  # Set to True for development mode, False for production
+
+# Public company-list writes — cap per IP.
+_ADD_COMPANY_RATE = 5
+_ADD_COMPANY_WINDOW = 60
 
 _RESUMES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
 
@@ -138,7 +143,10 @@ async def auth_companies():
 
 
 @router.post("/companies")
-async def auth_add_company(req: AddCompanyRequest):
+async def auth_add_company(req: AddCompanyRequest, request: Request = None):
+    client_ip = get_client_ip(request)
+    if client_ip and not check_rate_limit(f"add_company:{client_ip}", _ADD_COMPANY_RATE, _ADD_COMPANY_WINDOW):
+        return JSONResponse(status_code=429, content={"ok": False, "error": "Too many requests. Try again later."})
     name = req.name.strip()
     if not name:
         return {"ok": False, "error": "Company name is required"}

@@ -430,7 +430,11 @@ async function authRegister() {
     let searchId = "";
     try {
       const raw = localStorage.getItem(SEARCH_CACHE_KEY);
-      if (raw) { const s = JSON.parse(raw); if (s?.searchId) searchId = s.searchId; }
+      if (raw) {
+        const s = JSON.parse(raw);
+        const ids = s && Array.isArray(s.searchIds) ? s.searchIds : [];
+        searchId = String(ids[0] || (s && s.searchId) || "");
+      }
     } catch (e) {}
     const r = await fetch("/api/auth/register", {
       method: "POST", headers: { "Content-Type": "application/json" },

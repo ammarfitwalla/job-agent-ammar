@@ -197,5 +197,16 @@ Result: `ss` shows `127.0.0.1:7860` only; `http://130.210.34.176:7860/health` ti
 ## Follow-ups / notes
 
 - Rename references to the old brand are handled app-side (rebrand to JobAwn done separately).
-- `noreply@jobagent.brevo.com` (Brevo sender) and localStorage keys (`jobagent_*`) were intentionally left unchanged.
+- Email sending: Brevo code removed 2026-09-07 (`utils/emailer.py` + `/api/email/report` route) — active senders are SMTP (`smtp_sender.py`) for backend OTP/backups and EmailJS (frontend OTP fallback). localStorage keys (`jobagent_*`) intentionally left unchanged.
 - Next app deploys continue via the established `scp → docker cp → py_compile → docker restart job-agent` flow — the container now shares no volume, so step order stays snapshot-safe.
+
+---
+
+## Deployment entry — 2026-09-07 (evening)
+
+Pushed via the `scp → docker cp → py_compile → docker restart` flow from local working tree, **excluding `backend/config.py`** (server copy untouched).
+
+- **Pre-deploy rollback image:** `job-agent:snapshot-2026-09-07-pre-deploy` (docker commit of the running container before files were copied).
+- **Backend:** rate limiting (`utils/rate_limiter.py` hardened — lock + TTL sweep, `utils/client_ip.py` new), split rate limits across routes (`api/routes/{auth,events,joblink,jobs,leads,referrals,resume,roles,scrape,users,visits}.py`), Brevo removal completed (`api/routes/email.py` + `utils/emailer.py` deleted from container).
+- **Frontend:** admin user-modal status/company fix (`admin.html`, `js/admin.js`), pagination overflow / windowing fix + page clamp (`js/search.js`), auth `search_id` carry-over fix (`js/auth.js`).
+- Verified post-restart: container `Up`, loopback `/health` 200, public `https://jobawn.com/health` 200, new pagination/auth/admin markers served, `/api/email/report` → 404.

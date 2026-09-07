@@ -1,11 +1,13 @@
 import hashlib
 import threading
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from db import get_raw_jobs, get_session, update_raw_job_score, upsert_referral_score
 from utils.logger import log
+from utils.client_ip import get_client_ip
+from utils.rate_limiter import check_rate_limit
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -13,6 +15,10 @@ _scoring_inflight = set()
 _scoring_lock = threading.Lock()
 
 MAX_RELEVANCE_CHECKS = 3
+
+# On-demand LLM re-scoring is a cost vector — cap per user/IP.
+_CHECK_RATE = 15
+_CHECK_WINDOW = 60
 
 
 def _cache_user_score(email: str, url: str, resume_text: str, score: int) -> None:
@@ -93,9 +99,13 @@ async def get_job(search_id: str = Query(""), index: int = 0):
 
 
 @router.post("/check-relevance")
-def check_relevance(req: CheckRelevanceRequest):
+def check_relevance(req: CheckRelevanceRequest, request: Request = None):
     if not req.search_id or not req.url:
         return {"ok": False, "error": "Missing search_id or url"}
+    client_ip = get_client_ip(request)
+    key = req.email or client_ip or "unknown"
+    if client_ip and not check_rate_limit(f"check_relevance:{key}", _CHECK_RATE, _CHECK_WINDOW):
+        raise HTTPException(429, "Too many requests. Try again later.")
     jobs = get_raw_jobs(req.search_id)
     job = next((j for j in jobs if j.get("url") == req.url), None)
     if job is None:
