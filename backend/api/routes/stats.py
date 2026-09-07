@@ -17,7 +17,7 @@ async def public_stats():
         cur.execute("SELECT COUNT(*) FROM users")
         total_users = cur.fetchone()[0]
 
-        cur.execute("SELECT COUNT(DISTINCT LOWER(company)) FROM users WHERE company != ''")
+        cur.execute("SELECT COUNT(DISTINCT LOWER(company)) FROM users WHERE company != '' AND refer_opt_in = 1")
         total_companies = cur.fetchone()[0]
 
         return {
