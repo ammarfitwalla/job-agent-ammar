@@ -160,7 +160,7 @@ async function _sendCodeCore(email, btn, errEl, opts) {
     } else if (d.fallback && d.code) {
       const emailRes = await sendEmailJS({
         email: email,
-        subject: "Your Job Agent verification code",
+        subject: "Your JobAwn verification code",
         passcode: d.code,
       });
       if (!emailRes.ok) {

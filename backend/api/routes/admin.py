@@ -537,7 +537,7 @@ async def get_combo_usage(limit: int = 50):
 
 
 @router.get("/cache-stats")
-async def get_cache_stats():
+async def get_cache_stats(used: bool = True):
     from db import _get_conn
     with _get_conn() as (conn, cur):
         cur.execute(
@@ -550,13 +550,16 @@ async def get_cache_stats():
         total = dict(cur.fetchone())
         rows = {}
         for s in sites:
-            cur.execute(
+            sql = (
                 "SELECT id, role, site, city, state, country, internship_mode, "
                 "is_remote, job_count, scraped_at, usage_count, last_used_at "
                 "FROM job_cache WHERE site = ? "
-                "ORDER BY scraped_at DESC, id DESC LIMIT 10",
-                (s["site"],),
             )
+            params: list = [s["site"]]
+            if used:
+                sql += "AND usage_count > 0 "
+            sql += "ORDER BY scraped_at DESC, id DESC LIMIT 10"
+            cur.execute(sql, params)
             rows[s["site"]] = [dict(r) for r in cur.fetchall()]
     return {"sites": sites, "total_entries": total["e"] or 0, "total_jobs": total["j"] or 0, "rows": rows}
 

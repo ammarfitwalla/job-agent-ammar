@@ -330,7 +330,7 @@ def run_db_backup():
         gz_size_mb = round(os.path.getsize(gz_tmp) / 1048576, 2)
         ok = send_email_with_attachment(
             to=config.DB_BACKUP_EMAIL,
-            subject=f"Job Agent — DB Backup ({date.today()})",
+            subject=f"JobAwn — DB Backup ({date.today()})",
             html_body=f"<p>Attached is the database snapshot ({gz_size_mb} MB gzipped).</p>",
             file_path=gz_tmp,
             filename=f"job_agent_{date.today()}.db.gz",

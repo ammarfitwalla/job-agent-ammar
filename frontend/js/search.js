@@ -933,7 +933,7 @@ function clearSearchState() {
   hideTabBar();
   const sr = document.getElementById("suggestedRoles");
   if (sr) { sr.innerHTML = ""; sr.classList.add("hidden"); }
-  document.title = "AI Job Agent";
+  document.title = "JobAwn";
   setStatus("", "");
   localStorage.removeItem(SEARCH_CACHE_KEY);
 }
@@ -1582,7 +1582,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   _activeYoeFilters.clear();
   document.getElementById("filterBar").classList.add("hidden");
 
-  document.title = "Searching... - AI Job Agent";
+  document.title = "Searching... - JobAwn";
   setStatus("Initializing data collection...", "blue");
   logEvent("search_started", { sites, keywords_count: keywords.length, roles_count: rolesToScrape.length });
 
@@ -1618,7 +1618,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
     scrapeAttempts = 0;
     pollAllScrapes();
   } catch (e) {
-    document.title = "AI Job Agent";
+    document.title = "JobAwn";
     setStatus("Error: " + e.message, "red");
     logEvent("search_error", { error: e.message }, Math.round((Date.now() - _searchStart) / 1000));
     resetSearchBtn(); showElement("results");
@@ -1645,7 +1645,7 @@ function stopSearchNow() {
     ? `Stopped by you — ${allJobs.length} jobs kept`
     : "Search stopped — no jobs collected yet. Try broader roles or location.";
   setStatus(msg, "amber");
-  document.title = `(${allJobs.length}) Jobs - AI Job Agent`;
+  document.title = `(${allJobs.length}) Jobs - JobAwn`;
   logEvent("scrape_stopped", { jobs: allJobs.length });
 }
 
@@ -1706,7 +1706,7 @@ function pollAllScrapes() {
       } else {
         setStatus("Collecting job data...", "blue");
       }
-      document.title = `(${totalJobs}) Jobs - AI Job Agent`;
+      document.title = `(${totalJobs}) Jobs - JobAwn`;
       if (_customRoleList.length > 0 && _aiRoleList.length > 0) {
         updateTabCounts();
         renderActiveTab();
@@ -1724,7 +1724,7 @@ function pollAllScrapes() {
       }
       let msg = `Analysis complete — ${totalJobs} jobs found`;
       setStatus(msg, totalJobs ? "green" : "amber");
-      document.title = `(${totalJobs}) Jobs - AI Job Agent`;
+      document.title = `(${totalJobs}) Jobs - JobAwn`;
     }
 
     if (consecutiveErrors >= 3) {

@@ -243,11 +243,15 @@ async function loadServerStats() {
 }
 
 // ── Cache Stats ──
+let _cacheUsedOnly = true;
+
 async function loadCacheStats() {
   try {
-    const r = await fetch("/api/admin/cache-stats", { cache: "no-cache" });
+    const r = await fetch(`/api/admin/cache-stats?used=${_cacheUsedOnly ? 1 : 0}`, { cache: "no-cache" });
     const d = await r.json();
     const sites = d.sites || [];
+    const toggleBtn = document.getElementById("cacheUsedToggle");
+    if (toggleBtn) toggleBtn.textContent = _cacheUsedOnly ? "Show all" : "Active only";
     const rows = sites.map(s => `<tr>
       <td>${s.site || "\u2014"}</td>
       <td>${s.entries || 0}</td>
@@ -280,9 +284,9 @@ async function loadCacheStats() {
         <td style="white-space:nowrap">${x.scraped_at ? formatRelative(x.scraped_at) : "\u2014"}</td>
         <td style="text-align:center">${x.usage_count ?? 0}</td>
         <td style="white-space:nowrap">${x.last_used_at ? formatRelative(x.last_used_at) : "\u2014"}</td>
-      </tr>`).join("") : '<tr><td colspan="11" class="empty">No cached rows</td></tr>';
+      </tr>`).join("") : `<tr><td colspan="11" class="empty">${_cacheUsedOnly ? "No active (used) rows" : "No cached rows"}</td></tr>`;
       return `<div class="chart-box db-card" style="max-width:100%;margin-top:16px">
-        <h3>${_esc(s.site || "Unknown")} &mdash; Top 10 Cached Jobs</h3>
+        <h3>${_esc(s.site || "Unknown")} &mdash; Top 10 Cached Jobs (${_cacheUsedOnly ? "Active" : "All"})</h3>
         <div class="table-wrap"><table><thead><tr>
           <th>ID</th><th>Role</th><th>City</th><th>State</th><th>Country</th><th>Intern</th>
           <th>Remote</th><th>Jobs</th><th>Scraped</th><th>Used</th><th>Last Used</th>
@@ -292,6 +296,11 @@ async function loadCacheStats() {
     const container = document.getElementById("cacheSiteRows");
     if (container) container.innerHTML = siteRows;
   } catch {}
+}
+
+function toggleCacheUsed() {
+  _cacheUsedOnly = !_cacheUsedOnly;
+  loadCacheStats();
 }
 
 // ── Sessions ──
@@ -810,6 +819,7 @@ window.openUserModal = openUserModal;
 window.closeUserModal = closeUserModal;
 window.saveUser = saveUser;
 window.loadCacheStats = loadCacheStats;
+window.toggleCacheUsed = toggleCacheUsed;
 window.loadServerStats = loadServerStats;
 window.switchTab = switchTab;
 window.loadDbInfo = loadDbInfo;

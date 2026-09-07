@@ -54,13 +54,13 @@ def send_verification_email(to: str, code: str) -> bool:
     """Send 6-digit verification code via SMTP."""
     html = (
         "<div style='font-family:sans-serif;max-width:400px;margin:0 auto;padding:20px'>"
-        "<h2 style='color:#1e293b'>Job Agent</h2>"
+        "<h2 style='color:#1e293b'>JobAwn</h2>"
         "<p style='color:#475569'>Your verification code:</p>"
         f"<p style='font-size:28px;font-weight:bold;letter-spacing:4px;color:#1e293b'>{code}</p>"
         "<p style='color:#94a3b8;font-size:13px'>Expires in 10 minutes.</p>"
         "</div>"
     )
-    return send_email(to, "Job Agent — Your Verification Code", html)
+    return send_email(to, "JobAwn — Your Verification Code", html)
 
 
 def send_email_with_attachment(to: str, subject: str, html_body: str, file_path: str, filename: str) -> bool:

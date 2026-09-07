@@ -48,7 +48,7 @@ def _save_votes(count: int):
         json.dump({"votes": count}, f)
 
 app = FastAPI(
-    title="Job Agent API",
+    title="JobAwn API",
     description="Scrape, score, and manage job applications",
     version="1.0.0",
     lifespan=lifespan,
