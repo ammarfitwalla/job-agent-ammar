@@ -67,3 +67,30 @@ Task numbering follows the discussion on 2026-09-07. Items 3–6 pending per exp
 
 - **Load test:** `loadtest-plan-2026-09-07.md` written and approach agreed (k6 vs prod, unique X-Forwarded-For per VU) — not run yet; **k6 not installed locally**; needs a go/no-go before hammering prod.
 - **Housekeeping:** `backend/config.py` intentionally uncommitted (secrets; server copy is source of truth). `stop_on_old.md` + `tmp_usage.json` are untracked scratch — keep or delete.
+
+---
+
+## 7. NVIDIA provider (Groq → fallback)
+
+**What/why:** Make NVIDIA NIM the primary LLM provider, with Groq catching failures. Spec supplied 2026-09-07; changes drafted then reverted to this file only.
+
+**Spec:**
+1. `backend/config.py` — add:
+   - `NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")`
+   - `NVIDIA_MODEL = os.environ.get("NVIDIA_MODEL", "nvidia/nemotron-3-super-120b-a12b")`
+   - `NVIDIA_KEYWORDS_MODEL` → same model constant (single model for both roles)
+2. `backend/llm/providers.py` — add `NvidiaProvider(BaseProvider)` using the already-installed openai SDK:
+   - `OpenAI(base_url="https://integrate.api.nvidia.com/v1", api_key=key)`
+   - `client.chat.completions.create(model=m, messages=[{"role":"user","content":prompt}], temperature=0.1, max_tokens=max_tokens, top_p=0.95, stream=False, timeout=30)`
+   - Same TokenBucket throttle + 3-attempt backoff loop as `GroqProvider`.
+3. `backend/llm/llm_client.py` — register `"nvidia"` (scoring) + `"nvidia_keywords"` providers; set `_FALLBACK_CHAIN = ["groq"]` so NVIDIA is primary and Groq catches failures. Callers (`chat`/`batch_chat`/`keyword_chat`) unchanged.
+
+**Implementation notes (checked 2026-09-07):**
+- `openai` SDK 2.44.0 and `groq` 1.5.0 both installed; already in `backend/requirements.txt:27-28`.
+- `_route()` picks primary via `_providers.get(LLM_PROVIDER)` and its fallback loop skips `name == LLM_PROVIDER` (`llm_client.py:52-60`) — so **`LLM_PROVIDER` default must flip to `"nvidia"`** (currently `"groq"`) for NVIDIA to actually be primary.
+- `keyword_chat()` currently hardcodes `_providers.get("groq_keywords")` with no fallback (`llm_client.py:33-36`) — needs a parallel `LLM_PROVIDER + "_keywords"` primary with `"groq_keywords"` fallback.
+- An empty-`NVIDIA_API_KEY` guard in `NvidiaProvider` makes unconfigured runs fall fast to Groq (otherwise each call would 401 after a network round-trip).
+
+**Deployment notes:**
+- Do **not** deploy local `backend/config.py` (secrets). The container's own `/app/backend/config.py` must be updated (append the 3 NVIDIA constants) **before** shipping `llm_client.py`, or the app import-crashes.
+- NVIDIA_API_KEY for prod goes via container env (`docker run -e NVIDIA_API_KEY=...`) or the container's config — needs the key from the user; until then everything falls back to Groq (safe).
