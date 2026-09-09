@@ -628,7 +628,7 @@ tr.clickable:hover td { background: #f8fafc; }
   </div>
 </div>
 
-<div class="footer">JobAwn Admin &middot; <a href="/app" target="_blank">Main App <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg></a></div>
+<div class="footer">JobAwn Admin &middot; <a href="#" onclick="window.openTerms('terms'); return false;">Terms</a> &middot; <a href="#" onclick="window.openTerms('privacy'); return false;">Privacy</a> &middot; <a href="/app" target="_blank">Main App <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg></a></div>
 
 <!-- User Create/Edit Modal -->
 <div id="userModal" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px" onclick="if (event.target === this) closeUserModal()">
@@ -666,5 +666,6 @@ tr.clickable:hover td { background: #f8fafc; }
 </div>
 
   <script type="module" src="js/admin.js"></script>
+  <script src="js/terms.js"></script>
 </body>
 </html>

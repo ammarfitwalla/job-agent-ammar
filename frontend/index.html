@@ -156,7 +156,7 @@
 
         <div class="h-4 w-px bg-slate-200 hidden sm:block"></div>
 
-        <a href="/profile.html" class="relative w-10 h-10 rounded-full flex items-center justify-center text-slate-600 hover:text-brand-600 hover:bg-brand-50 bg-slate-100 border border-slate-200 transition-all shadow-sm" id="profileLink" title="Your Profile">
+        <a href="/profile" class="relative w-10 h-10 rounded-full flex items-center justify-center text-slate-600 hover:text-brand-600 hover:bg-brand-50 bg-slate-100 border border-slate-200 transition-all shadow-sm" id="profileLink" title="Your Profile">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
           <span id="referralBadge" class="hidden absolute -top-1 -right-1 w-4 h-4 bg-red-500 border-2 border-white rounded-full text-[8px] text-white font-bold flex items-center justify-center leading-none"></span>
         </a>
@@ -531,6 +531,15 @@
     </div>
   </div>
 
+  <!-- Footer -->
+  <footer class="mt-auto py-4 px-6 text-center text-xs text-slate-400" style="background:#f8fafc;border-top:1px solid #e2e8f0">
+    <a href="#" onclick="window.openTerms('terms'); return false;" class="font-semibold text-slate-500 hover:text-brand-600 transition-colors">Terms &amp; Conditions</a>
+    <span class="mx-2 text-slate-300">&middot;</span>
+    <a href="#" onclick="window.openTerms('privacy'); return false;" class="font-semibold text-slate-500 hover:text-brand-600 transition-colors">Privacy</a>
+    <span class="mx-2 text-slate-300">&middot;</span>
+    <span>&copy; 2026 JobAwn</span>
+  </footer>
+
   <!-- Toast -->
   <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 hidden">
     <div class="bg-slate-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 whitespace-nowrap">
@@ -581,5 +590,6 @@
   <script type="module" src="/js/auth.js"></script>
   <script type="module" src="/js/referrals.js"></script>
   <script src="/js/search.js"></script>
+  <script src="/js/terms.js"></script>
 </body>
 </html>

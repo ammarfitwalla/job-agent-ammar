@@ -73,7 +73,7 @@ async def no_cache_frontend(request, call_next):
         path.startswith("/js/")
         or path.endswith(".css")
         or path.endswith(".html")
-        or path in ("/", "/app", "/admin")
+        or path in ("/", "/app", "/admin", "/profile")
     ):
         response.headers["Cache-Control"] = "no-cache"
     return response
@@ -142,6 +142,7 @@ _frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 _admin_html = os.path.join(_frontend_dir, "admin.html")
 _landing_html = os.path.join(_frontend_dir, "landing.html")
 _app_html = os.path.join(_frontend_dir, "index.html")
+_profile_html = os.path.join(_frontend_dir, "profile.html")
 
 
 @app.get("/admin")
@@ -156,6 +157,13 @@ async def app_redirect():
     if os.path.isfile(_app_html):
         return FileResponse(_app_html)
     return PlainTextResponse("index.html not found", status_code=404)
+
+
+@app.get("/profile")
+async def profile_redirect():
+    if os.path.isfile(_profile_html):
+        return FileResponse(_profile_html)
+    return PlainTextResponse("profile.html not found", status_code=404)
 
 
 @app.get("/")
