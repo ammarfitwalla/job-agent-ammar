@@ -32,7 +32,7 @@
 - SMTP verified live: auth.py login+send_message OK from local AND from inside Oracle container.
 
 ## Git state
-- config.py NEVER staged. Untracked-at-repo-root scratch: AGENTS-SUMMARY.md, tmp_usage.json; untracked under backend/scripts: check_naukri_locations.py, test_migration.py, test_naukri_*.py — all intentionally left out.
+- config.py NEVER staged. Untracked scratch kept out of the repo: tmp_usage.json (deleted), _ref/ (gitignored), backend/scripts test_naukri_*.py — all intentionally excluded.
 - main commits: 61f8214 (pre-session), d814c05 (Option 2), cc1fd1e (verify script), 362be2f (complete-profile fixes v15), ba7eb3d (v16 + fallback-code + SMTP). All pushed.
 
 ## Current Task / Status

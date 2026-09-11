@@ -98,4 +98,4 @@ backend returns `401` and the user must re-login. **There is no silent auto-refr
 | `frontend/js/api.js` | `window.api()` (Bearer header, 401 handling), `downloadAuthed`, session storage |
 | `frontend/js/auth.js` | OTP modal + `setAuthSession` |
 
-See also `jwt_deploy_runbook.md` for production deployment.
+See also `docs/deployment/jwt_deploy_runbook.md` for production deployment.

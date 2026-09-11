@@ -65,7 +65,7 @@ Task numbering follows the discussion on 2026-09-07. Items 3–6 pending per exp
 
 ## Carry-over (decided earlier, not in the numbered list)
 
-- **Load test:** `loadtest-plan-2026-09-07.md` written and approach agreed (k6 vs prod, unique X-Forwarded-For per VU) — not run yet; **k6 not installed locally**; needs a go/no-go before hammering prod.
+- **Load test:** `docs/planning/loadtest-plan-2026-09-07.md` written and approach agreed (k6 vs prod, unique X-Forwarded-For per VU) — not run yet; **k6 not installed locally**; needs a go/no-go before hammering prod.
 - **Housekeeping:** `backend/config.py` intentionally uncommitted (secrets; server copy is source of truth). `stop_on_old.md` + `tmp_usage.json` are untracked scratch — keep or delete.
 
 ---

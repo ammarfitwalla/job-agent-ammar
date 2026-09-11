@@ -162,12 +162,19 @@ job-agent-ammar/
 ├── resumes/                     # Uploaded resume files (gitignored)
 ├── Dockerfile                   # HuggingFace Spaces build
 ├── render.yaml                  # Render.com deployment config
-├── HOW_IT_WORKS.md              # User-facing scoring explanation
-├── JWT_AUTH.md                  # JWT auth flow walkthrough
-├── jwt_deploy_runbook.md        # Production deploy/rollback runbook (Oracle box)
-├── PLAN.md                      # Profile + Saved Jobs implementation plan
-├── REFERRAL_MARKETPLACE.md      # Referral marketplace implementation plan
-└── votes.json                   # Community vote counter
+├── scripts/                     # Ops scripts
+│   ├── deploy-oracle.sh         # Oracle VM deploy helper
+│   └── fetch_server_logs.py     # Pull container logs
+└── docs/
+    ├── README.md                # Docs index
+    ├── architecture/            # Current-system references
+    │   ├── CODEBASE.md          # This document
+    │   ├── HOW_IT_WORKS.md      # User-facing scoring explanation
+    │   └── JWT_AUTH.md          # JWT auth flow walkthrough
+    ├── planning/                # Historical plans & task lists
+    ├── deployment/              # Ops guides and records
+    │   └── jwt_deploy_runbook.md# Production deploy/rollback runbook (Oracle box)
+    └── project/                 # Project summaries
 ```
 
 ---
@@ -219,7 +226,7 @@ Stateless, signed, expiring JWT tokens (**HS256**, pure stdlib — no PyJWT depe
 - Login flow: `POST /api/auth/send-code` (public) → `POST /api/auth/verify-code` (public) → returns `{token, user}` → browser stores token in **sessionStorage** (`ja_token`) → `window.api()` attaches `Authorization: Bearer <token>` → `401` clears the token and fires `ja:auth-required` (debounced 60s) to re-show the login modal.
 - Protected routes trust the token, not client params: e.g. `/api/profile` serves the token's email, `/api/auth/register` rejects a non-matching email (`403`), saved-job ownership is checked via `db.get_saved_job_owner`.
 
-Full step-by-step walkthrough: **`JWT_AUTH.md`**.
+Full step-by-step walkthrough: **`docs/architecture/JWT_AUTH.md`**.
 
 ---
 
@@ -557,7 +564,7 @@ Both install Chromium, Playwright, Python requirements.
 
 | Platform | Notes |
 |----------|-------|
-| **Oracle Cloud VM (current live prod)** | Docker container, nginx reverse proxy + Let's Encrypt HTTPS, backend on 7860, frontend served by FastAPI at `/`. Deploy/rollback flow in **`jwt_deploy_runbook.md`** |
+| **Oracle Cloud VM (current live prod)** | Docker container, nginx reverse proxy + Let's Encrypt HTTPS, backend on 7860, frontend served by FastAPI at `/`. Deploy/rollback flow in **`docs/deployment/jwt_deploy_runbook.md`** |
 | Render | `render.yaml` — Docker service, env vars for API keys (port via `$PORT`) |
 | HuggingFace Spaces | Root `Dockerfile` — port 7860 |
 

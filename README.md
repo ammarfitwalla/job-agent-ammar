@@ -67,10 +67,10 @@ Automated job scraper + AI scoring + referral marketplace + web dashboard.
 
 ## Configuration
 
-Copy `config.example.py` to `config.py` and set API keys, email credentials, and search preferences. `config.py` is **gitignored** — server copy is the source of truth. See `CODEBASE.md` and `JWT_AUTH.md` for architecture and auth details.
+Copy `config.example.py` to `config.py` and set API keys, email credentials, and search preferences. `config.py` is **gitignored** — server copy is the source of truth. See `docs/architecture/CODEBASE.md` and `docs/architecture/JWT_AUTH.md` for architecture and auth details. Full doc index: `docs/README.md`.
 
 ## Deploy
 
-- **Production (live domain):** Docker on an Oracle Cloud VM behind nginx + Let's Encrypt (`jobawn.com`). Deploy/rollback steps in `jwt_deploy_runbook.md`.
+- **Production (live domain):** Docker on an Oracle Cloud VM behind nginx + Let's Encrypt (`jobawn.com`). Deploy/rollback steps in `docs/deployment/jwt_deploy_runbook.md`.
 - **Render:** auto-deploys from GitHub via `render.yaml`
 - **Hugging Face Spaces:** uses root `Dockerfile`, port 7860
