@@ -896,6 +896,30 @@ async function mergeDB() {
   btn.disabled = false; btn.innerHTML = orig;
 }
 
+async function downloadBackup() {
+  const btn = document.getElementById("backupBtn");
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-spinner"></span> Preparing...';
+  const result = document.getElementById("dbBackupResult");
+  if (result) { result.textContent = ""; result.className = "db-result"; }
+  try {
+    const ok = await window.downloadAuthed("/api/admin/backup", "");
+    if (result) {
+      if (ok) {
+        result.className = "db-result success";
+        result.textContent = "Backup downloaded";
+      } else {
+        result.className = "db-result error";
+        result.textContent = "Download failed";
+      }
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
 // ── Resume Upload ──
 window.handleResumeFiles = function handleResumeFiles(files) {
   const count = document.getElementById("resumeFileCount");
@@ -973,6 +997,7 @@ window.switchTab = switchTab;
 window.loadDbInfo = loadDbInfo;
 window.restoreDB = restoreDB;
 window.mergeDB = mergeDB;
+window.downloadBackup = downloadBackup;
 window.sendAdminCode = sendAdminCode;
 window.verifyAdminCode = verifyAdminCode;
 

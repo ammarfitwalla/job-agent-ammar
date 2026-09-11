@@ -1,10 +1,13 @@
+import io
 import json
 import os
 import platform
+import sqlite3
 import tempfile
-from datetime import datetime, timedelta
+import zipfile
+from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from api.deps import get_current_user
@@ -409,6 +412,56 @@ async def admin_db_info(user: dict = Depends(get_current_user)):
 
     size_bytes = os.path.getsize(_DB_PATH) if os.path.isfile(_DB_PATH) else 0
     return {"size_bytes": size_bytes, "size_mb": round(size_bytes / 1048576, 2), "sessions": sessions, "users": users}
+
+
+@router.get("/backup")
+async def admin_download_backup(user: dict = Depends(get_current_user)):
+    if user["email"].lower() != ADMIN_EMAIL.lower():
+        return JSONResponse(status_code=403, content={"error": "Unauthorized"})
+    from db import _get_conn
+
+    resumes_dir = _resumes_dir()
+    has_resumes = os.path.isdir(resumes_dir) and bool(os.listdir(resumes_dir))
+
+    snapshot = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    snapshot.close()
+    try:
+        dest = sqlite3.connect(snapshot.name)
+        try:
+            with _get_conn() as (src, cur):
+                src.backup(dest)
+                cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                tables = [r[0] for r in cur.fetchall()]
+            dest.commit()
+        finally:
+            dest.close()
+
+        if not tables and not has_resumes:
+            raise HTTPException(404, "Nothing to back up")
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            with open(snapshot.name, "rb") as f:
+                zf.writestr("job_agent.db", f.read())
+            if has_resumes:
+                for root, _, files in os.walk(resumes_dir):
+                    for fname in files:
+                        fpath = os.path.join(root, fname)
+                        arcname = os.path.relpath(fpath, resumes_dir)
+                        zf.write(fpath, os.path.join("resumes", arcname))
+        buf.seek(0)
+
+        filename = f"jobawn-backup-{date.today().isoformat()}.zip"
+        return StreamingResponse(
+            buf,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    finally:
+        try:
+            os.unlink(snapshot.name)
+        except Exception:
+            pass
 
 
 @router.post("/db/restore")

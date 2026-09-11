@@ -904,6 +904,93 @@ class TestAdminUserCRU(unittest.TestCase):
         self.assertEqual(r.status_code, 401)
 
 
+class TestAdminBackup(unittest.TestCase):
+    _ADMIN = "ammarfitwalla@gmail.com"
+
+    def setUp(self):
+        _init_test_db()
+        self._conn_patcher = patch("db._get_conn", _make_conn_patch())
+        self._conn_patcher.start()
+
+        self._tmp_resumes = tempfile.TemporaryDirectory()
+        with open(os.path.join(self._tmp_resumes.name, "sample.pdf"), "wb") as f:
+            f.write(b"%PDF-1.4 fake resume")
+        self._resumes_patcher = patch("api.routes.admin._resumes_dir", lambda: self._tmp_resumes.name)
+        self._resumes_patcher.start()
+
+        conn, cur = _fresh_conn()
+        cur.execute(
+            "INSERT OR IGNORE INTO users (email, name, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now'))",
+            (self._ADMIN, "Admin"),
+        )
+        conn.commit()
+        conn.close()
+
+        from fastapi.testclient import TestClient
+        from api.main import app
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        self._conn_patcher.stop()
+        self._resumes_patcher.stop()
+        self._tmp_resumes.cleanup()
+
+    def _zip_names(self, content):
+        import io as _io
+        import zipfile as _zipfile
+        with _zipfile.ZipFile(_io.BytesIO(content)) as zf:
+            return set(zf.namelist())
+
+    def test_download_zip_has_db_and_resumes(self):
+        r = self.client.get("/api/admin/backup", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.headers.get("content-type"), "application/zip")
+        names = self._zip_names(r.content)
+        self.assertIn("job_agent.db", names)
+        self.assertIn("resumes/sample.pdf", names)
+
+    def test_zip_db_is_valid_and_contains_admin(self):
+        import io as _io
+        import zipfile as _zipfile
+        import sqlite3 as _sqlite3
+        r = self.client.get("/api/admin/backup", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+        with _zipfile.ZipFile(_io.BytesIO(r.content)) as zf:
+            with zf.open("job_agent.db") as f:
+                data = f.read()
+        db_path = os.path.join(tempfile.mkdtemp(), "snap.db")
+        try:
+            with open(db_path, "wb") as f:
+                f.write(data)
+            snap = _sqlite3.connect(db_path)
+            try:
+                snap.row_factory = _sqlite3.Row
+                cur = snap.cursor()
+                cur.execute("SELECT email FROM users WHERE email = ?", (self._ADMIN,))
+                row = cur.fetchone()
+            finally:
+                snap.close()
+        finally:
+            os.remove(db_path)
+        self.assertIsNotNone(row)
+        self.assertEqual(row["email"], self._ADMIN)
+
+    def test_content_disposition_has_todays_date(self):
+        from datetime import date
+        r = self.client.get("/api/admin/backup", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+        cd = r.headers.get("content-disposition", "")
+        self.assertIn(f"jobawn-backup-{date.today().isoformat()}.zip", cd)
+
+    def test_backup_requires_token(self):
+        r = self.client.get("/api/admin/backup")
+        self.assertEqual(r.status_code, 401)
+
+    def test_backup_non_admin_forbidden(self):
+        r = self.client.get("/api/admin/backup", headers=_auth("hacker@evil.com"))
+        self.assertEqual(r.status_code, 403)
+
+
 class TestJWTGuard(unittest.TestCase):
     def setUp(self):
         _init_test_db()

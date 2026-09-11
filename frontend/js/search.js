@@ -1897,7 +1897,7 @@ function renderAllJobs(jobs) {
       </div>
     </div>`;
   }
-  subFilterHtml += `<span class="flex items-center gap-2 text-xs text-slate-400 ml-auto">${yoeFilterHtml}${boardFilterHtml}<span class="flex items-center gap-1.5"><span>Sort:</span>
+  subFilterHtml += `<span class="flex flex-wrap items-center gap-2 text-xs text-slate-400 ml-auto">${yoeFilterHtml}${boardFilterHtml}<span class="flex items-center gap-1.5"><span>Sort:</span>
     <select id="sortSelect" class="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
       <option value="relevant" ${currentSort === 'relevant' ? 'selected' : ''}>Most Relevant</option>
       <option value="recent" ${currentSort === 'recent' ? 'selected' : ''}>Most Recent</option>
