@@ -26,7 +26,7 @@ async function loadProfile() {
   const refPromise = window.loadReferrals ? window.loadReferrals().catch(() => {}) : Promise.resolve();
 
   try {
-    const r = await fetch(`/api/profile?email=${encodeURIComponent(profile.email)}`);
+    const r = await window.api("/api/profile");
     const d = await r.json();
     document.getElementById("profileSkeleton").classList.add("hidden");
     document.getElementById("dashboardSidebar").classList.remove("hidden");
@@ -99,7 +99,8 @@ function renderProfile(data) {
   const resumeFilename = data.resume_filename || "";
   if (resumeFilename && resumeSection) {
     resumeName.textContent = resumeFilename;
-    resumeDownload.href = `/api/profile/resume?email=${encodeURIComponent(data.email)}`;
+    resumeDownload.href = "/api/profile/resume";
+    resumeDownload.setAttribute("data-download", "1");
     resumeSection.classList.remove("hidden");
     if (resumeMissing) resumeMissing.classList.add("hidden");
   } else if (resumeSection) {
@@ -141,7 +142,7 @@ function filterProfileCompanyDropdown() {
 
 async function addCustomProfileCompany(name, event) {
   event.stopPropagation();
-  await fetch("/api/auth/companies", {
+  await window.api("/api/auth/companies", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
   });
@@ -231,7 +232,7 @@ async function saveProfile() {
     company = _PROFILE_EMPLOYMENT_LABELS[status] || "";
   }
   try {
-    const r = await fetch("/api/profile", {
+    const r = await window.api("/api/profile", {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: profile.email, company, position, linkedin_url: linkedin, refer_opt_in: document.getElementById("editReferOptIn")?.checked ? 1 : 0 }),
     });
@@ -267,7 +268,7 @@ async function saveProfile() {
         try {
           const fd = new FormData();
           fd.append("file", resumeFile);
-          const rr = await fetch(`/api/profile/resume?email=${encodeURIComponent(profile.email)}`, { method: "POST", body: fd });
+          const rr = await window.api("/api/profile/resume", { method: "POST", body: fd });
           const rd = await rr.json();
           if (rd.ok && rd.filename) {
             const resumeSection = document.getElementById("profileResumeSection");
@@ -275,7 +276,7 @@ async function saveProfile() {
             const resumeName = document.getElementById("profileResumeName");
             const resumeDownload = document.getElementById("profileResumeDownload");
             if (resumeName) resumeName.textContent = rd.filename;
-            if (resumeDownload) resumeDownload.href = `/api/profile/resume?email=${encodeURIComponent(profile.email)}`;
+            if (resumeDownload) { resumeDownload.href = "/api/profile/resume"; resumeDownload.setAttribute("data-download", "1"); }
             if (resumeSection) resumeSection.classList.remove("hidden");
             if (resumeMissing) resumeMissing.classList.add("hidden");
             const statusEl = document.getElementById("profileResumeEditStatus");
@@ -296,7 +297,7 @@ async function saveNameLocally(email, name) {
   document.getElementById("profileName").textContent = name;
   document.getElementById("profileAvatar").textContent = name.charAt(0).toUpperCase();
   try {
-    const r = await fetch("/api/profile/name", {
+    const r = await window.api("/api/profile/name", {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, name }),
     });

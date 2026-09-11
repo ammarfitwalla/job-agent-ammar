@@ -52,9 +52,13 @@ async function refreshCompanyUser(company) {
 async function checkReferralNotifications() {
   if (_referralNotifTimer) { clearTimeout(_referralNotifTimer); _referralNotifTimer = null; }
   const profile = getProfile();
-  if (!profile) return;
+  if (!profile) { _referralNotifTimer = setTimeout(checkReferralNotifications, 30000); return; }
+  if (!window.getAuthToken || !window.getAuthToken()) {
+    _referralNotifTimer = setTimeout(checkReferralNotifications, 30000);
+    return;
+  }
   try {
-    const r = await fetch(`/api/referrals/incoming?email=${encodeURIComponent(profile.email)}`);
+    const r = await window.api("/api/referrals/incoming");
     const d = await r.json();
     const pending = (d.requests || []).filter(req => req.status === "pending").length;
     const badge = document.getElementById("referralBadge");
@@ -81,7 +85,7 @@ function refreshReferralRemaining() {
   const profile = getProfile();
   if (!profile) return;
   const el = document.getElementById("referralRemaining");
-  fetch(`/api/referrals/remaining?email=${encodeURIComponent(profile.email)}`)
+  window.api("/api/referrals/remaining")
     .then(r => r.json())
     .then(d => {
       if (d.remaining > 0) {
@@ -206,9 +210,9 @@ async function inviteReferrer(company) {
   if (!profile) { closeReferralModal(); window.showAuthModal(); return; }
   const link = getShareLink(company);
   try {
-    const r = await fetch("/api/referrals/invite", {
+    const r = await window.api("/api/referrals/invite", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: profile.email, company: company || "" }),
+      body: JSON.stringify({ company: company || "" }),
     });
     const d = await r.json();
     if (!d.ok && d.error) { showToast(d.error); return; }
@@ -236,9 +240,9 @@ async function notifyWhenAvailable(company) {
   const btn = document.getElementById("notifyWhenAvailableBtn");
   if (btn) { btn.disabled = true; btn.classList.add("opacity-60", "cursor-wait"); }
   try {
-    const r = await fetch("/api/referrals/notify", {
+    const r = await window.api("/api/referrals/notify", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: profile.email, company }),
+      body: JSON.stringify({ company }),
     });
     const d = await r.json();
     if (d.ok) {
@@ -282,7 +286,7 @@ async function showReferralUsers(company) {
   const remainingEl = document.getElementById("referralRemaining");
   title.textContent = company;
   if (profile) {
-    fetch(`/api/referrals/remaining?email=${encodeURIComponent(profile.email)}`)
+    window.api(`/api/referrals/remaining`)
       .then(r => r.json())
       .then(d => {
         if (d.remaining > 0) {
@@ -342,7 +346,7 @@ async function showReferralUsers(company) {
   let outgoingRequests = [];
   if (profile) {
     try {
-      const r = await fetch(`/api/referrals/outgoing?email=${encodeURIComponent(profile.email)}`);
+      const r = await window.api("/api/referrals/outgoing");
       const d = await r.json();
       outgoingRequests = d.requests || [];
     } catch (e) {}
@@ -392,7 +396,6 @@ function getResumeText() {
 }
 
 async function scoreReferralJob() {
-  const profile = getProfile();
   const url = window._referralJobUrl || "";
   const title = window._referralJobTitle || "";
   const company = _referralCompany;
@@ -407,10 +410,9 @@ async function scoreReferralJob() {
     : (window._referralJobDescription || "");
   if (!description) return 0;
   try {
-    const r = await fetch("/api/referrals/score", {
+    const r = await window.api("/api/referrals/score", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        from_email: (profile || {}).email || "",
         job_url: url,
         job_title: title,
         company: company,
@@ -490,7 +492,7 @@ function setupReferralResumeRow(row, profile) {
       const fd = new FormData();
       fd.append("file", file);
       try {
-        const r = await fetch(`/api/profile/resume?email=${encodeURIComponent(profile.email)}`, { method: "POST", body: fd });
+        const r = await window.api("/api/profile/resume", { method: "POST", body: fd });
         const d = await r.json();
         if (d.ok && d.filename) {
           _referralResumeFilename = d.filename;
@@ -549,14 +551,11 @@ async function askReferral(btn, referrerId, toName) {
 }
 
 async function sendReferralRequest(btn, referrerId, toName, message, msgBox) {
-  const profile = getProfile();
-
   btn.disabled = true;
   btn.textContent = "Sending...";
-  fetch("/api/referrals/request", {
+  window.api("/api/referrals/request", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      from_email: profile.email,
       referrer_id: referrerId,
       job_url: window._referralJobUrl || "",
       job_title: window._referralJobTitle || "",
@@ -598,10 +597,7 @@ function withdrawReferralRequest(id, btn, toEmail, toName) {
   if (!confirm("Withdraw this referral request?")) return;
   btn.disabled = true;
   btn.textContent = "Withdrawing...";
-  fetch(`/api/referrals/${id}/withdraw`, {
-    method: "PUT", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: getProfile().email }),
-  }).then(r => {
+  window.api(`/api/referrals/${id}/withdraw`, { method: "PUT" }).then(r => {
     console.log("withdraw response status:", r.status);
     return r.json();
   }).then(d => {
@@ -653,8 +649,8 @@ async function loadReferrals() {
 
   try {
     const [inc, out] = await Promise.all([
-      fetch(`/api/referrals/incoming?email=${encodeURIComponent(profile.email)}`, { cache: "no-cache" }).then(r => r.json()),
-      fetch(`/api/referrals/outgoing?email=${encodeURIComponent(profile.email)}`, { cache: "no-cache" }).then(r => r.json()),
+      window.api("/api/referrals/incoming", { cache: "no-cache" }).then(r => r.json()),
+      window.api("/api/referrals/outgoing", { cache: "no-cache" }).then(r => r.json()),
     ]);
     const incReqs = (inc.requests || []).map(r => ({ ...r, _direction: "from" }));
     const outReqs = (out.requests || []).map(r => ({ ...r, _direction: "to" }));
@@ -815,7 +811,7 @@ async function loadReferrals() {
             ${r.from_company || r.from_position ? `<p class="text-xs text-slate-500">${[r.from_position, r.from_company].filter(Boolean).join(" at ")}</p>` : ""}
             <div class="flex flex-wrap gap-3 pt-1">
               ${r.from_linkedin_url ? `<a href="${htmlEscape(r.from_linkedin_url)}" target="_blank" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>LinkedIn</a>` : ""}
-              ${r.resume_filename ? `<a href="/api/referrals/resume?request_id=${r.id}" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Resume</a>` : ""}
+              ${r.resume_filename ? `<a href="/api/referrals/resume?request_id=${r.id}" data-download="1" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Resume</a>` : ""}
             </div>` : `
             <div class="flex flex-wrap items-center gap-2">
               <span class="text-sm font-medium text-slate-700">${htmlEscape(r.to_email)}</span>
@@ -883,10 +879,7 @@ async function acceptReferral(id) {
   const profile = getProfile();
   if (!profile) return;
   try {
-    const r = await fetch(`/api/referrals/${id}/accept`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: profile.email }),
-    });
+    const r = await window.api(`/api/referrals/${id}/accept`, { method: "PUT" });
     const d = await r.json();
     if (d.ok && d.contact) {
       showToast(`Contact revealed: ${d.contact.email}`);
@@ -901,10 +894,7 @@ async function declineReferral(id) {
   const profile = getProfile();
   if (!profile) return;
   try {
-    const r = await fetch(`/api/referrals/${id}/decline`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: profile.email }),
-    });
+    const r = await window.api(`/api/referrals/${id}/decline`, { method: "PUT" });
     const d = await r.json();
     if (d.ok) {
       showToast("Referral declined");
@@ -920,10 +910,7 @@ async function completeReferral(id) {
   if (!profile) return;
   if (!confirm("Have you submitted the referral for this person? You can't undo this.")) return;
   try {
-    const r = await fetch(`/api/referrals/${id}/complete`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: profile.email }),
-    });
+    const r = await window.api(`/api/referrals/${id}/complete`, { method: "PUT" });
     const d = await r.json();
     if (d.ok) {
       if (d.credits_awarded) {
@@ -946,10 +933,7 @@ async function senderConfirmReferral(id) {
   if (!profile) return;
   if (!confirm("Confirm that this person referred you? You can't undo this.")) return;
   try {
-    const r = await fetch(`/api/referrals/${id}/confirm`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: profile.email }),
-    });
+    const r = await window.api(`/api/referrals/${id}/confirm`, { method: "PUT" });
     const d = await r.json();
     if (d.ok) {
       if (d.credits_awarded) {
@@ -991,9 +975,8 @@ async function withdrawReferral(id) {
   if (!profile) return;
   if (!confirm("Withdraw this referral request?")) return;
   try {
-    const r = await fetch(`/api/referrals/${id}/withdraw`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: profile.email }),
+    const r = await window.api(`/api/referrals/${id}/withdraw`, {
+      method: "PUT",
     });
     const d = await r.json();
     if (d.ok) {

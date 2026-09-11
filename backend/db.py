@@ -1479,6 +1479,13 @@ def update_saved_job_status(job_id: int, status: str) -> bool:
             return cur.rowcount > 0
 
 
+def get_saved_job_owner(job_id: int) -> str:
+    with _get_conn() as (conn, cur):
+        cur.execute("SELECT user_email FROM saved_jobs WHERE id = ?", (job_id,))
+        row = cur.fetchone()
+        return row["user_email"] if row else ""
+
+
 def delete_saved_job(job_id: int) -> bool:
     with _write_lock:
         with _get_conn() as (conn, cur):

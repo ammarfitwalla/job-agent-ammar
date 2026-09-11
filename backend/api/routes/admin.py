@@ -3,13 +3,14 @@ import os
 import platform
 import tempfile
 from datetime import datetime, timedelta
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/api/admin", tags=["admin"])
+from api.deps import get_current_user
+from config import ADMIN_EMAIL
 
-ADMIN_EMAIL = "ammarfitwalla@gmail.com"
+router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 class CreateUserRequest(BaseModel):
@@ -342,13 +343,13 @@ async def admin_registrations():
 
 
 def _check_admin(email: str):
-    if email != ADMIN_EMAIL:
+    if email.lower() != ADMIN_EMAIL.lower():
         raise HTTPException(403, "Unauthorized")
 
 
 @router.post("/users")
-async def admin_create_user(req: CreateUserRequest, email: str = ""):
-    _check_admin(email)
+async def admin_create_user(req: CreateUserRequest, user: dict = Depends(get_current_user)):
+    _check_admin(user["email"])
     from db import create_user, get_user
     if not req.email or not req.email.strip():
         raise HTTPException(400, "email is required")
@@ -362,8 +363,8 @@ async def admin_create_user(req: CreateUserRequest, email: str = ""):
 
 
 @router.patch("/users/{user_email}")
-async def admin_update_user(user_email: str, req: UpdateUserRequest, email: str = ""):
-    _check_admin(email)
+async def admin_update_user(user_email: str, req: UpdateUserRequest, user: dict = Depends(get_current_user)):
+    _check_admin(user["email"])
     from db import update_user_admin, get_user
     target = get_user(user_email)
     if not target:
@@ -395,8 +396,8 @@ async def admin_leads():
 
 
 @router.get("/db/info")
-async def admin_db_info(email: str = ""):
-    if email != ADMIN_EMAIL:
+async def admin_db_info(user: dict = Depends(get_current_user)):
+    if user["email"].lower() != ADMIN_EMAIL.lower():
         return JSONResponse(status_code=403, content={"error": "Unauthorized"})
     from db import _get_conn, _DB_PATH
 
@@ -411,8 +412,8 @@ async def admin_db_info(email: str = ""):
 
 
 @router.post("/db/restore")
-async def admin_db_restore(file: UploadFile = File(...), email: str = Form("")):
-    if email != ADMIN_EMAIL:
+async def admin_db_restore(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    if user["email"].lower() != ADMIN_EMAIL.lower():
         return {"ok": False, "error": "Unauthorized"}
     from db import _DB_PATH, init_db
 
@@ -440,8 +441,8 @@ async def admin_db_restore(file: UploadFile = File(...), email: str = Form("")):
 
 
 @router.post("/db/merge")
-async def admin_db_merge(file: UploadFile = File(...), email: str = Form("")):
-    if email != ADMIN_EMAIL:
+async def admin_db_merge(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    if user["email"].lower() != ADMIN_EMAIL.lower():
         return {"ok": False, "error": "Unauthorized"}
     from db import _get_conn
     import tempfile, os, uuid
@@ -496,8 +497,8 @@ async def admin_db_merge(file: UploadFile = File(...), email: str = Form("")):
 
 
 @router.post("/resume/upload")
-async def admin_resume_upload(files: list[UploadFile] = File(...), email: str = Form("")):
-    if email != ADMIN_EMAIL:
+async def admin_resume_upload(files: list[UploadFile] = File(...), user: dict = Depends(get_current_user)):
+    if user["email"].lower() != ADMIN_EMAIL.lower():
         return {"ok": False, "error": "Unauthorized"}
     resumes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
     os.makedirs(resumes_dir, exist_ok=True)

@@ -162,7 +162,7 @@ async function refreshProfileResumeBtn() {
   let hasResume = !!(profile.resume_filename || "");
   if (!profile.resume_filename) {
     try {
-      const r = await fetch(`/api/profile?email=${encodeURIComponent(profile.email)}`);
+      const r = await window.api("/api/profile");
       const d = await r.json();
       if (d && d.email) { window.setProfile(d); hasResume = !!(d.resume_filename || ""); }
     } catch {}
@@ -177,7 +177,7 @@ async function useProfileResume() {
   const lbl = document.getElementById("useProfileResumeLabel");
   if (btn) { btn.disabled = true; if (lbl) lbl.textContent = "Loading..."; }
   try {
-    const r = await fetch(`/api/profile/resume/text?email=${encodeURIComponent(profile.email)}`);
+    const r = await window.api("/api/profile/resume/text");
     const d = await r.json();
     if (!d.ok || !d.text) throw new Error(d.error || "No resume found");
     const ta = document.getElementById("resume");
@@ -509,10 +509,9 @@ async function doSaveJob(job) {
   const profile = window.getProfile();
   if (!profile) return;
   try {
-    const r = await fetch("/api/saved-jobs", {
+    const r = await window.api("/api/saved-jobs", {
       method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
-        email: profile.email,
         title: job.title || "",
         company: job.company || "",
         url: job.url || "",
@@ -539,7 +538,7 @@ async function doSaveJob(job) {
 async function doUnsaveJob(job) {
   if (!job._savedId) return;
   try {
-    await fetch(`/api/saved-jobs/${job._savedId}`, { method: "DELETE" });
+    await window.api(`/api/saved-jobs/${job._savedId}`, { method: "DELETE" });
     job._saved = false;
     job._savedId = null;
     updateSaveButtons();
@@ -571,10 +570,10 @@ async function checkSavedStatuses() {
   const urls = jobsToCheck.map(j => j.url).filter(Boolean);
   if (!urls.length) return;
   try {
-    const r = await fetch("/api/saved-jobs/batch-check", {
+    const r = await window.api("/api/saved-jobs/batch-check", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ email: profile.email, urls }),
+      body: JSON.stringify({ urls }),
     });
     const d = await r.json();
     if (d.saved_map) {
@@ -1187,7 +1186,7 @@ async function addRoleFromSearch(val) {
   const allRoles = Object.values(roleCategories || {}).flat();
   if (allRoles.some(r => r.toLowerCase() === val.toLowerCase())) return;
   try {
-    const r = await fetch("/roles/custom", {
+    const r = await window.api("/roles/custom", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: val }),
@@ -1997,9 +1996,7 @@ function renderAllJobs(jobs) {
       const companies = [...new Set(allJobs.map(j => j.company).filter(Boolean))];
       if (companies.length) {
         try {
-          const profile = window.getProfile();
-          const email = profile?.email || '';
-          const r = await fetch(`/api/users/company-counts?companies=${encodeURIComponent(companies.join(","))}&user_email=${encodeURIComponent(email)}`);
+          const r = await window.api(`/api/users/company-counts?companies=${encodeURIComponent(companies.join(","))}`);
           const d = await r.json();
           _referralCounts = d.counts || {};
         } catch {}
@@ -2012,8 +2009,7 @@ function renderAllJobs(jobs) {
   if (profile) {
     const companies = [...new Set(displayJobs.map(j => j.company).filter(Boolean))];
     if (companies.length) {
-      const email = profile.email || '';
-      fetch(`/api/users/company-counts?companies=${encodeURIComponent(companies.join(","))}&user_email=${encodeURIComponent(email)}`)
+      window.api(`/api/users/company-counts?companies=${encodeURIComponent(companies.join(","))}`)
         .then(r => r.json())
         .then(d => {
           _referralCounts = d.counts || {};

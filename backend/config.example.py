@@ -378,3 +378,12 @@ EMAIL_PORT=int(os.environ.get("EMAIL_PORT", "587"))
 EMAIL_USER=os.environ.get("EMAIL_USER", "")
 EMAIL_PASSWORD=os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_TO=os.environ.get("EMAIL_TO", "")
+
+# ==============
+# JWT AUTH
+# ==============
+# JWT_SECRET = os.environ.get("JWT_SECRET", "")   # REQUIRED in production (fail-fast if empty)
+JWT_SECRET = os.environ.get("JWT_SECRET", "")
+JWT_ALLOW_DEV_SECRET = os.environ.get("JWT_ALLOW_DEV_SECRET", "") == "1"
+JWT_ACCESS_TOKEN_MINUTES = int(os.environ.get("JWT_ACCESS_TOKEN_MINUTES", "1440"))
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "ammarfitwalla@gmail.com")

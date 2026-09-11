@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Query, Request, HTTPException
+from fastapi import APIRouter, Depends, Query, Request, HTTPException
 
+from api.deps import get_optional_user
 from db import get_anonymous_referrers_by_company, get_company_referrer_counts, get_company_directory
 from utils.client_ip import get_client_ip
 from utils.rate_limiter import check_rate_limit
@@ -24,11 +25,12 @@ async def users_at_company(company: str = Query(""), request: Request = None):
 
 
 @router.get("/company-counts")
-async def company_counts(companies: str = Query(""), user_email: str = Query("")):
+async def company_counts(companies: str = Query(""), user: dict | None = Depends(get_optional_user)):
     if not companies:
         return {"counts": {}}
     company_list = [c.strip() for c in companies.split(",") if c.strip()]
-    counts = get_company_referrer_counts(company_list, exclude_email=user_email or None)
+    exclude_email = user["email"] if user else None
+    counts = get_company_referrer_counts(company_list, exclude_email=exclude_email)
     return {"counts": {c: counts.get(c.lower(), 0) for c in company_list}}
 
 

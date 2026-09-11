@@ -9,6 +9,8 @@ from copy import deepcopy
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
+os.environ["JWT_ALLOW_DEV_SECRET"] = "1"
+
 
 import tempfile
 
@@ -153,6 +155,15 @@ def _make_conn_patch():
     return fake_get_conn
 
 
+def _auth_token(email):
+    from utils.jwt import create_token
+    return create_token(email)
+
+
+def _auth(email):
+    return {"Authorization": "Bearer " + _auth_token(email)}
+
+
 class TestIntegrationAuthFlow(unittest.TestCase):
     def setUp(self):
         _init_test_db()
@@ -180,7 +191,7 @@ class TestIntegrationAuthFlow(unittest.TestCase):
         return self.client.post("/api/auth/verify-code", json={"email": email, "code": code})
 
     def _register(self, email, name, company="", position="", linkedin_url=""):
-        return self.client.post("/api/auth/register", json={
+        return self.client.post("/api/auth/register", headers=_auth(email), json={
             "email": email, "name": name, "company": company,
             "position": position, "linkedin_url": linkedin_url,
         })
@@ -196,6 +207,7 @@ class TestIntegrationAuthFlow(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertTrue(data["ok"])
+        self.assertIn("token", data)
         self.assertEqual(data["user"]["email"], email)
         self.assertEqual(data["user"]["name"], "testuser")
 
@@ -244,6 +256,20 @@ class TestIntegrationAuthFlow(unittest.TestCase):
         r = self._verify_code(email, "000000")
         self.assertEqual(r.status_code, 429)
 
+    def test_06_register_requires_token(self):
+        r = self.client.post("/api/auth/register", json={
+            "email": "notoken@example.com", "name": "No Token",
+        })
+        self.assertEqual(r.status_code, 401)
+
+    def test_07_register_rejects_mismatched_email(self):
+        email = "mismatch@example.com"
+        self._verify_code(email)
+        r = self.client.post("/api/auth/register", headers=_auth("other@example.com"), json={
+            "email": email, "name": "Wrong",
+        })
+        self.assertEqual(r.status_code, 403)
+
 
 class TestIntegrationRateLimits(unittest.TestCase):
     def setUp(self):
@@ -278,16 +304,16 @@ class TestIntegrationRateLimits(unittest.TestCase):
 
     def test_add_company_rate_limited_per_ip(self):
         for i in range(5):
-            r = self.client.post("/api/auth/companies", json={"name": f"RateLimitCo{i}"})
+            r = self.client.post("/api/auth/companies", headers=_auth("rlco@example.com"), json={"name": f"RateLimitCo{i}"})
             self.assertEqual(r.status_code, 200)
-        r = self.client.post("/api/auth/companies", json={"name": "RateLimitCoLast"})
+        r = self.client.post("/api/auth/companies", headers=_auth("rlco@example.com"), json={"name": "RateLimitCoLast"})
         self.assertEqual(r.status_code, 429)
 
     def test_custom_role_rate_limited_per_ip(self):
         for i in range(10):
-            r = self.client.post("/roles/custom", json={"name": f"RateLimitRole{i}"})
+            r = self.client.post("/roles/custom", headers=_auth("rlrole@example.com"), json={"name": f"RateLimitRole{i}"})
             self.assertEqual(r.status_code, 200)
-        r = self.client.post("/roles/custom", json={"name": "RateLimitRoleLast"})
+        r = self.client.post("/roles/custom", headers=_auth("rlrole@example.com"), json={"name": "RateLimitRoleLast"})
         self.assertEqual(r.status_code, 429)
 
     def test_scrape_rate_limited_per_ip(self):
@@ -327,7 +353,7 @@ class TestIntegrationProfileFlow(unittest.TestCase):
 
         self.email = "profiletest@example.com"
         self.client.post("/api/auth/verify-code", json={"email": self.email, "code": "123456"})
-        self.client.post("/api/auth/register", json={
+        self.client.post("/api/auth/register", headers=_auth(self.email), json={
             "email": self.email, "name": "Profile User", "company": "Acme",
             "position": "Developer", "linkedin_url": "https://linkedin.com/in/profile",
         })
@@ -336,8 +362,11 @@ class TestIntegrationProfileFlow(unittest.TestCase):
         self._conn_patcher.stop()
         self._dev_mode_patcher.stop()
 
+    def _get_profile(self, email):
+        return self.client.get("/api/profile", headers=_auth(email))
+
     def test_01_get_profile(self):
-        r = self.client.get(f"/api/profile?email={self.email}")
+        r = self._get_profile(self.email)
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertEqual(data["email"], self.email)
@@ -350,20 +379,18 @@ class TestIntegrationProfileFlow(unittest.TestCase):
         self.assertIn("status_counts", data)
 
     def test_02_get_profile_nonexistent(self):
-        r = self.client.get("/api/profile?email=nobody@example.com")
+        r = self._get_profile("nobody@example.com")
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertIn("error", data)
 
-    def test_03_get_profile_no_email(self):
-        r = self.client.get("/api/profile?email=")
-        self.assertEqual(r.status_code, 200)
-        data = r.json()
-        self.assertIn("error", data)
+    def test_03_profile_requires_token(self):
+        r = self.client.get("/api/profile")
+        self.assertEqual(r.status_code, 401)
 
     def test_04_update_profile(self):
-        r = self.client.put("/api/profile", json={
-            "email": self.email, "name": "Updated Profile",
+        r = self.client.put("/api/profile", headers=_auth(self.email), json={
+            "name": "Updated Profile",
             "company": "Google", "position": "Senior Dev",
             "linkedin_url": "https://linkedin.com/in/updated",
         })
@@ -375,20 +402,20 @@ class TestIntegrationProfileFlow(unittest.TestCase):
         self.assertEqual(data["user"]["position"], "Senior Dev")
 
     def test_05_update_name_only(self):
-        r = self.client.put("/api/profile/name", json={"email": self.email, "name": "Just Name"})
+        r = self.client.put("/api/profile/name", headers=_auth(self.email), json={"name": "Just Name"})
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertTrue(data["ok"])
         self.assertEqual(data["name"], "Just Name")
 
     def test_06_profile_persists_after_refresh(self):
-        r = self.client.put("/api/profile", json={
-            "email": self.email, "name": "After Refresh",
+        r = self.client.put("/api/profile", headers=_auth(self.email), json={
+            "name": "After Refresh",
             "company": "Microsoft", "position": "Engineer",
         })
         self.assertTrue(r.json()["ok"])
 
-        r2 = self.client.get(f"/api/profile?email={self.email}")
+        r2 = self._get_profile(self.email)
         self.assertEqual(r2.status_code, 200)
         data = r2.json()
         self.assertEqual(data["name"], "After Refresh")
@@ -428,11 +455,11 @@ class TestIntegrationReferralFlow(unittest.TestCase):
         self.message = "Great fit!"
 
         self.client.post("/api/auth/verify-code", json={"email": self.from_email, "code": "123456"})
-        self.client.post("/api/auth/register", json={
+        self.client.post("/api/auth/register", headers=_auth(self.from_email), json={
             "email": self.from_email, "name": "Referrer", "company": "Meta",
         })
         self.client.post("/api/auth/verify-code", json={"email": self.to_email, "code": "123456"})
-        self.client.post("/api/auth/register", json={
+        self.client.post("/api/auth/register", headers=_auth(self.to_email), json={
             "email": self.to_email, "name": "Referee", "company": "Acme",
         })
 
@@ -442,8 +469,7 @@ class TestIntegrationReferralFlow(unittest.TestCase):
         self._db_dev_mode_patcher.stop()
 
     def _create_referral(self, from_email=None, to_email=None, job_url=None, resume_filename=""):
-        return self.client.post("/api/referrals/request", json={
-            "from_email": from_email or self.from_email,
+        return self.client.post("/api/referrals/request", headers=_auth(from_email or self.from_email), json={
             "to_email": to_email or self.to_email,
             "job_url": job_url or self.job_url,
             "job_title": self.job_title,
@@ -477,7 +503,7 @@ class TestIntegrationReferralFlow(unittest.TestCase):
 
     def test_04_get_incoming(self):
         self._create_referral()
-        r = self.client.get(f"/api/referrals/incoming?email={self.to_email}")
+        r = self.client.get("/api/referrals/incoming", headers=_auth(self.to_email))
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertGreaterEqual(len(data.get("requests", [])), 1)
@@ -485,7 +511,7 @@ class TestIntegrationReferralFlow(unittest.TestCase):
 
     def test_05_get_outgoing(self):
         self._create_referral()
-        r = self.client.get(f"/api/referrals/outgoing?email={self.from_email}")
+        r = self.client.get("/api/referrals/outgoing", headers=_auth(self.from_email))
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertGreaterEqual(len(data.get("requests", [])), 1)
@@ -498,35 +524,35 @@ class TestIntegrationReferralFlow(unittest.TestCase):
 
     def test_05b_resume_filename_persisted(self):
         self._create_referral(resume_filename="resume.pdf")
-        outgoing = self.client.get(f"/api/referrals/outgoing?email={self.from_email}").json()
+        outgoing = self.client.get("/api/referrals/outgoing", headers=_auth(self.from_email)).json()
         req = outgoing["requests"][0]
         self.assertEqual(req.get("resume_filename"), "resume.pdf")
 
     def test_05c_resume_locked_until_accepted(self):
         self._create_referral(resume_filename="resume.pdf")
-        outgoing = self.client.get(f"/api/referrals/outgoing?email={self.from_email}").json()
+        outgoing = self.client.get("/api/referrals/outgoing", headers=_auth(self.from_email)).json()
         rid = outgoing["requests"][0]["id"]
-        r = self.client.get(f"/api/referrals/resume?request_id={rid}")
+        r = self.client.get(f"/api/referrals/resume?request_id={rid}", headers=_auth(self.from_email))
         self.assertEqual(r.status_code, 403)
 
     def test_05d_resume_missing_file_after_accept(self):
         self._create_referral(resume_filename="does_not_exist.pdf")
-        outgoing = self.client.get(f"/api/referrals/outgoing?email={self.from_email}").json()
+        outgoing = self.client.get("/api/referrals/outgoing", headers=_auth(self.from_email)).json()
         rid = outgoing["requests"][0]["id"]
-        self.client.put(f"/api/referrals/{rid}/accept", json={"email": self.to_email})
-        r = self.client.get(f"/api/referrals/resume?request_id={rid}")
+        self.client.put(f"/api/referrals/{rid}/accept", headers=_auth(self.to_email))
+        r = self.client.get(f"/api/referrals/resume?request_id={rid}", headers=_auth(self.from_email))
         self.assertEqual(r.status_code, 404)
 
     def test_06_accept_referral(self):
         self._create_referral()
-        outgoing = self.client.get(f"/api/referrals/outgoing?email={self.from_email}").json()
+        outgoing = self.client.get("/api/referrals/outgoing", headers=_auth(self.from_email)).json()
         rid = outgoing["requests"][0]["id"]
-        r = self.client.put(f"/api/referrals/{rid}/accept", json={"email": self.to_email})
+        r = self.client.put(f"/api/referrals/{rid}/accept", headers=_auth(self.to_email))
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertTrue(data["ok"])
         self.assertIn("contact", data)
-        after = self.client.get(f"/api/referrals/outgoing?email={self.from_email}").json()
+        after = self.client.get("/api/referrals/outgoing", headers=_auth(self.from_email)).json()
         a_req = after["requests"][0]
         # Accepted requests must still expose the opaque referrer key so the
         # frontend can correlate cards and stop offering "Ask for Referral".
@@ -536,14 +562,14 @@ class TestIntegrationReferralFlow(unittest.TestCase):
 
     def test_07_complete_referral(self):
         self._create_referral()
-        outgoing = self.client.get(f"/api/referrals/outgoing?email={self.from_email}").json()
+        outgoing = self.client.get("/api/referrals/outgoing", headers=_auth(self.from_email)).json()
         rid = outgoing["requests"][0]["id"]
-        self.client.put(f"/api/referrals/{rid}/accept", json={"email": self.to_email})
+        self.client.put(f"/api/referrals/{rid}/accept", headers=_auth(self.to_email))
         conn, cur = _fresh_conn()
         cur.execute("UPDATE referral_requests SET accepted_at = datetime('now', '-1 hour') WHERE id = ?", (rid,))
         conn.commit()
         conn.close()
-        r = self.client.put(f"/api/referrals/{rid}/complete", json={"email": self.to_email})
+        r = self.client.put(f"/api/referrals/{rid}/complete", headers=_auth(self.to_email))
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertTrue(data["ok"])
@@ -551,31 +577,31 @@ class TestIntegrationReferralFlow(unittest.TestCase):
 
     def test_08_withdraw_referral(self):
         self._create_referral()
-        outgoing = self.client.get(f"/api/referrals/outgoing?email={self.from_email}").json()
+        outgoing = self.client.get("/api/referrals/outgoing", headers=_auth(self.from_email)).json()
         rid = outgoing["requests"][0]["id"]
-        r = self.client.put(f"/api/referrals/{rid}/withdraw", json={"email": self.from_email})
+        r = self.client.put(f"/api/referrals/{rid}/withdraw", headers=_auth(self.from_email))
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertTrue(data["ok"])
 
     def test_09_withdraw_only_by_sender(self):
         self._create_referral()
-        outgoing = self.client.get(f"/api/referrals/outgoing?email={self.from_email}").json()
+        outgoing = self.client.get("/api/referrals/outgoing", headers=_auth(self.from_email)).json()
         rid = outgoing["requests"][0]["id"]
-        r = self.client.put(f"/api/referrals/{rid}/withdraw", json={"email": self.to_email})
+        r = self.client.put(f"/api/referrals/{rid}/withdraw", headers=_auth(self.to_email))
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertFalse(data["ok"])
 
     def test_10_remaining_count(self):
-        r = self.client.get(f"/api/referrals/remaining?email={self.from_email}")
+        r = self.client.get("/api/referrals/remaining", headers=_auth(self.from_email))
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertEqual(data["remaining"], 5)
         self.assertEqual(data["limit"], 5)
 
         self._create_referral()
-        r = self.client.get(f"/api/referrals/remaining?email={self.from_email}")
+        r = self.client.get("/api/referrals/remaining", headers=_auth(self.from_email))
         data = r.json()
         self.assertEqual(data["remaining"], 4)
 
@@ -583,12 +609,12 @@ class TestIntegrationReferralFlow(unittest.TestCase):
         for i in range(5):
             ref_email = f"ref{i}@example.com"
             self.client.post("/api/auth/verify-code", json={"email": ref_email, "code": "123456"})
-            self.client.post("/api/auth/register", json={"email": ref_email, "name": f"Ref{i}"})
+            self.client.post("/api/auth/register", headers=_auth(ref_email), json={"email": ref_email, "name": f"Ref{i}"})
             r = self._create_referral(to_email=ref_email, job_url=f"https://example.com/job/{i}")
             self.assertTrue(r.json()["ok"])
 
         self.client.post("/api/auth/verify-code", json={"email": "overflow@example.com", "code": "123456"})
-        self.client.post("/api/auth/register", json={"email": "overflow@example.com", "name": "Overflow"})
+        self.client.post("/api/auth/register", headers=_auth("overflow@example.com"), json={"email": "overflow@example.com", "name": "Overflow"})
         r = self._create_referral(to_email="overflow@example.com", job_url="https://example.com/job/overflow")
         self.assertEqual(r.status_code, 200)
         data = r.json()
@@ -598,9 +624,9 @@ class TestIntegrationReferralFlow(unittest.TestCase):
 
     def test_12_decline_referral(self):
         self._create_referral()
-        outgoing = self.client.get(f"/api/referrals/outgoing?email={self.from_email}").json()
+        outgoing = self.client.get("/api/referrals/outgoing", headers=_auth(self.from_email)).json()
         rid = outgoing["requests"][0]["id"]
-        r = self.client.put(f"/api/referrals/{rid}/decline", json={"email": self.to_email})
+        r = self.client.put(f"/api/referrals/{rid}/decline", headers=_auth(self.to_email))
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertTrue(data["ok"])
@@ -638,7 +664,7 @@ class TestIntegrationReferralNetworkFlow(unittest.TestCase):
     def _register(self, email, name, company="", refer_opt_in=0, invited_by=""):
         r = self.client.post("/api/auth/verify-code", json={"email": email, "code": "123456"})
         self.assertEqual(r.status_code, 200)
-        return self.client.post("/api/auth/register", json={
+        return self.client.post("/api/auth/register", headers=_auth(email), json={
             "email": email, "name": name, "company": company,
             "refer_opt_in": refer_opt_in, "invited_by": invited_by,
         })
@@ -665,17 +691,17 @@ class TestIntegrationReferralNetworkFlow(unittest.TestCase):
 
     def test_03_refer_opt_in_toggle(self):
         self._register("toggle@example.com", "Toggler", "Amazon")
-        r = self.client.put("/api/profile/refer-opt-in", json={"email": "toggle@example.com", "refer_opt_in": 1})
+        r = self.client.put("/api/profile/refer-opt-in", headers=_auth("toggle@example.com"), json={"refer_opt_in": 1})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["ok"], True)
-        r2 = self.client.get("/api/profile?email=toggle@example.com")
+        r2 = self.client.get("/api/profile", headers=_auth("toggle@example.com"))
         self.assertEqual(r2.json()["refer_opt_in"], 1)
 
-        r3 = self.client.put("/api/profile", json={
-            "email": "toggle@example.com", "name": "Toggler", "refer_opt_in": 0,
+        r3 = self.client.put("/api/profile", headers=_auth("toggle@example.com"), json={
+            "name": "Toggler", "refer_opt_in": 0,
         })
         self.assertTrue(r3.json()["ok"])
-        r4 = self.client.get("/api/profile?email=toggle@example.com")
+        r4 = self.client.get("/api/profile", headers=_auth("toggle@example.com"))
         self.assertEqual(r4.json()["refer_opt_in"], 0)
 
     def test_04_referrer_directory(self):
@@ -694,8 +720,8 @@ class TestIntegrationReferralNetworkFlow(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["user"]["refer_opt_in"], 1)
 
-        inviter = self.client.get("/api/profile?email=inviter@example.com").json()
-        invitee = self.client.get("/api/profile?email=invitee@example.com").json()
+        inviter = self.client.get("/api/profile", headers=_auth("inviter@example.com")).json()
+        invitee = self.client.get("/api/profile", headers=_auth("invitee@example.com")).json()
         self.assertEqual(inviter["referral_credits"], 5)
         self.assertEqual(invitee["referral_credits"], 5)
 
@@ -717,10 +743,10 @@ class TestIntegrationReferralNetworkFlow(unittest.TestCase):
 
     def test_07_notify_stores_intent(self):
         self._register("notifier@example.com", "Notifier", "Stripe")
-        r = self.client.post("/api/referrals/notify", json={"email": "notifier@example.com", "company": "Stripe"})
+        r = self.client.post("/api/referrals/notify", headers=_auth("notifier@example.com"), json={"company": "Stripe"})
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()["ok"])
-        r2 = self.client.post("/api/referrals/notify", json={"email": "notifier@example.com", "company": "Stripe"})
+        r2 = self.client.post("/api/referrals/notify", headers=_auth("notifier@example.com"), json={"company": "Stripe"})
         self.assertTrue(r2.json()["ok"])
 
         conn, cur = _fresh_conn()
@@ -730,8 +756,8 @@ class TestIntegrationReferralNetworkFlow(unittest.TestCase):
 
     def test_08_notifies_getter(self):
         self._register("notifyb@example.com", "Notify B", "Square")
-        self.client.post("/api/referrals/notify", json={"email": "notifyb@example.com", "company": "Square"})
-        r = self.client.get("/api/referrals/notifies?company=Square")
+        self.client.post("/api/referrals/notify", headers=_auth("notifyb@example.com"), json={"company": "Square"})
+        r = self.client.get("/api/referrals/notifies?company=Square", headers=_auth("ammarfitwalla@gmail.com"))
         emails = [n["email"] for n in r.json().get("notifies", [])]
         self.assertIn("notifyb@example.com", emails)
 
@@ -809,6 +835,8 @@ class TestIntegrationCompanyHarvest(unittest.TestCase):
 
 
 class TestAdminUserCRU(unittest.TestCase):
+    _ADMIN = "ammarfitwalla@gmail.com"
+
     def setUp(self):
         _init_test_db()
         self._conn_patcher = patch("db._get_conn", _make_conn_patch())
@@ -823,25 +851,25 @@ class TestAdminUserCRU(unittest.TestCase):
 
     def test_create_read_update_user(self):
         email = "admincru@example.com"
-        r = self.client.post("/api/admin/users?email=ammarfitwalla@gmail.com", json={
+        r = self.client.post("/api/admin/users", headers=_auth(self._ADMIN), json={
             "email": email, "name": "Admin CRU", "company": "TCS", "position": "Dev",
         })
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()["ok"])
 
-        r = self.client.get("/api/admin/registrations")
+        r = self.client.get("/api/admin/registrations", headers=_auth(self._ADMIN))
         data = r.json()
         emails = [u["email"] for u in data["registrations"]]
         self.assertIn(email, emails)
 
-        r = self.client.patch(f"/api/admin/users/{email}?email=ammarfitwalla@gmail.com", json={
+        r = self.client.patch(f"/api/admin/users/{email}", headers=_auth(self._ADMIN), json={
             "name": "Updated Name", "company": "Wipro", "position": "Senior Dev",
             "referral_credits": 12, "refer_opt_in": 1,
         })
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()["ok"])
 
-        r = self.client.get("/api/admin/registrations")
+        r = self.client.get("/api/admin/registrations", headers=_auth(self._ADMIN))
         user = [u for u in r.json()["registrations"] if u["email"] == email][0]
         self.assertEqual(user["name"], "Updated Name")
         self.assertEqual(user["company"], "Wipro")
@@ -850,24 +878,80 @@ class TestAdminUserCRU(unittest.TestCase):
 
     def test_partial_update_keeps_other_fields(self):
         email = "partial@example.com"
-        self.client.post("/api/admin/users?email=ammarfitwalla@gmail.com", json={
+        self.client.post("/api/admin/users", headers=_auth(self._ADMIN), json={
             "email": email, "name": "Partial", "company": "Accenture", "position": "Analyst",
         })
-        r = self.client.patch(f"/api/admin/users/{email}?email=ammarfitwalla@gmail.com", json={"position": "Consultant"})
+        r = self.client.patch(f"/api/admin/users/{email}", headers=_auth(self._ADMIN), json={"position": "Consultant"})
         self.assertEqual(r.status_code, 200)
-        user = [u for u in self.client.get("/api/admin/registrations").json()["registrations"] if u["email"] == email][0]
+        user = [u for u in self.client.get("/api/admin/registrations", headers=_auth(self._ADMIN)).json()["registrations"] if u["email"] == email][0]
         self.assertEqual(user["position"], "Consultant")
         self.assertEqual(user["company"], "Accenture")
 
     def test_update_missing_user_404(self):
-        r = self.client.patch("/api/admin/users/nope@example.com?email=ammarfitwalla@gmail.com", json={"name": "X"})
+        r = self.client.patch("/api/admin/users/nope@example.com", headers=_auth(self._ADMIN), json={"name": "X"})
         self.assertEqual(r.status_code, 404)
 
     def test_create_requires_valid_admin(self):
-        r = self.client.post("/api/admin/users?email=hacker@evil.com", json={
+        r = self.client.post("/api/admin/users", headers=_auth("hacker@evil.com"), json={
             "email": "h@evil.com", "name": "Hacker",
         })
         self.assertEqual(r.status_code, 403)
+
+    def test_admin_requires_token(self):
+        r = self.client.post("/api/admin/users", json={
+            "email": "x@example.com", "name": "X",
+        })
+        self.assertEqual(r.status_code, 401)
+
+
+class TestJWTGuard(unittest.TestCase):
+    def setUp(self):
+        _init_test_db()
+        self._conn_patcher = patch("db._get_conn", _make_conn_patch())
+        self._conn_patcher.start()
+
+        from fastapi.testclient import TestClient
+        from api.main import app
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        self._conn_patcher.stop()
+
+    def test_public_endpoint_open(self):
+        r = self.client.get("/api/auth/companies")
+        self.assertEqual(r.status_code, 200)
+
+    def test_protected_endpoint_requires_token(self):
+        r = self.client.get("/api/profile")
+        self.assertEqual(r.status_code, 401)
+
+    def test_protected_endpoint_with_token(self):
+        r = self.client.get("/api/profile", headers=_auth("guard@example.com"))
+        self.assertEqual(r.status_code, 200)
+
+    def test_malformed_token_rejected(self):
+        r = self.client.get("/api/profile", headers={"Authorization": "Bearer not-a-jwt"})
+        self.assertEqual(r.status_code, 401)
+
+    def test_admin_path_non_admin_forbidden(self):
+        r = self.client.get("/api/admin/registrations", headers=_auth("user@example.com"))
+        self.assertEqual(r.status_code, 403)
+
+    def test_admin_path_requires_token(self):
+        r = self.client.get("/api/admin/registrations")
+        self.assertEqual(r.status_code, 401)
+
+    def test_cross_user_saved_jobs_isolation(self):
+        from db import add_saved_job
+        add_saved_job("owner@example.com", {"title": "SWE", "company": "Apple", "url": "https://example.com/job/a", "total_score": 90})
+        r = self.client.get("/api/saved-jobs?email=owner@example.com", headers=_auth("other@example.com"))
+        self.assertEqual(r.status_code, 403)
+
+    def test_expired_token_rejected(self):
+        from utils.jwt import create_token
+        token = create_token("expired@example.com", expires_minutes=-1)
+        r = self.client.get("/api/profile", headers={"Authorization": "Bearer " + token})
+        self.assertEqual(r.status_code, 401)
 
 
 if __name__ == "__main__":

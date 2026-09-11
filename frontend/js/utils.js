@@ -35,8 +35,9 @@ function clearProfile() {
 async function fetchProfile() {
   const email = localStorage.getItem("jobagent_profile_email");
   if (!email) return;
+  if (!window.getAuthToken || !window.getAuthToken()) return;
   try {
-    const r = await fetch(`/api/profile?email=${encodeURIComponent(email)}`);
+    const r = await window.api("/api/profile");
     const d = await r.json();
     if (d.email) setProfile(d);
   } catch {}

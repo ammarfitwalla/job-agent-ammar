@@ -630,6 +630,26 @@ tr.clickable:hover td { background: #f8fafc; }
 
 <div class="footer">JobAwn Admin &middot; <a href="#" onclick="window.openTerms('terms'); return false;">Terms</a> &middot; <a href="#" onclick="window.openTerms('privacy'); return false;">Privacy</a> &middot; <a href="/app" target="_blank">Main App <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg></a></div>
 
+<!-- Admin login gate -->
+<div id="adminAuthGate" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(15,23,42,0.6);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:16px;padding:28px;width:400px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);text-align:center">
+    <div style="font-size:22px;font-weight:800;letter-spacing:-0.02em;color:#0f172a;display:flex;align-items:center;justify-content:center;gap:10px">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;background:#eef2ff;color:#4f46e5;border-radius:9px;font-size:13px;border:1px solid #e0e7ff">JA</span>
+      Admin Sign&nbsp;In
+    </div>
+    <p style="font-size:13px;color:#64748b;margin:10px 0 20px">Verify your email to unlock the admin dashboard.</p>
+    <input id="adminGateEmail" type="email" placeholder="Admin email" autocomplete="email"
+      style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:10px;box-sizing:border-box">
+    <button class="btn btn-primary" id="adminGateSendBtn" style="width:100%" onclick="sendAdminCode()">Send Code</button>
+    <div id="adminGateOtpWrap" style="display:none;margin-top:12px">
+      <input id="adminGateOtp" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code"
+        style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;box-sizing:border-box;text-align:center;letter-spacing:6px">
+      <button class="btn btn-primary" id="adminGateVerifyBtn" style="width:100%;margin-top:10px" onclick="verifyAdminCode()">Verify &amp; Enter</button>
+    </div>
+    <div id="adminGateError" style="display:none;color:#dc2626;font-size:13px;font-weight:600;padding:8px 12px;background:#fef2f2;border-radius:8px;margin-top:12px;text-align:left"></div>
+  </div>
+</div>
+
 <!-- User Create/Edit Modal -->
 <div id="userModal" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px" onclick="if (event.target === this) closeUserModal()">
   <div style="background:#fff;border-radius:16px;padding:24px;width:460px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.25)">
@@ -665,6 +685,7 @@ tr.clickable:hover td { background: #f8fafc; }
   </div>
 </div>
 
+  <script src="js/api.js"></script>
   <script type="module" src="js/admin.js"></script>
   <script src="js/terms.js"></script>
 </body>

@@ -11,6 +11,8 @@ from copy import deepcopy
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
+os.environ["JWT_ALLOW_DEV_SECRET"] = "1"
+
 
 # ── 1. Rate Limiter ──
 

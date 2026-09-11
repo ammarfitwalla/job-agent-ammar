@@ -1,12 +1,14 @@
 import hashlib
 import os
 
-from fastapi import APIRouter, Query, HTTPException, Request
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 
 from fastapi.responses import JSONResponse, FileResponse
 
+from api.deps import get_current_user
+from config import ADMIN_EMAIL
 from db import (
     create_referral_request, get_incoming_referrals, get_outgoing_referrals,
     update_referral_status, get_referral_request, get_user, confirm_referral,
@@ -20,7 +22,7 @@ from utils.rate_limiter import check_rate_limit
 
 _MONTHLY_LIMIT = 5
 
-# LLM job scoring per request — cap per IP since from_email is user-supplied.
+# LLM job scoring per request — cap per IP.
 _SCORE_RATE = 15
 _SCORE_WINDOW = 60
 
@@ -90,7 +92,6 @@ def _get_or_score_referral_job(from_email: str, job_url: str, job_title: str, co
 
 
 class ReferralRequest(BaseModel):
-    from_email: str
     to_email: str = ""
     referrer_id: str = ""
     job_url: str = ""
@@ -104,7 +105,6 @@ class ReferralRequest(BaseModel):
 
 
 class ReferralScoreRequest(BaseModel):
-    from_email: str
     job_url: str = ""
     job_title: str = ""
     company: str = ""
@@ -113,19 +113,19 @@ class ReferralScoreRequest(BaseModel):
 
 
 @router.post("/score")
-async def referral_score(req: ReferralScoreRequest, request: Request = None):
+async def referral_score(req: ReferralScoreRequest, request: Request = None,
+                         user: dict = Depends(get_current_user)):
     client_ip = get_client_ip(request)
     if client_ip and not check_rate_limit(f"referral_score:{client_ip}", _SCORE_RATE, _SCORE_WINDOW):
         return JSONResponse(status_code=429, content={"ok": False, "error": "Too many requests. Try again later."})
-    score = _get_or_score_referral_job(req.from_email, req.job_url, req.job_title, req.company,
+    score = _get_or_score_referral_job(user["email"], req.job_url, req.job_title, req.company,
                                        req.job_description, req.resume_text)
     return {"ok": True, "score": score}
 
 
 @router.post("/request")
-async def referral_create(req: ReferralRequest):
-    if not req.from_email:
-        return {"ok": False, "error": "from_email is required"}
+async def referral_create(req: ReferralRequest, user: dict = Depends(get_current_user)):
+    from_email = user["email"]
     # Resolve the target referrer by opaque key (privacy) or direct email (legacy).
     if req.referrer_id:
         referrer = get_user_by_referrer_key(req.referrer_id)
@@ -136,35 +136,34 @@ async def referral_create(req: ReferralRequest):
         to_email = req.to_email or ""
     if not to_email:
         return {"ok": False, "error": "to_email is required"}
-    if not check_rate_limit(f"referral:{req.from_email}", 10, 60):
+    if not check_rate_limit(f"referral:{from_email}", 10, 60):
         return JSONResponse(status_code=429, content={"ok": False, "error": "Too many requests. Try again later."})
-    if req.from_email == to_email:
+    if from_email == to_email:
         return {"ok": False, "error": "You can't refer yourself"}
     to_user = get_user(to_email)
     if not to_user:
         return {"ok": False, "error": "User not found"}
-    existing = get_pending_referral(req.from_email, to_email, req.job_url, req.company)
+    existing = get_pending_referral(from_email, to_email, req.job_url, req.company)
     if existing:
         return {"ok": False, "error": "You already have a pending request to this person for this job"}
-    sent_count = get_monthly_sent_count(req.from_email)
+    sent_count = get_monthly_sent_count(from_email)
     remaining = max(0, _MONTHLY_LIMIT - sent_count)
     if sent_count >= _MONTHLY_LIMIT:
         return {"ok": False, "error": f"Monthly limit reached ({_MONTHLY_LIMIT}/month). You have 0 remaining requests.", "remaining": 0}
     match_score = req.match_score
     if match_score <= 0:
-        match_score = _get_or_score_referral_job(req.from_email, req.job_url, req.job_title, req.company,
+        match_score = _get_or_score_referral_job(from_email, req.job_url, req.job_title, req.company,
                                                  req.job_description, req.resume_text)
     rid = create_referral_request(
-        req.from_email, to_email, req.job_url, req.job_title,
+        from_email, to_email, req.job_url, req.job_title,
         req.company, match_score, req.message, req.resume_filename,
     )
     return {"ok": True, "id": rid, "remaining": remaining - 1, "match_score": match_score}
 
 
 @router.get("/incoming")
-async def referral_incoming(email: str = ""):
-    if not email:
-        return {"requests": []}
+async def referral_incoming(user: dict = Depends(get_current_user)):
+    email = user["email"]
     reqs = get_incoming_referrals(email)
     for r in reqs:
         from_user = get_user(r["from_email"])
@@ -177,9 +176,8 @@ async def referral_incoming(email: str = ""):
 
 
 @router.get("/outgoing")
-async def referral_outgoing(email: str = ""):
-    if not email:
-        return {"requests": []}
+async def referral_outgoing(user: dict = Depends(get_current_user)):
+    email = user["email"]
     reqs = get_outgoing_referrals(email)
     for r in reqs:
         to_user = get_user(r["to_email"])
@@ -197,16 +195,12 @@ async def referral_outgoing(email: str = ""):
     return {"requests": reqs}
 
 
-class UpdateStatusRequest(BaseModel):
-    email: str
-
-
 @router.put("/{req_id}/accept")
-async def referral_accept(req_id: int, body: UpdateStatusRequest):
+async def referral_accept(req_id: int, user: dict = Depends(get_current_user)):
     req = get_referral_request(req_id)
     if not req:
         return {"ok": False, "error": "Request not found"}
-    if req["to_email"] != body.email:
+    if req["to_email"].lower() != user["email"].lower():
         return {"ok": False, "error": "Not authorized"}
     ok = update_referral_status(req_id, "accepted")
     if ok:
@@ -224,19 +218,19 @@ async def referral_accept(req_id: int, body: UpdateStatusRequest):
 
 
 @router.put("/{req_id}/decline")
-async def referral_decline(req_id: int, body: UpdateStatusRequest):
+async def referral_decline(req_id: int, user: dict = Depends(get_current_user)):
     req = get_referral_request(req_id)
     if not req:
         return {"ok": False, "error": "Request not found"}
-    if req["to_email"] != body.email:
+    if req["to_email"].lower() != user["email"].lower():
         return {"ok": False, "error": "Not authorized"}
     ok = update_referral_status(req_id, "declined")
     return {"ok": ok}
 
 
 @router.put("/{req_id}/complete")
-async def referral_complete(req_id: int, body: UpdateStatusRequest):
-    result = confirm_referral(req_id, body.email, "receiver")
+async def referral_complete(req_id: int, user: dict = Depends(get_current_user)):
+    result = confirm_referral(req_id, user["email"], "receiver")
     if result["ok"]:
         return {
             "ok": True,
@@ -248,8 +242,8 @@ async def referral_complete(req_id: int, body: UpdateStatusRequest):
 
 
 @router.put("/{req_id}/confirm")
-async def referral_confirm(req_id: int, body: UpdateStatusRequest):
-    result = confirm_referral(req_id, body.email, "sender")
+async def referral_confirm(req_id: int, user: dict = Depends(get_current_user)):
+    result = confirm_referral(req_id, user["email"], "sender")
     if result["ok"]:
         return {
             "ok": True,
@@ -261,11 +255,11 @@ async def referral_confirm(req_id: int, body: UpdateStatusRequest):
 
 
 @router.put("/{req_id}/withdraw")
-async def referral_withdraw(req_id: int, body: UpdateStatusRequest):
+async def referral_withdraw(req_id: int, user: dict = Depends(get_current_user)):
     req = get_referral_request(req_id)
     if not req:
         return {"ok": False, "error": "Request not found"}
-    if req["from_email"] != body.email:
+    if req["from_email"].lower() != user["email"].lower():
         return {"ok": False, "error": "Not authorized"}
     if req["status"] != "pending":
         return {"ok": False, "error": "Can only withdraw pending requests"}
@@ -274,47 +268,44 @@ async def referral_withdraw(req_id: int, body: UpdateStatusRequest):
 
 
 @router.get("/remaining")
-async def referral_remaining(email: str = ""):
-    if not email:
-        return {"remaining": 0, "limit": _MONTHLY_LIMIT}
+async def referral_remaining(user: dict = Depends(get_current_user)):
+    email = user["email"]
     sent_count = get_monthly_sent_count(email)
     remaining = max(0, _MONTHLY_LIMIT - sent_count)
     return {"remaining": remaining, "limit": _MONTHLY_LIMIT}
 
 
 class NotifyRequest(BaseModel):
-    email: str
     company: str = ""
 
 
 @router.post("/notify")
-async def referral_notify(req: NotifyRequest):
-    if not req.email or not req.company:
+async def referral_notify(req: NotifyRequest, user: dict = Depends(get_current_user)):
+    email = user["email"]
+    if not email or not req.company:
         return {"ok": False, "error": "email and company are required"}
-    if not check_rate_limit(f"referral_notify:{req.email}", 5, 60):
+    if not check_rate_limit(f"referral_notify:{email}", 5, 60):
         return JSONResponse(status_code=429, content={"ok": False, "error": "Too many requests. Try again later."})
-    added = add_referral_notify(req.email.strip(), req.company.strip())
+    added = add_referral_notify(email.strip(), req.company.strip())
     return {"ok": True, "new": added}
 
 
 class InviteRequest(BaseModel):
-    email: str
     company: str = ""
 
 
 @router.post("/invite")
-async def referral_invite(req: InviteRequest):
+async def referral_invite(req: InviteRequest, user: dict = Depends(get_current_user)):
     """Generate a shareable invite link that auto-opts the invitee in as a referrer."""
-    if not req.email:
-        return {"ok": False, "error": "email is required"}
-    user = get_user(req.email)
-    if not user:
+    email = user["email"]
+    user_row = get_user(email)
+    if not user_row:
         return {"ok": False, "error": "User not found"}
     base = "/app?ref="
-    link = f"{base}{req.email}"
+    link = f"{base}{email}"
     if req.company:
         link += f"&company={req.company}"
-    return {"ok": True, "link": link, "from_email": req.email}
+    return {"ok": True, "link": link, "from_email": email}
 
 
 @router.get("/notifies")
@@ -323,12 +314,15 @@ async def referral_notifies_list(company: str = ""):
 
 
 @router.get("/resume")
-async def referral_resume(request_id: int = Query(...)):
+async def referral_resume(request_id: int = Query(...), user: dict = Depends(get_current_user)):
     req = get_referral_request(request_id)
     if not req:
         raise HTTPException(404, "Request not found")
     if req.get("status") != "accepted":
         raise HTTPException(403, "Resume is only available after the request is accepted")
+    allowed = {req.get("from_email", "").lower(), req.get("to_email", "").lower()}
+    if user["email"].lower() not in allowed and user["email"].lower() != ADMIN_EMAIL.lower():
+        raise HTTPException(403, "Not authorized")
     fname = req.get("resume_filename") or ""
     if not fname:
         raise HTTPException(404, "No resume on this request")

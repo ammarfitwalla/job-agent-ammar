@@ -49,7 +49,7 @@ async function loadSavedJobs() {
   const profile = getProfile();
   if (!profile) return;
   try {
-    const r = await fetch(`/api/saved-jobs?email=${encodeURIComponent(profile.email)}`);
+    const r = await window.api("/api/saved-jobs");
     const d = await r.json();
     allSavedJobs = d.jobs || [];
     filterJobs(_filterStatus);
@@ -143,7 +143,7 @@ function renderJobList() {
 
 async function updateStatus(jobId, status) {
   try {
-    const r = await fetch(`/api/saved-jobs/${jobId}/status`, {
+    const r = await window.api(`/api/saved-jobs/${jobId}/status`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
@@ -164,7 +164,7 @@ async function updateStatus(jobId, status) {
 
 async function removeJob(jobId) {
   try {
-    const r = await fetch(`/api/saved-jobs/${jobId}`, { method: "DELETE" });
+    const r = await window.api(`/api/saved-jobs/${jobId}`, { method: "DELETE" });
     const d = await r.json();
     if (d.deleted) {
       allSavedJobs = allSavedJobs.filter(j => j.id !== jobId);

@@ -6,13 +6,15 @@ from contextlib import asynccontextmanager
 # Ensure project root is on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse, FileResponse
+from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from api.routes import jobs, scrape, resume, roles, states, events, leads, admin, auth, profile, saved_jobs, visits, users, referrals, stats, joblink
 import json
 from db import init_db
+from config import ADMIN_EMAIL, JWT_ALLOW_DEV_SECRET
+from utils.jwt import JwtError, decode_token, ensure_secret
 
 VOTE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "votes.json")
 VOTE_THRESHOLD = 100
@@ -20,6 +22,12 @@ VOTE_THRESHOLD = 100
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    try:
+        ensure_secret()
+    except JwtError as e:
+        raise RuntimeError(
+            f"JWT misconfiguration at startup: {e}. Set JWT_SECRET (no random in-process fallback)."
+        ) from e
     init_db()
     try:
         from scheduler import start_scheduler
@@ -77,6 +85,118 @@ async def no_cache_frontend(request, call_next):
     ):
         response.headers["Cache-Control"] = "no-cache"
     return response
+
+
+# ==============
+# AUTH GUARD
+# Default-deny for /api/* (except the public whitelist), admin-class paths
+# require a token whose email equals the admin email (case-insensitive),
+# and legacy admin surfaces (/db, /logs, /docs, /redoc, /openapi.json,
+# /resume/download, /resume/storage) require the same. OPTIONS preflights pass.
+# ==============
+_STATIC_EXT = (".html", ".css", ".js", ".png", ".svg", ".ico", ".webp", ".jpg",
+               ".jpeg", ".gif", ".woff", ".woff2", ".txt", ".map")
+_PUBLIC_PATHS = {"/", "/app", "/profile", "/admin", "/health"}
+_PUBLIC_PREFIXES = ("/js/", "/css/", "/images/", "/fonts/")
+_PUBLIC_EXACT_API = {
+    "/api/stats/public",
+    "/api/auth/send-code",
+    "/api/auth/verify-code",
+    "/api/lead",
+    "/api/events",
+    "/api/referrals/resolve-url",
+    "/api/users/at-company",
+    "/api/users/company-counts",
+    "/api/users/referrer-directory",
+}
+_PUBLIC_GET_ONLY = {"/api/auth/companies"}
+_PUBLIC_NON_API = {"/scrape", "/scrape/stop", "/scrape/status", "/states", "/roles", "/jobs"}
+_PUBLIC_PREFIX_API = ("/api/visit/",)
+
+_ADMIN_PATHS = {
+    "/db", "/logs", "/docs", "/redoc", "/openapi.json",
+    "/resume/download", "/resume/storage",
+    "/api/leads",
+    "/api/referrals/notifies",
+}
+_ADMIN_METHOD_PATHS = {("DELETE", "/votes")}
+_ADMIN_PREFIXES = ("/api/admin/",)
+
+_PROTECTED_NON_API = {"/roles/custom"}
+
+# Interaction with the live API docs requires an admin token everywhere except local dev,
+# where JWT_ALLOW_DEV_SECRET=1 also flips the docs open (FastAPI /docs, /redoc, /openapi.json).
+_DEV_DOC_PUBLIC = JWT_ALLOW_DEV_SECRET
+_DEV_DOC_PATHS = ("/docs", "/redoc", "/openapi.json")
+
+
+def _is_admin_class(method: str, path: str) -> bool:
+    if _DEV_DOC_PUBLIC and path in _DEV_DOC_PATHS:
+        return False
+    if path.startswith(_ADMIN_PREFIXES):
+        return True
+    if path in _ADMIN_PATHS:
+        return True
+    if (method, path) in _ADMIN_METHOD_PATHS:
+        return True
+    return False
+
+
+def _is_public(method: str, path: str) -> bool:
+    if _DEV_DOC_PUBLIC and path in _DEV_DOC_PATHS:
+        return True
+    if path in _PUBLIC_PATHS:
+        return True
+    if path.startswith(_PUBLIC_PREFIXES):
+        return True
+    if path.endswith(_STATIC_EXT) and not path.endswith(".json"):
+        return True
+    if path in _PUBLIC_EXACT_API:
+        return True
+    if path in _PUBLIC_GET_ONLY and method == "GET":
+        return True
+    if path.startswith(_PUBLIC_PREFIX_API):
+        return True
+    if path in _PUBLIC_NON_API and not (path == "/votes" and method == "DELETE"):
+        return True
+    return False
+
+
+@app.middleware("http")
+async def auth_guard(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    path = request.url.path
+    user = None
+    auth_header = request.headers.get("authorization", "")
+    if auth_header:
+        scheme, _, token = auth_header.partition(" ")
+        if scheme.lower() == "bearer" and token.strip():
+            try:
+                payload = decode_token(token.strip())
+                sub = (payload.get("sub") or "").strip()
+                if sub:
+                    user = {"email": sub}
+            except JwtError:
+                user = None
+    request.state.user = user
+
+    if _is_admin_class(request.method, path):
+        if not user:
+            return JSONResponse(status_code=401, content={"detail": "Invalid or missing credentials"})
+        if user["email"].lower() != ADMIN_EMAIL.lower():
+            return JSONResponse(status_code=403, content={"detail": "Not authorized"})
+        return await call_next(request)
+
+    if _is_public(request.method, path):
+        return await call_next(request)
+
+    if path.startswith("/api/") or path in _PROTECTED_NON_API:
+        if not user:
+            return JSONResponse(status_code=401, content={"detail": "Invalid or missing credentials"})
+
+    return await call_next(request)
 
 
 # Visit logging is handled client-side via the frontend beacon (/api/visit/start, /api/visit/end)

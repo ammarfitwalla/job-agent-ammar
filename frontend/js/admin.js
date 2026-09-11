@@ -1,7 +1,103 @@
 // ── Auth Guard ──
 const _adminEmail = "ammarfitwalla@gmail.com";
-const _email = localStorage.getItem("jobagent_profile_email");
-if (!_email || _email.toLowerCase() !== _adminEmail.toLowerCase()) { window.location.href = "/app"; }
+let _lastGatePromptAt = 0;
+const _GATE_PROMPT_DEBOUNCE_MS = 60000;
+
+function showAdminLoginGate(message) {
+  const gate = document.getElementById("adminAuthGate");
+  if (!gate) return;
+  const now = Date.now();
+  if (now - _lastGatePromptAt < _GATE_PROMPT_DEBOUNCE_MS) return;
+  _lastGatePromptAt = now;
+  stopRefresh();
+  const emailInput = document.getElementById("adminGateEmail");
+  if (emailInput && !emailInput.value) emailInput.value = window.getAuthEmail() || _adminEmail;
+  const err = document.getElementById("adminGateError");
+  if (err) { err.textContent = message || ""; err.style.display = message ? "block" : "none"; }
+  gate.style.display = "flex";
+}
+
+function hideAdminLoginGate() {
+  const gate = document.getElementById("adminAuthGate");
+  if (!gate) return;
+  gate.style.display = "none";
+}
+
+function _gateIfNeeded(r) {
+  if (r && (r.status === 401 || r.status === 403)) {
+    showAdminLoginGate(r.status === 403 ? "Not authorized for admin access." : "Please sign in to continue.");
+    return true;
+  }
+  return false;
+}
+
+async function adminApi(path, opts) {
+  const r = await window.api(path, opts);
+  if (_gateIfNeeded(r)) return null;
+  return r;
+}
+
+function _gateError(msg) {
+  const err = document.getElementById("adminGateError");
+  if (err) { err.textContent = msg || ""; err.style.display = msg ? "block" : "none"; }
+}
+
+// ── OTP Login Gate ──
+async function sendAdminCode() {
+  const email = document.getElementById("adminGateEmail").value.trim();
+  _gateError("");
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { _gateError("Enter a valid email."); return; }
+  const btn = document.getElementById("adminGateSendBtn");
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Sending...";
+  try {
+    const r = await fetch("/api/auth/send-code", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const d = await r.json();
+    if (!d.ok) { _gateError(d.error || "Could not send code."); return; }
+    const wrap = document.getElementById("adminGateOtpWrap");
+    if (wrap) { wrap.style.display = "block"; }
+    if (d.code) { document.getElementById("adminGateOtp").value = d.code; }
+    const otp = document.getElementById("adminGateOtp");
+    if (otp) otp.focus();
+  } catch {
+    _gateError("Network error.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
+async function verifyAdminCode() {
+  const email = document.getElementById("adminGateEmail").value.trim();
+  const code = document.getElementById("adminGateOtp").value.trim();
+  if (!code) { _gateError("Enter the code you received."); return; }
+  const btn = document.getElementById("adminGateVerifyBtn");
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Verifying...";
+  try {
+    const r = await fetch("/api/auth/verify-code", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, code }),
+    });
+    const d = await r.json();
+    if (!d.ok || !d.token) { _gateError(d.error || "Invalid code."); return; }
+    window.setAuthSession(d.token, (d.user && d.user.email) || email);
+    hideAdminLoginGate();
+    location.reload();
+  } catch {
+    _gateError("Network error.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
+window.addEventListener("ja:auth-required", () => showAdminLoginGate());
 
 function _esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
@@ -82,7 +178,8 @@ function stopRefresh() {
 // ── Stats ──
 async function loadStats() {
   try {
-    const r = await fetch("/api/admin/stats", { cache: "no-cache" });
+    const r = await adminApi("/api/admin/stats", { cache: "no-cache" });
+    if (!r) return;
     const d = await r.json();
     const total = d.total_sessions || 1;
     document.getElementById("cards").innerHTML = [
@@ -149,7 +246,8 @@ async function loadStats() {
 // ── Combo Usage ──
 async function loadComboUsage() {
   try {
-    const r = await fetch("/api/admin/prewarm/usage?limit=20", { cache: "no-cache" });
+    const r = await adminApi("/api/admin/prewarm/usage?limit=20", { cache: "no-cache" });
+    if (!r) return;
     const d = await r.json();
     const combos = (d.combos || []).filter(c => c.usage_count > 0);
     if (!combos.length) {
@@ -190,7 +288,8 @@ async function loadComboUsage() {
 // ── Server Stats ──
 async function loadServerStats() {
   try {
-    const r = await fetch("/api/admin/server", { cache: "no-cache" });
+    const r = await adminApi("/api/admin/server", { cache: "no-cache" });
+    if (!r) return;
     const d = await r.json();
     const mem = d.memory || {};
     const cpu = d.cpu || {};
@@ -247,7 +346,8 @@ let _cacheUsedOnly = true;
 
 async function loadCacheStats() {
   try {
-    const r = await fetch(`/api/admin/cache-stats?used=${_cacheUsedOnly ? 1 : 0}`, { cache: "no-cache" });
+    const r = await adminApi(`/api/admin/cache-stats?used=${_cacheUsedOnly ? 1 : 0}`, { cache: "no-cache" });
+    if (!r) return;
     const d = await r.json();
     const sites = d.sites || [];
     const toggleBtn = document.getElementById("cacheUsedToggle");
@@ -306,7 +406,8 @@ function toggleCacheUsed() {
 // ── Sessions ──
 async function loadSessions() {
   try {
-    const r = await fetch("/api/admin/sessions", { cache: "no-cache" });
+    const r = await adminApi("/api/admin/sessions", { cache: "no-cache" });
+    if (!r) return;
     const d = await r.json();
     allSessions = d.sessions || [];
     renderSessions(allSessions);
@@ -338,7 +439,7 @@ function renderSessions(sessions) {
       <td title="${_esc(s.location || "")}">${_esc(s.location) || "\u2014"}</td>
       <td class="sites-cell" title="${_esc((s.sites || []).join(", "))}">${_esc((s.sites || []).join(", "))}</td>
       <td>${s.relevant_jobs || 0}</td>
-      <td>${s.resume_available ? `<a class="job-link" href="/api/admin/sessions/${encodeURIComponent(s.id)}/resume" target="_blank">View &#8599;</a>` : "\u2014"}</td>
+      <td>${s.resume_available ? `<a class="job-link" href="/api/admin/sessions/${encodeURIComponent(s.id)}/resume" data-download="1">View &#8599;</a>` : "\u2014"}</td>
       <td>${formatDuration(s.elapsed_seconds)}</td>
     </tr><tr class="detail-row" id="detail-${s.id}" data-session='${sj}'><td colspan="10"><div class="detail-panel" id="panel-${s.id}"><div class="empty">Loading session details...</div></div></td></tr>`;
   }).join("") || `<tr><td colspan="10"><div class="empty">No sessions found</div></td></tr>`;
@@ -380,7 +481,8 @@ async function toggleDetail(sid) {
   panel.innerHTML = renderBasicDetail(sid, sd);
 
   try {
-    const r = await fetch(`/api/admin/sessions/${sid}`);
+    const r = await adminApi(`/api/admin/sessions/${sid}`);
+    if (!r) return;
     const d = await r.json();
     if (d.error) { panel.innerHTML += `<div class="empty">${_esc(d.error)}</div>`; return; }
 
@@ -430,7 +532,8 @@ function renderBasicDetail(sid, s) {
 // ── Visits ──
 async function loadVisits() {
   try {
-    const r = await fetch("/api/admin/visits", { cache: "no-cache" });
+    const r = await adminApi("/api/admin/visits", { cache: "no-cache" });
+    if (!r) return;
     const d = await r.json();
     const visits = d.visits || [];
     const stats = d.stats || {};
@@ -484,13 +587,15 @@ function _statusFromCompany(company) {
 
 async function loadRegistrations() {
   try {
-    const r = await fetch("/api/admin/registrations", { cache: "no-cache" });
+    const r = await adminApi("/api/admin/registrations", { cache: "no-cache" });
+    if (!r) return;
     const d = await r.json();
     const regs = d.registrations || [];
 
     async function fetchSavedJobs(email) {
       try {
-        const r = await fetch(`/api/saved-jobs?email=${encodeURIComponent(email)}`);
+        const r = await adminApi(`/api/saved-jobs?email=${encodeURIComponent(email)}`);
+        if (!r) return [];
         const d = await r.json();
         return d.jobs || [];
       } catch { return []; }
@@ -672,15 +777,17 @@ async function saveUser() {
         btn.innerHTML = orig;
         return;
       }
-      r = await fetch(`/api/admin/users/${encodeURIComponent(_editingUserEmail)}?email=${encodeURIComponent(_adminEmail)}`, {
+      r = await adminApi(`/api/admin/users/${encodeURIComponent(_editingUserEmail)}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
+      if (!r) return;
       d = await r.json();
     } else {
       const payload = Object.assign({ email }, base);
-      r = await fetch(`/api/admin/users?email=${encodeURIComponent(_adminEmail)}`, {
+      r = await adminApi("/api/admin/users", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
+      if (!r) return;
       d = await r.json();
     }
     if (!r.ok || !d.ok) {
@@ -709,7 +816,8 @@ function switchTab(name, group = "main") {
 // ── Database ──
 async function loadDbInfo() {
   try {
-    const r = await fetch(`/api/admin/db/info?email=${encodeURIComponent(_adminEmail)}`);
+    const r = await adminApi("/api/admin/db/info");
+    if (!r) return;
     const d = await r.json();
     if (d.error) { document.getElementById("dbInfo").textContent = "Failed to load"; return; }
     document.getElementById("dbInfo").innerHTML = `Size: <strong>${d.size_mb} MB</strong> \u00b7 Sessions: <strong>${d.sessions}</strong> \u00b7 Users: <strong>${d.users}</strong>`;
@@ -733,9 +841,9 @@ async function restoreDB() {
   result.className = "db-result";
   const fd = new FormData();
   fd.append("file", file);
-  fd.append("email", _adminEmail);
   try {
-    const r = await fetch("/api/admin/db/restore", { method: "POST", body: fd });
+    const r = await adminApi("/api/admin/db/restore", { method: "POST", body: fd });
+    if (!r) return;
     const d = await r.json();
     if (d.ok) {
       result.className = "db-result success";
@@ -766,9 +874,10 @@ async function mergeDB() {
   const result = document.getElementById("dbMergeResult");
   result.textContent = ""; result.className = "db-result";
   const fd = new FormData();
-  fd.append("file", file); fd.append("email", _adminEmail);
+  fd.append("file", file);
   try {
-    const r = await fetch("/api/admin/db/merge", { method: "POST", body: fd });
+    const r = await adminApi("/api/admin/db/merge", { method: "POST", body: fd });
+    if (!r) return;
     const d = await r.json();
     if (d.ok) {
       const entries = Object.entries(d.inserted || {});
@@ -814,9 +923,9 @@ window.uploadResumes = async function uploadResumes() {
   result.textContent = ""; result.className = "db-result";
   const fd = new FormData();
   for (const f of files) fd.append("files", f);
-  fd.append("email", _adminEmail);
   try {
-    const r = await fetch("/api/admin/resume/upload", { method: "POST", body: fd });
+    const r = await adminApi("/api/admin/resume/upload", { method: "POST", body: fd });
+    if (!r) return;
     const d = await r.json();
     if (d.ok) {
       const ok = d.files.filter(f => f.ok).length;
@@ -864,7 +973,13 @@ window.switchTab = switchTab;
 window.loadDbInfo = loadDbInfo;
 window.restoreDB = restoreDB;
 window.mergeDB = mergeDB;
+window.sendAdminCode = sendAdminCode;
+window.verifyAdminCode = verifyAdminCode;
 
 // ── Init ──
-loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage(); loadDbInfo(); loadCacheStats(); loadServerStats();
-startRefresh();
+if (!window.getAuthToken()) {
+  showAdminLoginGate();
+} else {
+  loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage(); loadDbInfo(); loadCacheStats(); loadServerStats();
+  startRefresh();
+}

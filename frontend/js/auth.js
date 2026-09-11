@@ -4,6 +4,8 @@ import { setProfile, showToast } from "./utils.js";
 let emailjsInitialized = false;
 let _authEmail = "";
 let _authCompanyList = [];
+let _lastAuthPromptAt = 0;
+const _AUTH_PROMPT_DEBOUNCE_MS = 60000;
 const SEARCH_CACHE_KEY = "jobagent_last_search";
 const _invitedBy = (new URLSearchParams(window.location.search)).get("ref") || "";
 const _inviteCompany = (new URLSearchParams(window.location.search)).get("company") || "";
@@ -235,6 +237,7 @@ async function authVerifyCode() {
       if (errEl) { errEl.textContent = d.error || "Invalid code. Try again."; errEl.classList.remove("hidden"); }
       return;
     }
+    if (d.token) window.setAuthSession(d.token, d.user && d.user.email);
     try { sessionStorage.removeItem("ja_pending_email"); } catch (e) {}
     const codeStep = _el("authStepCode");
     if (codeStep) codeStep.classList.add("hidden");
@@ -349,7 +352,7 @@ function addCustomCompany(name, event) {
   if (_lastCustomCompany !== name) {
     _lastCustomCompany = name;
     if (typeof showToast === "function") showToast(`Company set to ${name}`);
-    fetch("/api/auth/companies", {
+    window.api("/api/auth/companies", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     }).catch(() => {});
@@ -436,7 +439,7 @@ async function authRegister() {
         searchId = String(ids[0] || (s && s.searchId) || "");
       }
     } catch (e) {}
-    const r = await fetch("/api/auth/register", {
+    const r = await window.api("/api/auth/register", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email, name, company, position,
@@ -458,7 +461,7 @@ async function authRegister() {
       try {
         const fd = new FormData();
         fd.append("file", resumeFile);
-        await fetch(`/api/profile/resume?email=${encodeURIComponent(email)}`, { method: "POST", body: fd });
+        await window.api("/api/profile/resume", { method: "POST", body: fd });
       } catch (e) {}
     }
     const s4 = _el("authStep4");
@@ -534,6 +537,23 @@ function authGoBack() {
 document.addEventListener("DOMContentLoaded", () => {
   setupCodeInputs();
   loadAuthCompanyList();
+});
+
+// Expired/missing-session: any protected call that comes back 401 opens the login modal.
+// Debounced so background pollers (e.g. the 30s referral-notification check) can't re-open a
+// modal the user just dismissed — one since a real session change. A fresh token silences it.
+document.addEventListener("ja:auth-required", () => {
+  if (document.readyState !== "complete") return;
+  const now = Date.now();
+  if (now - _lastAuthPromptAt < _AUTH_PROMPT_DEBOUNCE_MS) return;
+  _lastAuthPromptAt = now;
+  const m = _el("authModal");
+  if (m) {
+    if (m.style.display !== "flex") showAuthModal();
+  } else {
+    const card = _el("authPrompt");
+    if (card && card.classList.contains("hidden")) card.classList.remove("hidden");
+  }
 });
 
 // Attach to window for onclick handlers (single canonical auth flow)
