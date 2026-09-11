@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Callable
 
 from groq import Groq, RateLimitError
+from openai import OpenAI
 import requests
 
 from utils.logger import log
@@ -61,6 +62,7 @@ class GroqProvider(BaseProvider):
         self._api_key = api_key
         self._model = model
         self._bucket = TokenBucket(capacity=28, refill_rate=28 / 60)
+        self._last_usage = None
 
     def chat(self, prompt: str, max_tokens: int = 600, cancel_check: Optional[Callable[[], bool]] = None) -> str:
         print(f"[GROQ DBG] key='{self._api_key[:12]}...' model='{self._model}' prompt_len={len(prompt)}")
@@ -81,6 +83,7 @@ class GroqProvider(BaseProvider):
                     timeout=30,
                 )
                 content = completion.choices[0].message.content
+                self._last_usage = completion.usage
                 print(f"[GROQ DBG] attempt={attempt+1} finish={completion.choices[0].finish_reason} content_len={len(content) if content else 0} content_none={content is None}")
                 return content or ""
             except RateLimitError as e:
@@ -96,6 +99,60 @@ class GroqProvider(BaseProvider):
                 log(f"[GROQ ERROR] {e}")
                 return ""
         log("[GROQ] All retries exhausted")
+        return ""
+
+
+# ── NVIDIA NIM (primary) ───────────────────────────────────────────────────
+
+class NvidiaProvider(BaseProvider):
+    """NVIDIA NIM via the OpenAI-compatible endpoint (integrate.api.nvidia.com)."""
+
+    name = "nvidia"
+
+    def __init__(self, api_key, model):
+        self._api_key = api_key or ""
+        self._model = model
+        self._bucket = TokenBucket(capacity=28, refill_rate=28 / 60)
+        self._last_usage = None
+
+    def chat(self, prompt: str, max_tokens: int = 600, cancel_check: Optional[Callable[[], bool]] = None) -> str:
+        # Fail fast when unconfigured so callers fall back to Groq immediately.
+        if not self._api_key:
+            log("[NVIDIA] No NVIDIA_API_KEY configured — falling through to fallback")
+            return ""
+        for attempt in range(3):
+            if cancel_check and cancel_check():
+                log(f"[NVIDIA] Cancelled during retry — aborting")
+                return ""
+            self._bucket.acquire()
+            try:
+                client = OpenAI(
+                    base_url="https://integrate.api.nvidia.com/v1",
+                    api_key=self._api_key,
+                    timeout=60,
+                )
+                completion = client.chat.completions.create(
+                    model=self._model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.1,
+                    max_tokens=max_tokens,
+                    top_p=0.95,
+                    stream=False,
+                    timeout=60,
+                )
+                if not completion.choices:
+                    raise RuntimeError("empty choices")
+                self._last_usage = completion.usage
+                return completion.choices[0].message.content or ""
+            except Exception as e:
+                wait = self._backoff(attempt)
+                log(f"[NVIDIA ERROR] attempt {attempt+1}/3, waiting {wait:.1f}s — {e}")
+                for _ in range(int(wait / 0.5)):
+                    if cancel_check and cancel_check():
+                        log(f"[NVIDIA] Cancelled during backoff — aborting")
+                        return ""
+                    time.sleep(0.5)
+        log("[NVIDIA] All retries exhausted")
         return ""
 
 

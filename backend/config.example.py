@@ -4,7 +4,11 @@ import os
 # ==============
 # LLM SETTINGS
 # ==============
-LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq")  # "groq" or "ollama"
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "nvidia")  # "nvidia" or "groq" or "ollama"
+
+# NVIDIA NIM (primary)
+NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
+NVIDIA_MODEL = os.environ.get("NVIDIA_MODEL", "nvidia/nemotron-3-super-120b-a12b")
 
 # Groq (fallback)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
