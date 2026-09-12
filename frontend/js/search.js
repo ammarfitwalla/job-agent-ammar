@@ -2249,7 +2249,7 @@ document.addEventListener('click', (e) => {
           hideTabBar();
           renderAllJobs(allJobs);
         }
-        setStatus(`Restored ${allJobs.length} jobs from last session`, "green");
+        if (allJobs.length > 0) setStatus(`Restored ${allJobs.length} jobs from last session`, "green");
       } else {
         showElement("results");
         pollAllScrapes();

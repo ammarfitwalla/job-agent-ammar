@@ -370,7 +370,7 @@ tailwind.config = {
 </div>
 
 <!-- Auth Modal -->
-<div id="authModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 transition-opacity" onclick="if (event.target===this) closeAuthModal()">
+<div id="authModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 transition-opacity">
   <div id="authCard" class="bg-white rounded-2xl p-8 shadow-2xl w-full max-w-sm mx-auto transform transition-all fade-in" onclick="event.stopPropagation()">
     <div id="authStepCode">
       <div class="flex items-start justify-between mb-4">
@@ -384,13 +384,18 @@ tailwind.config = {
       </div>
 
       <div class="flex gap-2 justify-between mt-6 mb-2" id="codeInputs">
-        <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="0" autofocus>
-        <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="1">
-        <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="2">
-        <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="3">
-        <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="4">
-        <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="5">
+        <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="0" autofocus inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
+        <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="1" inputmode="numeric" pattern="[0-9]*">
+        <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="2" inputmode="numeric" pattern="[0-9]*">
+        <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="3" inputmode="numeric" pattern="[0-9]*">
+        <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="4" inputmode="numeric" pattern="[0-9]*">
+        <input class="code-digit w-12 h-14 text-center text-xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all bg-slate-50 focus:bg-white" maxlength="1" data-idx="5" inputmode="numeric" pattern="[0-9]*">
       </div>
+
+      <button type="button" onclick="pasteOtpCode()" class="w-full text-sm text-indigo-600 hover:text-indigo-700 font-semibold py-2 transition-colors flex items-center justify-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M8 5a2 2 0 002 2h4a2 2 0 002-2M8 5a2 2 0 012-2h4a2 2 0 012 2"/></svg>
+        Paste code
+      </button>
 
       <p id="authCodeError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center font-medium my-4 border border-red-100"></p>
       <p id="authFallbackCode" class="hidden text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 text-center font-medium my-4 border border-amber-100"></p>

@@ -1,18 +1,50 @@
 /* api.js — thin authenticated-fetch wrapper for JobAwn.
    Loaded as a CLASSIC script (no module) so it is available to all pages and module scripts.
    Publishes window.getAuthToken / setAuthToken / setAuthSession / api / downloadAuthed.
-   Token is kept in sessionStorage (anti-history, refreshed each session). */
+   Token is kept in localStorage so the session survives tab close, browser restart,
+   and mobile tab-discard; a single spurious 401 is retried once before clearing. */
 (function () {
   var TOKEN_KEY = "ja_token";
   var TOKEN_EMAIL_KEY = "ja_token_email";
 
   function getToken() {
-    try { return sessionStorage.getItem(TOKEN_KEY); } catch (e) { return null; }
+    try {
+      var t = localStorage.getItem(TOKEN_KEY);
+      if (t) return t;
+      // One-time migration: promote a sessionStorage token from before this change.
+      var old = sessionStorage.getItem(TOKEN_KEY);
+      if (old) {
+        localStorage.setItem(TOKEN_KEY, old);
+        sessionStorage.removeItem(TOKEN_KEY);
+        return old;
+      }
+    } catch (e) {}
+    return null;
   }
   function setToken(tok) {
     try {
-      if (tok) sessionStorage.setItem(TOKEN_KEY, tok);
-      else sessionStorage.removeItem(TOKEN_KEY);
+      if (tok) localStorage.setItem(TOKEN_KEY, tok);
+      else localStorage.removeItem(TOKEN_KEY);
+    } catch (e) {}
+  }
+  function getEmail() {
+    try {
+      var e = localStorage.getItem(TOKEN_EMAIL_KEY);
+      if (e) return e;
+      // One-time migration for pre-change sessionStorage sessions.
+      var old = sessionStorage.getItem(TOKEN_EMAIL_KEY);
+      if (old) {
+        localStorage.setItem(TOKEN_EMAIL_KEY, old);
+        sessionStorage.removeItem(TOKEN_EMAIL_KEY);
+        return old;
+      }
+    } catch (err) { return ""; }
+    return "";
+  }
+  function setEmail(email) {
+    try {
+      if (email) localStorage.setItem(TOKEN_EMAIL_KEY, email);
+      else localStorage.removeItem(TOKEN_EMAIL_KEY);
     } catch (e) {}
   }
 
@@ -21,27 +53,31 @@
   window.clearAuthToken = function () { setToken(null); };
   window.setAuthSession = function (tok, email) {
     setToken(tok);
-    try {
-      if (email) sessionStorage.setItem(TOKEN_EMAIL_KEY, email);
-      else sessionStorage.removeItem(TOKEN_EMAIL_KEY);
-    } catch (e) {}
+    setEmail(email || "");
   };
-  window.getAuthEmail = function () {
-    try { return sessionStorage.getItem(TOKEN_EMAIL_KEY) || ""; } catch (e) { return ""; }
-  };
+  window.getAuthEmail = getEmail;
+
+  async function apiOnce(path, opts) {
+    var tok = getToken();
+    if (tok) opts.headers["Authorization"] = "Bearer " + tok;
+    return fetch(path, opts);
+  }
 
   window.api = async function (path, opts) {
     opts = opts || {};
     opts.headers = Object.assign({}, opts.headers || {});
     var tok = getToken();
-    if (tok) opts.headers["Authorization"] = "Bearer " + tok;
-    var resp = await fetch(path, opts);
-    if (resp.status === 401) {
-      // A 401 while we're holding a token means that token is dead (expired or
-      // signed under a changed secret) — drop it so background pollers stop
-      // failing forever and stale sessions don't masquerade as logged in.
-      if (tok) window.clearAuthToken();
-      window.dispatchEvent(new CustomEvent("ja:auth-required", { detail: { status: resp.status, path: path } }));
+    var resp = await apiOnce(path, opts);
+    if (resp.status === 401 && tok) {
+      // A 401 while holding a token usually means it's dead (expired or signed
+      // under a changed secret) — but retry once first to rule out a transient
+      // blip. Only drop the session if the retry also 401s, so stale sessions
+      // stop failing forever and don't masquerade as logged in.
+      resp = await apiOnce(path, opts);
+      if (resp.status === 401) {
+        window.clearAuthToken();
+        window.dispatchEvent(new CustomEvent("ja:auth-required", { detail: { status: 401, path: path } }));
+      }
     }
     return resp;
   };

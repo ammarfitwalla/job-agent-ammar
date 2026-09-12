@@ -488,13 +488,44 @@ async function authRegister() {
   if (btn) { btn.disabled = false; btn.textContent = "Complete Profile"; }
 }
 
+function _fillOtpFrom(startIdx, raw) {
+  const inputs = document.querySelectorAll("#authModal .code-digit");
+  if (!inputs.length) return;
+  const digits = (raw || "").replace(/\D/g, "").slice(0, 6);
+  for (let i = 0; i < digits.length && startIdx + i < inputs.length; i++) {
+    inputs[startIdx + i].value = digits.charAt(i);
+  }
+  const nextIdx = Math.min(startIdx + digits.length, inputs.length - 1);
+  const next = inputs[nextIdx];
+  if (next) next.focus();
+}
+
+async function pasteOtpCode() {
+  const errEl = _el("authCodeError");
+  if (errEl) errEl.classList.add("hidden");
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.readText) throw new Error("unsupported");
+    const text = await navigator.clipboard.readText();
+    const digits = (text || "").replace(/\D/g, "");
+    if (digits.length !== 6) {
+      if (errEl) { errEl.textContent = "Clipboard doesn't contain a 6-digit code."; errEl.classList.remove("hidden"); }
+      return;
+    }
+    _fillOtpFrom(0, digits);
+  } catch (e) {
+    if (errEl) {
+      errEl.textContent = navigator.clipboard && navigator.clipboard.readText
+        ? "Couldn't access clipboard. Long-press the first box and tap Paste."
+        : "Paste isn't supported on this browser — enter the code manually.";
+      errEl.classList.remove("hidden");
+    }
+  }
+}
+
 function setupCodeInputs() {
   document.querySelectorAll("#authModal .code-digit").forEach(inp => {
     inp.addEventListener("input", function () {
-      if (this.value && this.dataset.idx < "5") {
-        const next = document.querySelector(`#authModal .code-digit[data-idx="${parseInt(this.dataset.idx) + 1}"]`);
-        if (next) next.focus();
-      }
+      _fillOtpFrom(parseInt(this.dataset.idx) || 0, this.value);
     });
     inp.addEventListener("keydown", function (e) {
       if ((e.key === "Backspace" || e.key === "Backward") && !this.value && this.dataset.idx > "0") {
@@ -506,11 +537,8 @@ function setupCodeInputs() {
     inp.addEventListener("paste", function (e) {
       e.preventDefault();
       const text = (e.clipboardData || window.clipboardData).getData("text").replace(/\D/g, "");
-      if (text.length !== 6) return;
-      const inputs = document.querySelectorAll("#authModal .code-digit");
-      inputs.forEach((input, i) => { input.value = text[i] || ""; });
-      const last = inputs[inputs.length - 1];
-      if (last) last.focus();
+      if (text.length < 6) return;
+      _fillOtpFrom(0, text);
     });
   });
 }
@@ -573,5 +601,6 @@ window.filterCompanyDropdown = filterCompanyDropdown;
 window.addCustomCompany = addCustomCompany;
 window.selectCompany = selectCompany;
 window.setupCodeInputs = setupCodeInputs;
+window.pasteOtpCode = pasteOtpCode;
 
 export { initEmailJS, sendEmailJS, loadAuthCompanyList };

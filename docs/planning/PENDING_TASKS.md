@@ -1,6 +1,6 @@
 # Pending Tasks
 
-Task numbering follows the discussion on 2026-09-07. Items 3–6 pending per explicit request; carry-over items at the end.
+Task numbering follows the discussion on 2026-09-07. Items 3 and 6 pending; carry-over items at the end. Done and removed: #4 JWT auth, #5 API auth, #7 NVIDIA provider (all deployed 2026-09-11).
 
 ## 3. Add city to location search (currently state + country only)
 
@@ -21,37 +21,6 @@ Task numbering follows the discussion on 2026-09-07. Items 3–6 pending per exp
 
 **Acceptance:** typing a city returns it; selecting it runs the search with `city` populated in the request; results still load when the city has no cache entry.
 
-## 4. Add JWT auth
-
-**What/why:** No token-based identity exists today. Auth is OTP+email only; after verification the client is "whoever claims an email".
-
-**Current state:** `backend/api/routes/auth.py` OTP flow (verification_codes table; SMTP/EmailJS send). Search identity is a separate `sessions` table. Profile/resume/admin endpoints trust a client-supplied `email` string (see task 5).
-
-**Scope:**
-1. Add `JWT_SECRET` (or derive from existing secret in `backend/config.py` — server copy only, never commit) + expiry config.
-2. New `backend/utils/jwt.py`: `create_token(email, role)`, `decode_token`, FastAPI `Depends(get_current_user)` dependency (409-401 on bad/expired).
-3. Issue on successful OTP verify in `auth.py`; expose via `Authorization: Bearer`.
-4. Decide token storage on the client (see task 6 for the same storage question; key-materials vs token in localStorage/sessionStorage).
-
-**Acceptance:** verify-by-email returns a signed token; `/api/auth/me` style call returns the claimed email from the token, not from a request field.
-
-## 5. Auth for APIs (replace client-supplied identity)
-
-**What/why:** Multiple endpoints treat a caller-supplied `email` as proof of identity (IDOR / admin impersonation).
-
-**Affected, verified:** `backend/api/routes/admin.py` — no dependency guards; mutators check `email != ADMIN_EMAIL` against the **client-supplied** field (`admin.py:345, 399, 415, 444, 500`); read-only admin endpoints (`/api/admin/stats, /sessions, /scores, /db/info, /visits, /leads, /server, /cache-stats`) are fully public. `backend/api/routes/profile.py` — GET/PUT `/api/profile`, `/api/profile/resume*`, `/refer-opt-in` keyed by `email` query param (anyone can read/overwrite another user's profile or resume text).
-
-**Scope:**
-1. Apply `get_current_user` (task 4) to profile + resume + saved_jobs + referrals routes; replace `email` params with `Depends(get_current_user)`.
-2. Admin: mutating routes require a token whose decoded email == `ADMIN_EMAIL` (server-side check), not a request field; read-only admin routes behind an admin-auth (or at least the same JWT + ADMIN_EMAIL).
-3. Keep the frontend working: admin.js + profile/referrals/localStorage flows must send the bearer token (or add an admin OTP flow for the admin page).
-
-**Acceptance:** `/api/profile?email=<other>` and `/api/admin/*` return 401/403 without a valid token and 403 when the token's email isn't the target/admin. Confirmed smoke-test repro before change: `GET https://jobawn.com/api/admin/stats` → 200 unauthenticated.
-
-## 6. Resume text storage (localStorage → encrypted or session)
-
-**What/why:** Resume PII persists in plaintext in `localStorage["jobagent_resume_text"]` with no expiry.
-
 **Current state:** `frontend/js/search.js:34` `RESUME_CACHE_KEY = "jobagent_resume_text"`; read at `frontend/js/referrals.js:388` for pre-fill. Resume is also sent to the server over HTTPS for scoring/keywords — the concern here is the browser-resident plaintext copy.
 
 **Scope (ranked):**
@@ -70,27 +39,48 @@ Task numbering follows the discussion on 2026-09-07. Items 3–6 pending per exp
 
 ---
 
-## 7. NVIDIA provider (Groq → fallback)
+## 8. Dedicated public `/referrals` page
 
-**What/why:** Make NVIDIA NIM the primary LLM provider, with Groq catching failures. Spec supplied 2026-09-07; changes drafted then reverted to this file only.
+**What/why:** Visitors browse companies with enrolled (opt-in) referrers, select a company, paste a job link, and ask an insider for a referral.
 
-**Spec:**
-1. `backend/config.py` — add:
-   - `NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")`
-   - `NVIDIA_MODEL = os.environ.get("NVIDIA_MODEL", "nvidia/nemotron-3-super-120b-a12b")`
-   - `NVIDIA_KEYWORDS_MODEL` → same model constant (single model for both roles)
-2. `backend/llm/providers.py` — add `NvidiaProvider(BaseProvider)` using the already-installed openai SDK:
-   - `OpenAI(base_url="https://integrate.api.nvidia.com/v1", api_key=key)`
-   - `client.chat.completions.create(model=m, messages=[{"role":"user","content":prompt}], temperature=0.1, max_tokens=max_tokens, top_p=0.95, stream=False, timeout=30)`
-   - Same TokenBucket throttle + 3-attempt backoff loop as `GroqProvider`.
-3. `backend/llm/llm_client.py` — register `"nvidia"` (scoring) + `"nvidia_keywords"` providers; set `_FALLBACK_CHAIN = ["groq"]` so NVIDIA is primary and Groq catches failures. Callers (`chat`/`batch_chat`/`keyword_chat`) unchanged.
+**Decisions (2026-09-12):** positions/counts shown publicly (only "Ask" requires login); AI match scoring skipped (`skip_score` flag); resume required to ask; landing "Get Referred" CTA (`/app?refurl=1`) pointed at `/referrals`.
 
-**Implementation notes (checked 2026-09-07):**
-- `openai` SDK 2.44.0 and `groq` 1.5.0 both installed; already in `backend/requirements.txt:27-28`.
-- `_route()` picks primary via `_providers.get(LLM_PROVIDER)` and its fallback loop skips `name == LLM_PROVIDER` (`llm_client.py:52-60`) — so **`LLM_PROVIDER` default must flip to `"nvidia"`** (currently `"groq"`) for NVIDIA to actually be primary.
-- `keyword_chat()` currently hardcodes `_providers.get("groq_keywords")` with no fallback (`llm_client.py:33-36`) — needs a parallel `LLM_PROVIDER + "_keywords"` primary with `"groq_keywords"` fallback.
-- An empty-`NVIDIA_API_KEY` guard in `NvidiaProvider` makes unconfigured runs fall fast to Groq (otherwise each call would 401 after a network round-trip).
+**Plan:** `docs/planning/referral_page_plan.md` (frontend page + page JS, `/referrals` route + public path in `backend/api/main.py`, `skip_score` in `backend/api/routes/referrals.py`, landing CTA change, `TestReferralPage`) — full change list there.
 
-**Deployment notes:**
-- Do **not** deploy local `backend/config.py` (secrets). The container's own `/app/backend/config.py` must be updated (append the 3 NVIDIA constants) **before** shipping `llm_client.py`, or the app import-crashes.
-- NVIDIA_API_KEY for prod goes via container env (`docker run -e NVIDIA_API_KEY=...`) or the container's config — needs the key from the user; until then everything falls back to Groq (safe).
+**Not started.** Deploy only when the user explicitly asks.
+
+---
+
+## 10. Security hardening
+
+**What/why:** Cheap high-value hardening. Adopted subset from proposed list (2.1-2.4, 3.2, 3.3); **CSRF tokens skipped** (auth is Bearer JWT in localStorage, no cookies — no ambient-credential vector).
+
+**Plan:** `docs/planning/security_hardening_plan.md`. Items in order: tighten CORS (`main.py:65-71` `allow_origins=["*"]`), security headers middleware (2.2), pragmatic CSP meta on all pages (2.1), pin/SRI CDNs (2.3; Tailwind Play CDN has no SRI), server-side `max_length` on stored Pydantic fields (3.2).
+
+**Folded into existing tasks:** referral-value escaping (2.4) → #8 referral page; resume text storage (3.3) → #6.
+
+**Not started.** Deploy only when the user explicitly asks.
+
+---
+
+## 9. User location (state/country) + admin registrations columns
+
+**What/why:** Collect user location (state + country) on the profile edit page, and show Location + Resume link columns in the admin **sessions → registrations** tab.
+
+**Decisions (2026-09-12):** reuse the search-page location autocomplete text box on the profile page (no free-text inputs); state/country optional on save; only state/country stored (city ignored).
+
+**Plan:** `docs/planning/user_location_plan.md` (shared `location-picker.js` extracted from `search.js`, users table migration + `update_user_profile`, profile API pass-through, new `/api/admin/users/{email}/resume` endpoint, profile page edit/display, admin registrations columns, `TestUserLocation`).
+
+**Not started.** Deploy only when the user explicitly asks.
+
+---
+
+## 11. Careers tab — jobs from company career pages
+
+**What/why:** Pull open roles directly from company career pages (ATS APIs + sitemaps + JSON-LD, adopting [jobseek](https://github.com/colophon-group/jobseek) monitor patterns — MIT, no CC BY-NC data reuse) and surface them on a dedicated Careers page/tab.
+
+**Decisions (2026-09-12):** admin-managed company list with auto-detect; ATS APIs + sitemap + JSON-LD monitors; separate Careers page (not merged into board cache); daily scheduled pull + manual admin refresh.
+
+**Plan:** `docs/planning/careers_page_plan.md` (`career_sources`/`career_jobs` tables, `careers_scraper.py` monitor registry incl. Greenhouse/Lever/Ashby/SmartRecruiters/Workable, `careers.py` public+admin routes, `/careers` page + link, scheduler job, admin Careers tab, `TestCareers`).
+
+**Not started.** Deploy only when the user explicitly asks.
