@@ -38,7 +38,9 @@ async function fetchProfile() {
   if (!window.getAuthToken || !window.getAuthToken()) return;
   try {
     const r = await window.api("/api/profile");
+    if (r.status === 401) { clearProfile(); if (typeof window.showAuthModal === "function") window.showAuthModal(); return; }
     const d = await r.json();
+    if (d.error) { clearProfile(); if (typeof window.showAuthModal === "function") window.showAuthModal(); return; }
     if (d.email) setProfile(d);
   } catch {}
 }

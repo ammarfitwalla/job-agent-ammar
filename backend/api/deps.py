@@ -13,7 +13,7 @@ def _decode(authorization: str) -> dict:
         payload = decode_token(token.strip())
     except JwtError as e:
         raise HTTPException(status_code=401, detail="Invalid or missing credentials") from e
-    email = (payload.get("sub") or "").strip()
+    email = (payload.get("sub") or "").strip().lower()
     if not email:
         raise HTTPException(status_code=401, detail="Invalid or missing credentials")
     return {"email": email}

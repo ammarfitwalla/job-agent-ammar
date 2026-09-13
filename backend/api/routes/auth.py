@@ -64,6 +64,7 @@ class RegisterRequest(BaseModel):
     name: str
     company: str = ""
     position: str = ""
+    employment_status: str = ""
     linkedin_url: str = ""
     search_id: str = ""
     refer_opt_in: int = 0
@@ -76,6 +77,7 @@ class AddCompanyRequest(BaseModel):
 
 @router.post("/send-code")
 async def auth_send_code(req: SendCodeRequest):
+    req.email = req.email.strip().lower()
     if not check_rate_limit(f"send_code:{req.email}", 3, 60):
         return JSONResponse(status_code=429, content={"ok": False, "error": "Too many requests. Try again later."})
     if DEV_MODE:
@@ -92,6 +94,7 @@ async def auth_send_code(req: SendCodeRequest):
 
 @router.post("/verify-code")
 async def auth_verify_code(req: VerifyCodeRequest):
+    req.email = req.email.strip().lower()
     if not check_rate_limit(f"verify_code:{req.email}", 5, 300):
         return JSONResponse(status_code=429, content={"ok": False, "error": "Too many attempts. Try again later."})
     if DEV_MODE and req.code == "123456":
@@ -114,12 +117,14 @@ async def auth_register(req: RegisterRequest, user: dict = Depends(get_current_u
     if req.email.strip().lower() != user["email"].lower():
         raise HTTPException(status_code=403, detail="Email does not match the verified session")
     email = user["email"]
+    if req.invited_by:
+        req.invited_by = req.invited_by.strip().lower()
     user = get_user(email)
     if user:
         from db import update_user_profile
-        update_user_profile(email, name=req.name, company=req.company, position=req.position, linkedin_url=req.linkedin_url)
+        update_user_profile(email, name=req.name, company=req.company, position=req.position, employment_status=req.employment_status, linkedin_url=req.linkedin_url)
     else:
-        user = create_user(email, req.name, req.company, req.position, req.linkedin_url)
+        user = create_user(email, req.name, req.company, req.position, req.linkedin_url, req.employment_status)
 
     if req.refer_opt_in:
         update_user_refer_opt_in(email, 1)

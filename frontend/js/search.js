@@ -39,13 +39,8 @@ let selectedRoles = new Set();
 let customKeywords = [];
 let scrapeAttempts = 0;
 let shownSlowWarning = false;
-let countriesMap = {};
-let selectedLocation = null;
-let searchTimeout = null;
-let lastQuery = "";
+let _locUI = null;
 let lastRenderedCount = 0;
-let allStates = [];
-let allCities = [];
 let internshipMode = false;
 let activeFilters = { site: '', experience_level: '' };
 let currentSort = 'relevant';
@@ -644,13 +639,18 @@ loadRoles();
   } catch {}
 })();
 updateSearchBtn();
-setupLocationSearch();
+if (window.LocationPicker && window.LocationPicker.init) {
+  _locUI = window.LocationPicker.init({
+    inputId: "locationInput",
+    resultsId: "locationResults",
+    selectedId: "selectedLocation",
+    onSelect: updateNaukriEligibility,
+    onClear: updateNaukriEligibility,
+    onChange: updateNaukriEligibility,
+  });
+}
 updateNaukriEligibility();
-(async () => {
-  await fetchCountries();
-  await loadStates();
-  updateNaukriEligibility();
-})();
+if (_locUI) _locUI.whenReady(updateNaukriEligibility);
 const _hasCachedSearch = (() => {
   try {
     const raw = localStorage.getItem(SEARCH_CACHE_KEY);
@@ -1337,194 +1337,18 @@ function getSelectedSites() { return Array.from(document.querySelectorAll("#site
 function getSelectedKeywords() { return [...Array.from(document.querySelectorAll("#keywords input:checked")).map(e => e.value), ...customKeywords]; }
 
 // ===== LOCATION SEARCH =====
-async function fetchCountries() {
-  try {
-    const r = await fetch("https://api.countrystatecity.in/v1/countries", {
-      headers: { "X-CSCAPI-KEY": "99b742739363f29d601908be8af875f40eede6b161f6b455da3e85b8373ccc45" }
-    });
-    const data = await r.json();
-    data.forEach(c => { countriesMap[c.iso2.toLowerCase()] = c.name; });
-  } catch {}
-}
-
 let LOCATION_OVERRIDE = { us: "usa", gb: "uk", ae: "united arab emirates" };
 
-async function loadStates() {
-  try {
-    const r = await fetch("/states");
-    const d = await r.json();
-    allStates = d.states || [];
-  } catch {}
-}
-
-function setupLocationSearch() {
-  const input = document.getElementById("locationInput");
-  const results = document.getElementById("locationResults");
-  const selected = document.getElementById("selectedLocation");
-
-  input.addEventListener("input", () => {
-    const q = input.value.trim();
-    if (selectedLocation) { selectedLocation = null; selected.classList.add("hidden"); }
-    updateNaukriEligibility();
-    if (q.length < 2) { results.classList.add("hidden"); return; }
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => searchState(q), 200);
-  });
-
-  input.addEventListener("blur", () => setTimeout(() => results.classList.add("hidden"), 200));
-  input.addEventListener("focus", () => {
-    if (results.children.length) results.classList.remove("hidden");
-  });
-}
-
-async function fetchCitiesFor(cc, q0) {
-  try {
-    const url = cc
-      ? `/cities?country=${encodeURIComponent(cc)}&q=${encodeURIComponent(q0)}`
-      : `/cities?q=${encodeURIComponent(q0)}`;
-    const r = await fetch(url);
-    const d = await r.json();
-    allCities = d.cities || [];
-    return allCities.slice(0, 4).map(c => ({
-      city: c.city,
-      state: c.state,
-      country: c.country,
-      country_code: c.country_code,
-      label: [c.city, c.state, c.country].filter(Boolean).join(", ")
-    }));
-  } catch {
-    return [];
-  }
-}
-
-async function searchState(query) {
-  if (query === lastQuery) return;
-  lastQuery = query;
-  const results = document.getElementById("locationResults");
-  results.innerHTML = "";
-  const lower = query.toLowerCase();
-  const segs = lower.split(",").map(s => s.trim()).filter(Boolean);
-
-  const countryMatches = [];
-  let cc = null;
-  for (const [code, name] of Object.entries(countriesMap)) {
-    if (name.toLowerCase() === lower || code === lower) {
-      if (!cc) cc = code;
-      countryMatches.push({
-        state: null,
-        country: name,
-        country_code: code,
-        label: name
-      });
-    }
-  }
-  if (!cc) {
-    for (const [code, name] of Object.entries(countriesMap)) {
-      const n = name.toLowerCase();
-      if (segs.some(seg => seg === n || seg === code)) { cc = code; break; }
-    }
-  }
-
-  const topCountries = countryMatches.slice(0, 3);
-
-  let cityMatches = [];
-  const exactCountry = countryMatches.length > 0;
-  const exactState = allStates.some(s => s.state.toLowerCase() === lower);
-  const q0 = (segs[0] || lower).slice(0, 40);
-  if (cc) {
-    cityMatches = await fetchCitiesFor(cc, q0);
-  } else if (!exactCountry && !exactState) {
-    // No country/state hint in the text — search cities across all common
-    // countries so a bare city like "mumbai" still suggests results.
-    cityMatches = await fetchCitiesFor(null, q0);
-  }
-
-  const count = Math.max(0, 6 - topCountries.length - cityMatches.length);
-  let stateMatches = [];
-  if (allStates.length) {
-    stateMatches = allStates
-      .filter(s => {
-        const sl = s.state.toLowerCase();
-        return sl.includes(lower) || (segs.length > 1 && segs.some(seg => seg.length >= 3 && sl.includes(seg)));
-      })
-      .slice(0, count)
-      .map(item => ({
-        state: item.state,
-        country: item.country,
-        country_code: item.country_code,
-        label: [item.state, item.country].filter(Boolean).join(", ")
-      }));
-  }
-
-  const matches = [...topCountries, ...cityMatches, ...stateMatches];
-  if (!matches.length) {
-    results.innerHTML = '<div class="px-4 py-3 text-xs text-slate-400">No matching locations</div>';
-    results.classList.remove("hidden");
-    return;
-  }
-  matches.forEach(item => {
-    const div = document.createElement("div");
-    div.className = "px-4 py-2.5 text-xs cursor-pointer hover:bg-slate-50 text-slate-700 border-b border-slate-50 last:border-0 font-medium transition-colors";
-    div.textContent = item.label;
-    div.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      selectLocation({ city: item.city || "", state: item.state, country: item.country, country_code: item.country_code, label: item.label });
-    });
-    results.appendChild(div);
-  });
-  results.classList.remove("hidden");
-}
-
-function selectLocation(loc) {
-  selectedLocation = loc;
-  document.getElementById("locationInput").value = loc.label;
-  document.getElementById("locationResults").classList.add("hidden");
-  const el = document.getElementById("selectedLocation");
-  el.innerHTML = `
-    <svg class="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-    <span>${loc.label}</span>
-    <button class="ml-1 text-emerald-600/60 hover:text-emerald-800" id="clearLocation">
-      <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-    </button>`;
-  el.classList.remove("hidden");
-  document.getElementById("clearLocation").addEventListener("click", () => {
-    selectedLocation = null;
-    el.classList.add("hidden");
-    document.getElementById("locationInput").value = "";
-    updateNaukriEligibility();
-  });
-  updateNaukriEligibility();
-}
-
-function resolveLocation() {
-  const text = (document.getElementById("locationInput").value || "").trim();
-  if (!text) return null;
-  const lower = text.toLowerCase();
-  let best = null;
-  for (const s of allStates) {
-    const sl = s.state.toLowerCase();
-    if (sl === lower) return s;
-    if (!best && lower.includes(sl)) best = s;
-  }
-  if (best) return best;
-  for (const c of allCities) {
-    if (c.city.toLowerCase() === lower) {
-      return { city: c.city, state: c.state, country: c.country, country_code: c.country_code };
-    }
-  }
-  for (const [code, name] of Object.entries(countriesMap)) {
-    if (name.toLowerCase() === lower || code === lower) {
-      return { state: "", country: name, country_code: code };
-    }
-  }
-  return null;
+function _resolveLocation() {
+  if (!_locUI) return null;
+  return _locUI.resolve((document.getElementById("locationInput").value || "").trim());
 }
 
 function updateNaukriEligibility() {
   const input = document.querySelector('#sites input[value="naukri"]');
   if (!input) return;
   const label = input.closest('label');
-  const loc = selectedLocation || resolveLocation();
+  const loc = (_locUI && _locUI.getSelected()) || (_locUI ? _resolveLocation() : null);
   const eligible = !!(loc && loc.country_code === 'in');
   if (eligible) {
     input.disabled = false;
@@ -1539,13 +1363,14 @@ function updateNaukriEligibility() {
 }
 
 function getIndeedCountry(loc) {
-  const l = loc || selectedLocation;
+  const l = loc || (_locUI && _locUI.getSelected());
   if (!l) return "USA";
   const cc = l.country_code;
-  return LOCATION_OVERRIDE[cc] || countriesMap[cc] || "usa";
+  const data = _locUI ? _locUI.getData() : { countries: {} };
+  return LOCATION_OVERRIDE[cc] || data.countries[cc] || "usa";
 }
 function getLocation(loc) {
-  const l = loc || selectedLocation;
+  const l = loc || (_locUI && _locUI.getSelected());
   if (!l) return "";
   return [l.city, l.state, l.country].filter(Boolean).join(", ");
 }
@@ -1645,7 +1470,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
 
   try {
     searchIds = [_searchId];
-    const loc = selectedLocation || resolveLocation();
+    const loc = (_locUI && _locUI.getSelected()) || (_locUI ? _resolveLocation() : null);
     await fetch("/scrape", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2343,8 +2168,6 @@ window.updateKwCount = updateKwCount;
 window.getSelectedRoles = getSelectedRoles;
 window.getSelectedSites = getSelectedSites;
 window.getSelectedKeywords = getSelectedKeywords;
-window.searchState = searchState;
-window.selectLocation = selectLocation;
 window.addKeyword = addKeyword;
 window.clearSearchState = clearSearchState;
 window.renderSuggestedRoles = renderSuggestedRoles;

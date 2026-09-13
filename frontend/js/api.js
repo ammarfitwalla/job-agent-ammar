@@ -57,6 +57,36 @@
   };
   window.getAuthEmail = getEmail;
 
+  // Decode the JWT exp claim client-side. If the stored token is already
+  // expired, wipe the session at boot and raise the login modal instead of
+  // pretending the user is still signed in (the old code only found out via a
+  // later 401, and even then missed the DOMContentLoaded window).
+  function enforceSessionOnLoad() {
+    var t = getToken();
+    if (!t) return;
+    var exp = 0;
+    try {
+      var parts = t.split(".");
+      if (parts.length === 3) {
+        var b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        b64 += "=".repeat((4 - (b64.length % 4)) % 4);
+        var payload = JSON.parse(atob(b64));
+        if (payload && payload.exp) exp = payload.exp * 1000;
+      }
+    } catch (e) {}
+    if (exp > 0 && exp <= Date.now()) {
+      setToken(null);
+      setEmail("");
+      if (typeof window.clearProfile === "function") window.clearProfile();
+      document.dispatchEvent(new CustomEvent("ja:auth-required", { detail: { status: 401, path: "bootstrap" } }));
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", enforceSessionOnLoad);
+  } else {
+    enforceSessionOnLoad();
+  }
+
   async function apiOnce(path, opts) {
     var tok = getToken();
     if (tok) opts.headers["Authorization"] = "Bearer " + tok;
@@ -76,7 +106,7 @@
       resp = await apiOnce(path, opts);
       if (resp.status === 401) {
         window.clearAuthToken();
-        window.dispatchEvent(new CustomEvent("ja:auth-required", { detail: { status: 401, path: path } }));
+        document.dispatchEvent(new CustomEvent("ja:auth-required", { detail: { status: 401, path: path } }));
       }
     }
     return resp;

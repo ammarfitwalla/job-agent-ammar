@@ -20,8 +20,12 @@ class UpdateProfileRequest(BaseModel):
     name: str | None = None
     company: str | None = None
     position: str | None = None
+    employment_status: str | None = None
     linkedin_url: str | None = None
     refer_opt_in: int | None = None
+    city: str | None = None
+    state: str | None = None
+    country: str | None = None
 
 
 @router.get("")
@@ -36,6 +40,10 @@ async def profile_get(user: dict = Depends(get_current_user)):
         "name": user_row["name"],
         "company": user_row.get("company", ""),
         "position": user_row.get("position", ""),
+        "employment_status": user_row.get("employment_status", ""),
+        "city": user_row.get("city", ""),
+        "state": user_row.get("state", ""),
+        "country": user_row.get("country", ""),
         "linkedin_url": user_row.get("linkedin_url", ""),
         "resume_filename": user_row.get("resume_filename", ""),
         "referral_credits": user_row.get("referral_credits", 0),
@@ -65,7 +73,11 @@ async def profile_update(req: UpdateProfileRequest, user: dict = Depends(get_cur
         name=req.name,
         company=req.company,
         position=req.position,
+        employment_status=req.employment_status,
         linkedin_url=req.linkedin_url,
+        city=req.city,
+        state=req.state,
+        country=req.country,
     )
     if req.refer_opt_in is not None:
         update_user_refer_opt_in(email, bool(req.refer_opt_in))

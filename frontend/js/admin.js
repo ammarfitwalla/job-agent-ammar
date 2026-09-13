@@ -572,15 +572,21 @@ async function loadVisits() {
 }
 
 const _STATUS_LABELS = { Student: "student", Graduate: "graduate", "Laid Off": "laid_off", "Career Break": "career_break" };
-const _STATUS_TO_LABEL = { student: "Student", graduate: "Graduate", laid_off: "Laid Off", career_break: "Career Break" };
+const _STATUS_DISPLAY = { employed: "Employed", student: "Student", graduate: "Graduate", laid_off: "Laid Off", career_break: "Career Break", not_specified: "\u2014" };
 
-function deriveStatus(company) {
+function deriveStatus(company, employment_status) {
+  const st = (employment_status || "").trim();
+  if (st) return _STATUS_DISPLAY[st] || st.replace("_", " ");
   if (!company) return "\u2014";
   const s = _STATUS_LABELS[company];
   return s ? s.replace("_", " ") : "Employed";
 }
 
-function _statusFromCompany(company) {
+function _userStatus(user) {
+  if (!user) return "not_specified";
+  const st = (user.employment_status || "").trim();
+  if (st) return st;
+  const company = user.company || "";
   if (!company) return "not_specified";
   return _STATUS_LABELS[company] || "employed";
 }
@@ -602,14 +608,14 @@ async function loadRegistrations() {
     }
 
     if (!regs.length) {
-      document.getElementById("registrationBody").innerHTML = '<tr><td colspan="10"><div class="empty">No registrations yet</div></td></tr>';
+      document.getElementById("registrationBody").innerHTML = '<tr><td colspan="12"><div class="empty">No registrations yet</div></td></tr>';
       return;
     }
 
     const expanded = new Set();
 
     function renderRow(u, i) {
-      const status = deriveStatus(u.company);
+      const status = deriveStatus(u.company, u.employment_status);
       const jobsLabel = u.company ? "View" : "\u2014";
       const esc = _esc;
       return `
@@ -624,12 +630,14 @@ async function loadRegistrations() {
           <td>${status}</td>
           <td>${esc(u.company) || "\u2014"}</td>
           <td>${esc(u.position) || "\u2014"}</td>
+          <td title="${esc([u.city, u.state, u.country].filter(Boolean).join(", "))}">${[u.city, u.state, u.country].filter(Boolean).join(", ") || "\u2014"}</td>
+          <td style="text-align:center;white-space:nowrap">${u.resume_filename ? `<a class="job-link" href="/api/admin/users/${encodeURIComponent(u.email)}/resume" data-download="1" target="_blank">View &#8599;</a>` : "\u2014"}</td>
           <td class="jobs-count" data-email="${esc(u.email)}">...</td>
           <td style="text-align:center">${u.referral_credits ?? 0}</td>
           <td style="white-space:nowrap">${u.updated_at ? formatDate(u.updated_at) : "\u2014"}</td>
         </tr>
         <tr class="jobs-detail-row" id="jobs-detail-${i}" style="display:none">
-          <td colspan="10" style="padding:0"><div class="jobs-detail-cell"><div class="jobs-loading">Loading...</div></div></td>
+          <td colspan="12" style="padding:0"><div class="jobs-detail-cell"><div class="jobs-loading">Loading...</div></div></td>
         </tr>`;
     }
 
@@ -703,14 +711,17 @@ function openUserModal(user) {
   _editingUser = user || null;
   const title = document.getElementById("userModalTitle");
   title.textContent = user ? "Edit User" : "Add User";
-  const status = user ? _statusFromCompany(user.company) : "not_specified";
+  const status = user ? _userStatus(user) : "not_specified";
   document.getElementById("userEmailInput").value = user ? user.email : "";
   document.getElementById("userEmailInput").disabled = !!user;
   document.getElementById("userNameInput").value = user ? (user.name || "") : "";
   document.querySelectorAll("#userStatusPills .employment-pill").forEach(p => p.classList.toggle("active-pill", p.dataset.status === status));
-  document.getElementById("userCompanyGroup").style.display = status === "employed" ? "block" : "none";
-  document.getElementById("userCompanyInput").value = user && status === "employed" ? (user.company || "") : "";
-  document.getElementById("userPositionInput").value = user ? (user.position || "") : "";
+  const showCompany = status === "employed";
+  const showPosition = status === "employed" || status === "laid_off";
+  document.getElementById("userCompanyGroup").style.display = showCompany ? "block" : "none";
+  document.getElementById("userPositionGroup").style.display = showPosition ? "block" : "none";
+  document.getElementById("userCompanyInput").value = user && showCompany ? (user.company || "") : "";
+  document.getElementById("userPositionInput").value = user && showPosition ? (user.position || "") : "";
   document.getElementById("userLinkedinInput").value = user ? (user.linkedin_url || "") : "";
   document.getElementById("userCreditsInput").value = user ? (user.referral_credits ?? 0) : "";
   document.getElementById("userOptInWrap").style.display = user ? "flex" : "none";
@@ -722,7 +733,12 @@ function openUserModal(user) {
 
 function selectUserStatus(status) {
   document.querySelectorAll("#userStatusPills .employment-pill").forEach(p => p.classList.toggle("active-pill", p.dataset.status === status));
-  document.getElementById("userCompanyGroup").style.display = status === "employed" ? "block" : "none";
+  const showCompany = status === "employed";
+  const showPosition = status === "employed" || status === "laid_off";
+  document.getElementById("userCompanyGroup").style.display = showCompany ? "block" : "none";
+  document.getElementById("userPositionGroup").style.display = showPosition ? "block" : "none";
+  if (!showCompany) document.getElementById("userCompanyInput").value = "";
+  if (!showPosition) document.getElementById("userPositionInput").value = "";
   _userModalError("");
 }
 
@@ -745,10 +761,11 @@ async function saveUser() {
     _userModalError("Enter a company name, or choose a different status.");
     return;
   }
-  const company = selectedStatus === "not_specified" ? "" : (selectedStatus === "employed" ? companyText : _STATUS_TO_LABEL[selectedStatus] || companyText);
+  const company = selectedStatus === "employed" ? companyText : "";
+  const employment_status = selectedStatus === "not_specified" ? "" : selectedStatus;
   const position = document.getElementById("userPositionInput").value.trim();
   const linkedin_url = document.getElementById("userLinkedinInput").value.trim();
-  const base = { name, company, position, linkedin_url };
+  const base = { name, company, position, employment_status, linkedin_url };
 
   const btn = document.getElementById("userSaveBtn");
   const orig = btn.innerHTML;
@@ -765,6 +782,7 @@ async function saveUser() {
       if (name !== (origUser.name || "")) payload.name = name;
       if (company !== (origUser.company || "")) payload.company = company;
       if (position !== (origUser.position || "")) payload.position = position;
+      if (employment_status !== (origUser.employment_status || "")) payload.employment_status = employment_status;
       if (linkedin_url !== (origUser.linkedin_url || "")) payload.linkedin_url = linkedin_url;
       if (credits !== (origUser.referral_credits ?? 0)) payload.referral_credits = credits;
       if (optIn !== (origUser.refer_opt_in ? 1 : 0)) payload.refer_opt_in = optIn;

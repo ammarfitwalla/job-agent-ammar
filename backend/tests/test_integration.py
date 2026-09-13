@@ -33,10 +33,15 @@ def _init_test_db():
             name TEXT NOT NULL,
             company TEXT DEFAULT '',
             position TEXT DEFAULT '',
+            employment_status TEXT DEFAULT '',
+            city TEXT DEFAULT '',
+            state TEXT DEFAULT '',
+            country TEXT DEFAULT '',
             linkedin_url TEXT DEFAULT '',
             referral_credits INTEGER DEFAULT 0,
             refer_opt_in INTEGER DEFAULT 0,
             invited_by TEXT DEFAULT '',
+            resume_filename TEXT DEFAULT '',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
@@ -269,6 +274,88 @@ class TestIntegrationAuthFlow(unittest.TestCase):
             "email": email, "name": "Wrong",
         })
         self.assertEqual(r.status_code, 403)
+
+    def test_08_verify_code_normalizes_email_case(self):
+        email = "CaseTest@Example.COM"
+        r = self._verify_code(email)
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["user"]["email"], "casetest@example.com")
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute("SELECT COUNT(*) n FROM users WHERE LOWER(email) = LOWER(?)", (email,))
+            self.assertEqual(cur.fetchone()["n"], 1)
+        finally:
+            conn.close()
+
+    def test_09_uppercase_verify_reuses_existing_account(self):
+        lower = "reuse@example.com"
+        r = self._verify_code(lower)
+        self.assertEqual(r.status_code, 200)
+        r = self._verify_code("REUSE@EXAMPLE.COM")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["user"]["email"], lower)
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute("SELECT COUNT(*) n FROM users WHERE LOWER(email) = LOWER(?)", (lower,))
+            self.assertEqual(cur.fetchone()["n"], 1)
+        finally:
+            conn.close()
+
+    def test_10_uppercase_token_resolves_to_lowercase_user(self):
+        email = "token@example.com"
+        self._verify_code(email)
+        r = self.client.get("/api/profile", headers={"Authorization": "Bearer " + _auth_token("TOKEN@EXAMPLE.COM")})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["email"], email)
+
+    def test_12_register_persists_employment_status(self):
+        email = "status12@example.com"
+        self._verify_code(email)
+        r = self.client.post("/api/auth/register", headers=_auth(email), json={
+            "email": email, "name": "Status User", "company": "",
+            "position": "Engineer", "employment_status": "laid_off",
+        })
+        self.assertEqual(r.status_code, 200)
+        user = r.json()["user"]
+        self.assertEqual(user["employment_status"], "laid_off")
+        self.assertEqual(user["position"], "Engineer")
+        self.assertEqual(user["company"], "")
+
+    def test_13_profile_round_trip_employment_status(self):
+        email = "profile13@example.com"
+        self._verify_code(email)
+        self.client.post("/api/auth/register", headers=_auth(email), json={
+            "email": email, "name": "Profile", "employment_status": "student",
+        })
+        r = self.client.put("/api/profile", headers=_auth(email), json={
+            "name": "Profile", "employment_status": "career_break", "position": "",
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["user"]["employment_status"], "career_break")
+        g = self.client.get("/api/profile", headers=_auth(email))
+        self.assertEqual(g.json()["employment_status"], "career_break")
+
+    def test_11_register_invited_by_normalized(self):
+        inviter = "norm-inviter@example.com"
+        invitee = "norm-invitee@example.com"
+        self._verify_code(inviter)
+        self._verify_code(invitee)
+        r = self.client.post("/api/auth/register", headers=_auth(invitee), json={
+            "email": invitee, "name": "Invitee", "invited_by": "NORM-INVITER@EXAMPLE.COM",
+        })
+        self.assertEqual(r.status_code, 200)
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute("SELECT invited_by, referral_credits FROM users WHERE email = ?", (invitee,))
+            row = cur.fetchone()
+            self.assertEqual(row["invited_by"], inviter)
+            self.assertEqual(row["referral_credits"], 5)
+            cur.execute("SELECT referral_credits FROM users WHERE email = ?", (inviter,))
+            self.assertEqual(cur.fetchone()["referral_credits"], 5)
+        finally:
+            conn.close()
 
 
 class TestIntegrationRateLimits(unittest.TestCase):
@@ -853,6 +940,7 @@ class TestAdminUserCRU(unittest.TestCase):
         email = "admincru@example.com"
         r = self.client.post("/api/admin/users", headers=_auth(self._ADMIN), json={
             "email": email, "name": "Admin CRU", "company": "TCS", "position": "Dev",
+            "employment_status": "laid_off",
         })
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()["ok"])
@@ -861,9 +949,12 @@ class TestAdminUserCRU(unittest.TestCase):
         data = r.json()
         emails = [u["email"] for u in data["registrations"]]
         self.assertIn(email, emails)
+        created = [u for u in data["registrations"] if u["email"] == email][0]
+        self.assertEqual(created["employment_status"], "laid_off")
 
         r = self.client.patch(f"/api/admin/users/{email}", headers=_auth(self._ADMIN), json={
             "name": "Updated Name", "company": "Wipro", "position": "Senior Dev",
+            "employment_status": "career_break",
             "referral_credits": 12, "refer_opt_in": 1,
         })
         self.assertEqual(r.status_code, 200)
@@ -873,6 +964,7 @@ class TestAdminUserCRU(unittest.TestCase):
         user = [u for u in r.json()["registrations"] if u["email"] == email][0]
         self.assertEqual(user["name"], "Updated Name")
         self.assertEqual(user["company"], "Wipro")
+        self.assertEqual(user["employment_status"], "career_break")
         self.assertEqual(user["referral_credits"], 12)
         self.assertEqual(user["refer_opt_in"], 1)
 
@@ -1138,6 +1230,126 @@ class TestCitySearch(unittest.TestCase):
         self.assertEqual(_board_location("naukri", st), "Texas")
         self.assertEqual(_board_location("indeed", st), "Texas, United States")
         self.assertEqual(_board_location("linkedin", st), "Texas")
+
+
+class TestUserLocation(unittest.TestCase):
+    _ADMIN = "ammarfitwalla@gmail.com"
+
+    def setUp(self):
+        _init_test_db()
+        self._conn_patcher = patch("db._get_conn", _make_conn_patch())
+        self._conn_patcher.start()
+        self._dev_mode_patcher = patch("api.routes.auth.DEV_MODE", True)
+        self._dev_mode_patcher.start()
+
+        from utils.rate_limiter import _limits
+        _limits.clear()
+
+        self._tmp_resumes = tempfile.TemporaryDirectory()
+        with open(os.path.join(self._tmp_resumes.name, "sample.pdf"), "wb") as f:
+            f.write(b"%PDF-1.4 fake resume")
+        self._resumes_patcher = patch("api.routes.admin._resumes_dir", lambda: self._tmp_resumes.name)
+        self._resumes_patcher.start()
+
+        conn, cur = _fresh_conn()
+        cur.execute(
+            "INSERT OR IGNORE INTO users (email, name, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now'))",
+            (self._ADMIN, "Admin"),
+        )
+        conn.commit()
+        conn.close()
+
+        from fastapi.testclient import TestClient
+        from api.main import app
+        self.client = TestClient(app)
+
+        self.email = "locuser@example.com"
+        self.client.post("/api/auth/verify-code", json={"email": self.email, "code": "123456"})
+        self.client.post("/api/auth/register", headers=_auth(self.email), json={
+            "email": self.email, "name": "Loc User", "company": "",
+            "position": "", "linkedin_url": "",
+        })
+        from db import update_user_profile
+        update_user_profile(self.email, city="", state="", country="", resume_filename="")
+
+    def tearDown(self):
+        self._conn_patcher.stop()
+        self._dev_mode_patcher.stop()
+        self._resumes_patcher.stop()
+        self._tmp_resumes.cleanup()
+
+    def test_01_profile_persists_city_state_country(self):
+        r = self.client.put("/api/profile", headers=_auth(self.email), json={
+            "city": "Mumbai", "state": "Maharashtra", "country": "India",
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["ok"])
+        self.assertEqual(r.json()["user"]["city"], "Mumbai")
+        self.assertEqual(r.json()["user"]["state"], "Maharashtra")
+        self.assertEqual(r.json()["user"]["country"], "India")
+        r = self.client.get("/api/profile", headers=_auth(self.email))
+        d = r.json()
+        self.assertEqual(d["city"], "Mumbai")
+        self.assertEqual(d["state"], "Maharashtra")
+        self.assertEqual(d["country"], "India")
+
+    def test_02_location_optional(self):
+        r = self.client.put("/api/profile", headers=_auth(self.email), json={"name": "Loc User"})
+        self.assertEqual(r.status_code, 200)
+        d = self.client.get("/api/profile", headers=_auth(self.email)).json()
+        self.assertEqual(d["city"], "")
+        self.assertEqual(d["state"], "")
+        self.assertEqual(d["country"], "")
+
+    def test_03_clear_location(self):
+        self.client.put("/api/profile", headers=_auth(self.email), json={
+            "city": "Pune", "state": "Maharashtra", "country": "India",
+        })
+        r = self.client.put("/api/profile", headers=_auth(self.email), json={
+            "city": "", "state": "", "country": "",
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["ok"])
+        d = self.client.get("/api/profile", headers=_auth(self.email)).json()
+        self.assertEqual(d["city"], "")
+        self.assertEqual(d["state"], "")
+        self.assertEqual(d["country"], "")
+
+    def test_04_admin_registrations_includes_location_and_resume(self):
+        from db import update_user_profile
+        self.client.put("/api/profile", headers=_auth(self.email), json={
+            "city": "Bengaluru", "state": "Karnataka", "country": "India",
+        })
+        update_user_profile(self.email, resume_filename="sample.pdf")
+        r = self.client.get("/api/admin/registrations", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+        regs = [x for x in r.json()["registrations"] if x["email"] == self.email]
+        self.assertEqual(len(regs), 1)
+        u = regs[0]
+        self.assertEqual(u["city"], "Bengaluru")
+        self.assertEqual(u["state"], "Karnataka")
+        self.assertEqual(u["country"], "India")
+        self.assertEqual(u["resume_filename"], "sample.pdf")
+
+    def test_05_admin_resume_no_token_401(self):
+        r = self.client.get(f"/api/admin/users/{self.email}/resume")
+        self.assertEqual(r.status_code, 401)
+
+    def test_06_admin_resume_non_admin_403(self):
+        r = self.client.get(f"/api/admin/users/{self.email}/resume", headers=_auth("hacker@evil.com"))
+        self.assertEqual(r.status_code, 403)
+
+    def test_07_admin_resume_file_200(self):
+        from db import update_user_profile
+        update_user_profile(self.email, resume_filename="sample.pdf")
+        r = self.client.get(f"/api/admin/users/{self.email}/resume", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.content, b"%PDF-1.4 fake resume")
+        self.assertIn("application/pdf", r.headers.get("content-type", ""))
+
+    def test_08_admin_resume_no_resume_404(self):
+        r = self.client.get(f"/api/admin/users/{self.email}/resume", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 404)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,18 @@
-import { getProfile, setProfile, showToast, updateNavIcon } from "./utils.js";
+import { getProfile, setProfile, clearProfile, showToast, updateNavIcon } from "./utils.js";
 import { _PROFILE_EMPLOYMENT_LABELS, _PROFILE_LABEL_TO_STATUS } from "./constants.js";
 
 let _profileCompanyList = [];
+let _locPicker = null;
+
+function _profileStatusDisplay(profile) {
+  const st = ((profile && profile.employment_status) || "").trim();
+  if (st === "employed") return "Employed";
+  if (st) return _PROFILE_EMPLOYMENT_LABELS[st] || st;
+  const company = (profile && profile.company) || "";
+  const legacy = _PROFILE_LABEL_TO_STATUS[company];
+  if (legacy) return _PROFILE_EMPLOYMENT_LABELS[legacy] || legacy;
+  return company ? "Employed" : "";
+}
 
 async function loadProfile() {
   const profile = getProfile();
@@ -27,6 +38,13 @@ async function loadProfile() {
 
   try {
     const r = await window.api("/api/profile");
+    if (r.status === 401) {
+      document.getElementById("profileSkeleton").classList.add("hidden");
+      clearProfile();
+      updateNavIcon();
+      if (typeof window.showAuthModal === "function") window.showAuthModal();
+      return;
+    }
     const d = await r.json();
     document.getElementById("profileSkeleton").classList.add("hidden");
     document.getElementById("dashboardSidebar").classList.remove("hidden");
@@ -71,8 +89,7 @@ function renderProfile(data) {
   document.getElementById("profileHeadline").textContent = parts.join(" ") || "";
   document.getElementById("profileHeadline").classList.toggle("hidden", !parts.length);
 
-  const statusLabel = _PROFILE_LABEL_TO_STATUS[company]
-    || (company ? "Employed" : "");
+  const statusLabel = _profileStatusDisplay(data);
   const badge = document.getElementById("profileStatusBadge");
   if (statusLabel) {
     badge.textContent = statusLabel;
@@ -106,6 +123,14 @@ function renderProfile(data) {
   } else if (resumeSection) {
     resumeSection.classList.add("hidden");
     if (resumeMissing) resumeMissing.classList.remove("hidden");
+  }
+
+  const locationSection = document.getElementById("profileLocationSection");
+  const locationEl = document.getElementById("profileLocation");
+  const locParts = [data.city, data.state, data.country].filter(Boolean);
+  if (locationSection && locationEl) {
+    locationEl.textContent = locParts.join(", ");
+    locationSection.classList.toggle("hidden", !locParts.length);
   }
 
   window.renderStatusTabs(data.status_counts || {});
@@ -172,8 +197,9 @@ function profileSelectEmploymentStatus(status) {
   }
   const roleGroup = document.getElementById("editRoleGroup");
   if (roleGroup) {
-    roleGroup.classList.toggle("hidden", !isEmployed);
-    if (!isEmployed) {
+    const showRole = isEmployed || status === "laid_off";
+    roleGroup.classList.toggle("hidden", !showRole);
+    if (!showRole) {
       document.getElementById("editRole").value = "";
     }
   }
@@ -186,14 +212,12 @@ function enableProfileEdit() {
   document.getElementById("profileEditMode").classList.remove("hidden");
   document.getElementById("editName").value = document.getElementById("profileName").textContent || "";
   const company = profile.company || "";
-  const matchedStatus = _PROFILE_LABEL_TO_STATUS[company];
-  if (matchedStatus) {
-    profileSelectEmploymentStatus(matchedStatus);
-    document.getElementById("editCompany").value = "";
-  } else {
-    profileSelectEmploymentStatus("employed");
-    document.getElementById("editCompany").value = company;
-  }
+  const stored = (profile.employment_status || "").trim();
+  const status = ["employed", "student", "graduate", "laid_off", "career_break"].includes(stored)
+    ? stored
+    : (_PROFILE_LABEL_TO_STATUS[company] ? _PROFILE_LABEL_TO_STATUS[company] : "employed");
+  profileSelectEmploymentStatus(status);
+  document.getElementById("editCompany").value = status === "employed" ? company : "";
   loadProfileCompanyList();
   filterProfileCompanyDropdown();
   document.getElementById("editRole").value = profile.position || "";
@@ -201,6 +225,22 @@ function enableProfileEdit() {
   document.getElementById("editLinkedin").value = linkedinEl.classList.contains("hidden") ? "" : linkedinEl.href;
   const referOptIn = document.getElementById("editReferOptIn");
   if (referOptIn) referOptIn.checked = !!profile.refer_opt_in;
+  _locPicker = (window.LocationPicker && window.LocationPicker.init)
+    ? window.LocationPicker.init({
+        inputId: "editLocation",
+        resultsId: "editLocationResults",
+        selectedId: "editLocationSelected",
+      })
+    : null;
+  const locParts = [profile.city, profile.state, profile.country].filter(Boolean);
+  if (_locPicker && locParts.length) {
+    _locPicker.setValue(locParts.join(", "), {
+      city: profile.city || "",
+      state: profile.state || "",
+      country: profile.country || "",
+      country_code: profile.country_code || "",
+    });
+  }
   document.getElementById("editName").focus();
 }
 
@@ -229,12 +269,21 @@ async function saveProfile() {
       return;
     }
   } else {
-    company = _PROFILE_EMPLOYMENT_LABELS[status] || "";
+    company = "";
+  }
+  let city = "", state = "", country = "";
+  if (_locPicker) {
+    const picked = _locPicker.getSelected();
+    if (picked) {
+      city = picked.city || "";
+      state = picked.state || "";
+      country = picked.country || "";
+    }
   }
   try {
     const r = await window.api("/api/profile", {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: profile.email, company, position, linkedin_url: linkedin, refer_opt_in: document.getElementById("editReferOptIn")?.checked ? 1 : 0 }),
+      body: JSON.stringify({ email: profile.email, company, position, employment_status: status, city, state, country, linkedin_url: linkedin, refer_opt_in: document.getElementById("editReferOptIn")?.checked ? 1 : 0 }),
     });
     const d = await r.json();
     if (d.ok) {
@@ -246,7 +295,7 @@ async function saveProfile() {
       if (companyStr) parts.push("at " + companyStr);
       document.getElementById("profileHeadline").textContent = parts.join(" ") || "";
       document.getElementById("profileHeadline").classList.toggle("hidden", !parts.length);
-      const statusLabel = _PROFILE_LABEL_TO_STATUS[companyStr] || (companyStr ? "Employed" : "");
+      const statusLabel = _profileStatusDisplay(d.user);
       const badge = document.getElementById("profileStatusBadge");
       if (statusLabel) {
         badge.textContent = statusLabel;
@@ -262,6 +311,13 @@ async function saveProfile() {
       } else {
         document.getElementById("profileLinkedin").classList.add("hidden");
         document.getElementById("profileLinkedin").parentElement.classList.add("hidden");
+      }
+      const locParts = [d.user?.city, d.user?.state, d.user?.country].filter(Boolean);
+      const locSec = document.getElementById("profileLocationSection");
+      const locEl = document.getElementById("profileLocation");
+      if (locSec && locEl) {
+        locEl.textContent = locParts.join(", ");
+        locSec.classList.toggle("hidden", !locParts.length);
       }
       const resumeFile = document.getElementById("editResumeFile")?.files?.[0];
       if (resumeFile) {

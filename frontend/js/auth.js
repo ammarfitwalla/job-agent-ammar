@@ -1,4 +1,4 @@
-import { DEV_MODE, EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, EMAILJS_PUBLIC_KEY, _EMPLOYMENT_LABELS } from "./constants.js";
+import { DEV_MODE, EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, EMAILJS_PUBLIC_KEY } from "./constants.js";
 import { setProfile, showToast } from "./utils.js";
 
 let emailjsInitialized = false;
@@ -296,6 +296,15 @@ function selectEmploymentStatus(status) {
       if (c) c.value = "";
     }
   }
+  const posGroup = _el("authPositionGroup");
+  if (posGroup) {
+    const showPos = status === "employed" || status === "laid_off";
+    posGroup.classList.toggle("hidden", !showPos);
+    if (!showPos) {
+      const p = _el("authPosition");
+      if (p) p.value = "";
+    }
+  }
 }
 
 function prefillInviteDetails(done) {
@@ -425,7 +434,7 @@ async function authRegister() {
       return;
     }
   } else {
-    company = _EMPLOYMENT_LABELS[status] || "";
+    company = "";
   }
   if (btn) btn.disabled = true;
   if (btn) btn.textContent = "Saving...";
@@ -443,6 +452,7 @@ async function authRegister() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email, name, company, position,
+        employment_status: status,
         linkedin_url: linkedin,
         search_id: searchId,
         refer_opt_in: _el("authReferOptIn")?.checked ? 1 : 0,
@@ -571,7 +581,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // Debounced so background pollers (e.g. the 30s referral-notification check) can't re-open a
 // modal the user just dismissed — one since a real session change. A fresh token silences it.
 document.addEventListener("ja:auth-required", () => {
-  if (document.readyState !== "complete") return;
+  if (document.readyState === "loading") return;
   const now = Date.now();
   if (now - _lastAuthPromptAt < _AUTH_PROMPT_DEBOUNCE_MS) return;
   _lastAuthPromptAt = now;

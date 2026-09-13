@@ -21,6 +21,7 @@ class CreateUserRequest(BaseModel):
     name: str = ""
     company: str = ""
     position: str = ""
+    employment_status: str = ""
     linkedin_url: str = ""
 
 
@@ -28,6 +29,7 @@ class UpdateUserRequest(BaseModel):
     name: str | None = None
     company: str | None = None
     position: str | None = None
+    employment_status: str | None = None
     linkedin_url: str | None = None
     referral_credits: int | None = None
     refer_opt_in: int | None = None
@@ -361,7 +363,7 @@ async def admin_create_user(req: CreateUserRequest, user: dict = Depends(get_cur
     req_email = req.email.strip().lower()
     if get_user(req_email):
         raise HTTPException(409, "User already exists")
-    create_user(req_email, req.name.strip(), req.company or "", req.position or "", req.linkedin_url or "")
+    create_user(req_email, req.name.strip(), req.company or "", req.position or "", req.linkedin_url or "", req.employment_status or "")
     return {"ok": True}
 
 
@@ -377,11 +379,26 @@ async def admin_update_user(user_email: str, req: UpdateUserRequest, user: dict 
         name=req.name,
         company=req.company,
         position=req.position,
+        employment_status=req.employment_status,
         linkedin_url=req.linkedin_url,
         referral_credits=req.referral_credits,
         refer_opt_in=req.refer_opt_in,
     )
     return {"ok": True}
+
+
+@router.get("/users/{user_email}/resume")
+async def admin_user_resume(user_email: str, user: dict = Depends(get_current_user)):
+    _check_admin(user["email"])
+    from db import get_user
+
+    u = get_user(user_email)
+    if not u or not u.get("resume_filename"):
+        raise HTTPException(404, "No resume found")
+    filepath = os.path.join(_resumes_dir(), u["resume_filename"])
+    if not os.path.isfile(filepath):
+        raise HTTPException(404, "Resume file not found")
+    return FileResponse(filepath, filename=u["resume_filename"])
 
 
 @router.get("/visits")

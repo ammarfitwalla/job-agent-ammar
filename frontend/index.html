@@ -448,7 +448,9 @@
             <input id="authCompany" type="text" placeholder="Company (type to search)" autocomplete="off" class="premium-input-field" oninput="filterCompanyDropdown()" onfocus="filterCompanyDropdown()">
             <div id="companyDropdown" class="hidden absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
           </div>
-          <input id="authPosition" type="text" placeholder="Your position (e.g. Senior Frontend Engineer)" class="premium-input-field">
+          <div id="authPositionGroup">
+            <input id="authPosition" type="text" placeholder="Your position (e.g. Senior Frontend Engineer)" class="premium-input-field">
+          </div>
           <input id="authLinkedin" type="url" placeholder="LinkedIn URL (optional)" class="premium-input-field">
           <label for="authReferOptIn" class="flex items-start gap-2.5 p-3 rounded-xl bg-indigo-50/70 border border-indigo-100 cursor-pointer select-none group">
             <input id="authReferOptIn" type="checkbox" class="w-4 h-4 mt-0.5 accent-indigo-600 rounded" checked>
@@ -594,6 +596,7 @@
   <script type="module" src="/js/utils.js"></script>
   <script type="module" src="/js/auth.js"></script>
   <script type="module" src="/js/referrals.js"></script>
+  <script src="/js/location-picker.js"></script>
   <script src="/js/search.js"></script>
   <script src="/js/terms.js"></script>
 </body>

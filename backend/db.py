@@ -101,6 +101,10 @@ def init_db():
                 name TEXT NOT NULL,
                 company TEXT DEFAULT '',
                 position TEXT DEFAULT '',
+                employment_status TEXT DEFAULT '',
+                city TEXT DEFAULT '',
+                state TEXT DEFAULT '',
+                country TEXT DEFAULT '',
                 linkedin_url TEXT DEFAULT '',
                 resume_filename TEXT DEFAULT '',
                 referral_credits INTEGER DEFAULT 0,
@@ -389,6 +393,28 @@ def init_db():
         # Migrate existing users table — add resume_filename
         try:
             cur.execute("ALTER TABLE users ADD COLUMN resume_filename TEXT DEFAULT ''")
+        except Exception:
+            pass
+        # Migrate existing users table — add location columns
+        for col in ("city TEXT DEFAULT ''", "state TEXT DEFAULT ''", "country TEXT DEFAULT ''"):
+            try:
+                cur.execute(f"ALTER TABLE users ADD COLUMN {col}")
+            except Exception:
+                pass
+        # Migrate existing users table — add employment_status column and backfill
+        # legacy status labels that were previously stored in the company field.
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN employment_status TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            cur.execute("""UPDATE users SET employment_status = CASE company
+                WHEN 'Student' THEN 'student'
+                WHEN 'Graduate' THEN 'graduate'
+                WHEN 'Laid Off' THEN 'laid_off'
+                WHEN 'Career Break' THEN 'career_break'
+                ELSE employment_status END
+                WHERE employment_status = ''""")
         except Exception:
             pass
         # Migrate existing referral_requests table — add dual-confirmation columns
@@ -1149,15 +1175,15 @@ def get_all_users(limit: int = 500) -> list[dict]:
         return [dict(r) for r in cur.fetchall()]
 
 
-def create_user(email: str, name: str, company: str = "", position: str = "", linkedin_url: str = "") -> dict:
+def create_user(email: str, name: str, company: str = "", position: str = "", linkedin_url: str = "", employment_status: str = "") -> dict:
     now = _now()
     with _write_lock:
         with _get_conn() as (conn, cur):
             cur.execute(
-                "INSERT OR IGNORE INTO users (email, name, company, position, linkedin_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (email, name, company, position, linkedin_url, now, now))
+                "INSERT OR IGNORE INTO users (email, name, company, position, employment_status, linkedin_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (email, name, company, position, employment_status, linkedin_url, now, now))
             conn.commit()
-    return {"email": email, "name": name, "company": company, "position": position, "linkedin_url": linkedin_url, "referral_credits": 0, "created_at": now}
+    return {"email": email, "name": name, "company": company, "position": position, "employment_status": employment_status, "linkedin_url": linkedin_url, "referral_credits": 0, "created_at": now}
 
 
 def update_user_name(email: str, name: str):
@@ -1167,7 +1193,7 @@ def update_user_name(email: str, name: str):
                          (name, _now(), email))
             conn.commit()
 
-def update_user_profile(email: str, name: str = None, company: str = None, position: str = None, linkedin_url: str = None, resume_filename: str = None):
+def update_user_profile(email: str, name: str = None, company: str = None, position: str = None, employment_status: str = None, linkedin_url: str = None, resume_filename: str = None, city: str = None, state: str = None, country: str = None):
     fields = []
     values = []
     if name is not None:
@@ -1179,6 +1205,18 @@ def update_user_profile(email: str, name: str = None, company: str = None, posit
     if position is not None:
         fields.append("position = ?")
         values.append(position)
+    if employment_status is not None:
+        fields.append("employment_status = ?")
+        values.append(employment_status)
+    if city is not None:
+        fields.append("city = ?")
+        values.append(city)
+    if state is not None:
+        fields.append("state = ?")
+        values.append(state)
+    if country is not None:
+        fields.append("country = ?")
+        values.append(country)
     if linkedin_url is not None:
         fields.append("linkedin_url = ?")
         values.append(linkedin_url)
@@ -1291,7 +1329,7 @@ def update_user_refer_opt_in(email: str, value: int) -> bool:
             return cur.rowcount > 0
 
 
-def update_user_admin(email: str, name: str = None, company: str = None, position: str = None,
+def update_user_admin(email: str, name: str = None, company: str = None, position: str = None, employment_status: str = None,
                       linkedin_url: str = None, referral_credits: int = None, refer_opt_in: int = None):
     """Admin-only full user update. Only provided fields are changed."""
     fields = []
@@ -1305,6 +1343,9 @@ def update_user_admin(email: str, name: str = None, company: str = None, positio
     if position is not None:
         fields.append("position = ?")
         values.append(position)
+    if employment_status is not None:
+        fields.append("employment_status = ?")
+        values.append(employment_status)
     if linkedin_url is not None:
         fields.append("linkedin_url = ?")
         values.append(linkedin_url)
