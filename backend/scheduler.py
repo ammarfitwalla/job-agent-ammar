@@ -446,11 +446,39 @@ def _register_proxy_testers():
         log(f"[PROXY-POOL] tester registration failed: {e}")
 
 
+def _probe_with_timeout(tester, proxy_url: str, timeout: float = 5.0) -> str:
+    """Probe a proxy but bail out after `timeout` seconds.
+
+    tls-client's `timeout_seconds` doesn't reliably bound connect/TLS-handshake
+    on hostile proxies, and a single hung probe used to freeze the whole pool
+    refresher. A daemon thread + bounded join keeps the pass moving; a hung
+    probe thread is simply abandoned (isolated, holds no locks).
+
+    Returns "ok" (probe succeeded), "fail" (clean rejection), or "timeout"
+    (still running when the deadline hit → treated as unusable)."""
+    result = {}
+
+    def _run():
+        try:
+            result["ok"] = bool(tester(proxy_url))
+        except Exception:
+            result["ok"] = False
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        return "timeout"
+    return "ok" if result.get("ok", False) else "fail"
+
+
 def refresh_proxy_pool(board: str = "naukri") -> int:
     """One refresh pass: probe free proxies for `board`, upsert working ones.
 
     Single-owner via the proxy_refresh_lock leader pattern. Returns -1 if we
-    don't own the lock, else the number of working proxies found."""
+    don't own the lock, else the number of working proxies found. Pass is
+    time-bounded per probe and ends early once we have enough working proxies,
+    so it can never hang the pool indefinitely."""
     import config
     from db import (refresh_pool, upsert_proxy, proxy_pool_stats)
 
@@ -468,23 +496,36 @@ def refresh_proxy_pool(board: str = "naukri") -> int:
             log(f"[PROXY-POOL] {board}: no proxies fetched")
             return 0
 
-        tested = 0
-        working = 0
         test_limit = getattr(config, "NAUKRI_PROXY_TEST_LIMIT", 30)
         pool_max = getattr(config, "NAUKRI_PROXY_POOL_MAX", 50)
+        min_target = getattr(config, "NAUKRI_PROXY_TEST_MIN_TARGET", 10)
+        probe_timeout = getattr(config, "NAUKRI_PROXY_TEST_TIMEOUT", 5) + 3  # hard cap
+
+        tested = 0
+        working = 0
+        timed_out = 0
+        failed = 0
         for p in all_proxies:
-            if tested >= test_limit:
+            if tested >= test_limit or working >= min_target:
                 break
             proxy_url = p if p.startswith("http") else f"http://{p}"
             tested += 1
-            if tester(proxy_url):
-                upsert_proxy(board, proxy_url, rekindle=True)
-                working += 1
+            status = _probe_with_timeout(tester, proxy_url, probe_timeout)
+            if status == "timeout":
+                timed_out += 1
+                continue
+            if status != "ok":
+                failed += 1
+                continue
+            upsert_proxy(board, proxy_url, rekindle=True)
+            working += 1
 
         refresh_pool(board, pool_max)
         stats = proxy_pool_stats(board)
-        log(f"[PROXY-POOL] {board}: refresh {working}/{tested} working — "
-            f"pool={stats['free']} free, {stats['in_use']} in_use, {stats['dead']} dead")
+        log(f"[PROXY-POOL] {board}: refresh {working}/{tested} working "
+            f"({failed} failed, {timed_out} timed out) — "
+            f"pool={stats['free']} free, {stats['in_use']} in_use, "
+            f"{stats['dead']} dead")
         return working
     except Exception as e:
         log(f"[PROXY-POOL] {board}: refresh failed: {e}")
