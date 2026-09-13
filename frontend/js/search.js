@@ -45,6 +45,7 @@ let searchTimeout = null;
 let lastQuery = "";
 let lastRenderedCount = 0;
 let allStates = [];
+let allCities = [];
 let internshipMode = false;
 let activeFilters = { site: '', experience_level: '' };
 let currentSort = 'relevant';
@@ -1376,28 +1377,76 @@ function setupLocationSearch() {
   });
 }
 
-function searchState(query) {
+async function fetchCitiesFor(cc, q0) {
+  try {
+    const url = cc
+      ? `/cities?country=${encodeURIComponent(cc)}&q=${encodeURIComponent(q0)}`
+      : `/cities?q=${encodeURIComponent(q0)}`;
+    const r = await fetch(url);
+    const d = await r.json();
+    allCities = d.cities || [];
+    return allCities.slice(0, 4).map(c => ({
+      city: c.city,
+      state: c.state,
+      country: c.country,
+      country_code: c.country_code,
+      label: [c.city, c.state, c.country].filter(Boolean).join(", ")
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function searchState(query) {
   if (query === lastQuery) return;
   lastQuery = query;
   const results = document.getElementById("locationResults");
   results.innerHTML = "";
   const lower = query.toLowerCase();
+  const segs = lower.split(",").map(s => s.trim()).filter(Boolean);
 
-  const countryMatches = Object.entries(countriesMap)
-    .filter(([code, name]) => name.toLowerCase().includes(lower) || code.includes(lower))
-    .slice(0, 3)
-    .map(([code, name]) => ({
-      state: null,
-      country: name,
-      country_code: code,
-      label: name
-    }));
+  const countryMatches = [];
+  let cc = null;
+  for (const [code, name] of Object.entries(countriesMap)) {
+    if (name.toLowerCase() === lower || code === lower) {
+      if (!cc) cc = code;
+      countryMatches.push({
+        state: null,
+        country: name,
+        country_code: code,
+        label: name
+      });
+    }
+  }
+  if (!cc) {
+    for (const [code, name] of Object.entries(countriesMap)) {
+      const n = name.toLowerCase();
+      if (segs.some(seg => seg === n || seg === code)) { cc = code; break; }
+    }
+  }
 
+  const topCountries = countryMatches.slice(0, 3);
+
+  let cityMatches = [];
+  const exactCountry = countryMatches.length > 0;
+  const exactState = allStates.some(s => s.state.toLowerCase() === lower);
+  const q0 = (segs[0] || lower).slice(0, 40);
+  if (cc) {
+    cityMatches = await fetchCitiesFor(cc, q0);
+  } else if (!exactCountry && !exactState) {
+    // No country/state hint in the text — search cities across all common
+    // countries so a bare city like "mumbai" still suggests results.
+    cityMatches = await fetchCitiesFor(null, q0);
+  }
+
+  const count = Math.max(0, 6 - topCountries.length - cityMatches.length);
   let stateMatches = [];
   if (allStates.length) {
-    const count = Math.max(0, 6 - countryMatches.length);
     stateMatches = allStates
-      .filter(s => s.state.toLowerCase().includes(lower))
+      .filter(s => {
+        const sl = s.state.toLowerCase();
+        return sl.includes(lower) || (segs.length > 1 && segs.some(seg => seg.length >= 3 && sl.includes(seg)));
+      })
       .slice(0, count)
       .map(item => ({
         state: item.state,
@@ -1407,7 +1456,7 @@ function searchState(query) {
       }));
   }
 
-  const matches = [...countryMatches, ...stateMatches];
+  const matches = [...topCountries, ...cityMatches, ...stateMatches];
   if (!matches.length) {
     results.innerHTML = '<div class="px-4 py-3 text-xs text-slate-400">No matching locations</div>';
     results.classList.remove("hidden");
@@ -1419,7 +1468,7 @@ function searchState(query) {
     div.textContent = item.label;
     div.addEventListener("mousedown", (e) => {
       e.preventDefault();
-      selectLocation({ state: item.state, country: item.country, country_code: item.country_code, label: item.label });
+      selectLocation({ city: item.city || "", state: item.state, country: item.country, country_code: item.country_code, label: item.label });
     });
     results.appendChild(div);
   });
@@ -1458,6 +1507,11 @@ function resolveLocation() {
     if (!best && lower.includes(sl)) best = s;
   }
   if (best) return best;
+  for (const c of allCities) {
+    if (c.city.toLowerCase() === lower) {
+      return { city: c.city, state: c.state, country: c.country, country_code: c.country_code };
+    }
+  }
   for (const [code, name] of Object.entries(countriesMap)) {
     if (name.toLowerCase() === lower || code === lower) {
       return { state: "", country: name, country_code: code };
@@ -1493,7 +1547,7 @@ function getIndeedCountry(loc) {
 function getLocation(loc) {
   const l = loc || selectedLocation;
   if (!l) return "";
-  return [l.state, l.country].filter(Boolean).join(", ");
+  return [l.city, l.state, l.country].filter(Boolean).join(", ");
 }
 
 // ===== INTERNSHIP MODE TOGGLE =====

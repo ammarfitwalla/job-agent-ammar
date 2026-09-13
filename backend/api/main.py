@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from api.routes import jobs, scrape, resume, roles, states, events, leads, admin, auth, profile, saved_jobs, visits, users, referrals, stats, joblink
+from api.routes import jobs, scrape, resume, roles, states, cities, events, leads, admin, auth, profile, saved_jobs, visits, users, referrals, stats, joblink
 import json
 from db import init_db
 from config import ADMIN_EMAIL, JWT_ALLOW_DEV_SECRET
@@ -110,7 +110,7 @@ _PUBLIC_EXACT_API = {
     "/api/users/referrer-directory",
 }
 _PUBLIC_GET_ONLY = {"/api/auth/companies"}
-_PUBLIC_NON_API = {"/scrape", "/scrape/stop", "/scrape/status", "/states", "/roles", "/jobs"}
+_PUBLIC_NON_API = {"/scrape", "/scrape/stop", "/scrape/status", "/states", "/cities", "/roles", "/jobs"}
 _PUBLIC_PREFIX_API = ("/api/visit/",)
 
 _ADMIN_PATHS = {
@@ -208,6 +208,7 @@ app.include_router(scrape.router)
 app.include_router(resume.router)
 app.include_router(roles.router)
 app.include_router(states.router)
+app.include_router(cities.router)
 app.include_router(events.router)
 app.include_router(leads.router)
 app.include_router(admin.router)

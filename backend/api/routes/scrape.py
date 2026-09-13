@@ -181,8 +181,7 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
 
         # Naukri matches by city token, not state name, so a state-level combo
         # loops the state's major cities and merges everything under the state key.
-        default_loc = "India" if site_key == "naukri" else "United States"
-        runs = [{"location": combo.get("location") or default_loc,
+        runs = [{"location": _board_location(site_key, combo),
                  "results_wanted": combo.get("results_wanted") or scrape_limit}]
         if site_key == "naukri" and not combo.get("city") and combo.get("state"):
             cities = _state_cities(combo.get("state", ""), combo.get("country", ""))
@@ -737,7 +736,168 @@ def _cache_lookup(req):
 
 
 _STATE_INDEX = None
+_CITY_INDEX = None
+_CITY_READY = False
+_CITY_LOCK = threading.Lock()
+_COUNTRY_CODE_TO_NAME = {}
 _city_state_map_cache = {}
+
+
+def _ensure_states():
+    """Build (once) the country-name map and state index synchronously (fast).
+    Calls from the request path must not block on the full city index."""
+    global _STATE_INDEX, _COUNTRY_CODE_TO_NAME
+    if _STATE_INDEX is not None:
+        return _STATE_INDEX
+    _STATE_INDEX = {}
+    _COUNTRY_CODE_TO_NAME = {}
+    try:
+        from countrystatecity_countries import get_countries, get_states_of_country
+        from api.routes.states import COMMON_COUNTRIES
+        for c in get_countries():
+            _COUNTRY_CODE_TO_NAME[c.iso2.lower()] = c.name
+        for cc in COMMON_COUNTRIES:
+            country_name = _COUNTRY_CODE_TO_NAME.get(cc, cc.upper())
+            try:
+                for s in get_states_of_country(cc):
+                    _STATE_INDEX[s.name.strip().lower()] = {
+                        "state": s.name,
+                        "country": country_name,
+                        "country_code": cc,
+                    }
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return _STATE_INDEX
+
+
+def _build_city_index():
+    """Build the {lowercase_city: [candidates]} index over COMMON_COUNTRIES.
+    Slow (~7s), so run it in a background thread. A city name maps to every
+    matching city across countries (US first) so structured resolutions can
+    pick the right one via its state/country segments."""
+    global _CITY_INDEX, _CITY_READY
+    if _CITY_READY:
+        return
+    _CITY_INDEX = {}
+    _ensure_states()
+    try:
+        from countrystatecity_countries import get_states_of_country, get_cities_of_country
+        from api.routes.states import COMMON_COUNTRIES
+        for cc in COMMON_COUNTRIES:
+            try:
+                state_name = {}
+                state_code_name = {}
+                for s in get_states_of_country(cc):
+                    state_name[s.state_code.strip().lower()] = s.name
+                for sc_code, s_name in state_name.items():
+                    state_code_name[s_name.strip().lower()] = sc_code
+                country_name = _COUNTRY_CODE_TO_NAME.get(cc, cc.upper())
+                for c in get_cities_of_country(cc):
+                    key = c.name.strip().lower()
+                    sc = c.state_code.strip().lower()
+                    st = state_name.get(sc, "")
+                    _CITY_INDEX.setdefault(key, []).append({
+                        "city": c.name,
+                        "state": st,
+                        "state_code": state_code_name.get(st.strip().lower(), sc.upper()),
+                        "country": country_name,
+                        "country_code": cc,
+                    })
+            except Exception:
+                pass
+    except Exception:
+        pass
+    finally:
+        _CITY_READY = True
+
+
+def _ensure_cities():
+    """Kick the background city-index build if not running; callers tolerate a
+    partial/empty index until it's ready."""
+    if not _CITY_READY and _CITY_LOCK.acquire(blocking=False):
+        try:
+            _build_city_index()
+        finally:
+            _CITY_LOCK.release()
+    return _CITY_INDEX or {}
+
+
+# Warm the city index in the background as soon as the module loads, so the
+# first scrape usually finds it ready.
+if _CITY_INDEX is None:
+    threading.Thread(target=_ensure_cities, daemon=True, name="city-index").start()
+
+
+def _st_matches(cand, hint):
+    return bool(hint) and (
+        cand["state"].lower() == hint
+        or (cand.get("state_code") or "").lower() == hint
+        or cand["state"].lower().startswith(hint)
+        or hint.startswith(cand["state"].lower())
+    )
+
+
+def _co_matches(cand, hint):
+    return bool(hint) and (cand["country_code"] == hint or cand["country"].lower() == hint)
+
+
+def _pick_city(cands, rest=()):
+    """Pick the right city from colliding city names using the remaining
+    'State, Country' segments of the typed text."""
+    rest = [x.strip().lower() for x in rest if x.strip()]
+    state_hint = rest[0] if len(rest) >= 1 else ""
+    country_hint = rest[1] if len(rest) >= 2 else ""
+    for c in cands:
+        if state_hint and country_hint and _st_matches(c, state_hint) and _co_matches(c, country_hint):
+            return c
+    for c in cands:
+        if state_hint and _st_matches(c, state_hint):
+            return c
+    for c in cands:
+        if country_hint and _co_matches(c, country_hint):
+            return c
+    return cands[0]
+
+
+def _city_hit_for(text):
+    """City-index entry for the given lowercase text, or None (prefix match on
+    >=3 chars). Returns the US-first default when names collide."""
+    index = _CITY_INDEX or {}
+    if not text or len(text) < 2:
+        return None
+    if text in index:
+        return index[text][0]
+    if len(text) >= 3:
+        best = None
+        for name, cands in index.items():
+            if name.startswith(text):
+                if best is None or len(name) < len(best):
+                    best = name
+        if best:
+            return index[best][0]
+    return None
+
+
+def _board_location(site_key, combo):
+    """Location token each board actually searches with.
+
+    Naukri matches bare city/state tokens; Indeed's 'l=' behaves best with the
+    fullest 'City, State, Country'; LinkedIn prefers 'City, State'."""
+    _ensure_states()
+    city = (combo.get("city") or "").strip()
+    state = (combo.get("state") or "").strip()
+    country_code = (combo.get("country") or "").strip()
+    country_name = _COUNTRY_CODE_TO_NAME.get(country_code.lower()) or country_code or ""
+    parts = [p for p in (city, state) if p]
+    if site_key == "naukri":
+        return (parts[0] if parts else country_name) or "India"
+    if site_key == "linkedin":
+        return ", ".join(parts) or country_name or "United States"
+    if site_key == "indeed":
+        return ", ".join(p for p in (city, state, country_name) if p) or "United States"
+    return ", ".join(p for p in (city, state, country_name) if p) or "United States"
 
 
 def _build_city_state_map(country_code: str = "") -> dict:
@@ -775,46 +935,49 @@ def _state_cities(state: str, country: str = "") -> list:
 
 
 def _resolve_request_location(req):
-    """Ensure req.state/country are set so the cache key aligns with the
+    """Ensure req.state/country/city are set so the cache key aligns with the
     prewarm grid. Falls back to resolving free-text req.location against the
-    same states/countries source the frontend dropdown uses."""
-    global _STATE_INDEX
-    if not (req.state or req.country) and not (req.location or "").strip():
+    same states/countries source the frontend dropdown uses; a typed city is
+    resolved into req.city (with its state/country) so it keys its own cache cell."""
+    if not (req.state or req.country or req.city) and not (req.location or "").strip():
         return req
+    _ensure_states()
+    city_index = _CITY_INDEX or {}
 
-    if _STATE_INDEX is None:
-        _STATE_INDEX = {}
-        try:
-            from countrystatecity_countries import get_countries, get_states_of_country
-            from api.routes.states import COMMON_COUNTRIES
-            country_by_code = {c.iso2.lower(): c.name for c in get_countries()}
-            for cc in COMMON_COUNTRIES:
-                for s in get_states_of_country(cc):
-                    _STATE_INDEX[s.name.strip().lower()] = {
-                        "state": s.name,
-                        "country": country_by_code.get(cc, cc.upper()),
-                        "country_code": cc,
-                    }
-        except Exception:
-            pass
+    # City given but state/country missing -> fill from the city index.
+    if req.city and (not req.state or not req.country):
+        cands = city_index.get(req.city.strip().lower())
+        if cands:
+            info = cands[0]
+            req.city = info["city"] or req.city
+            req.state = info["state"] or req.state
+            req.country = info["country_code"] or req.country
 
-    # State present but country missing -> fill from the index
+    # State present but country missing -> fill from the states index.
     if req.state and not req.country:
         info = _STATE_INDEX.get(req.state.strip().lower())
         if info:
             req.state = info["state"]
             req.country = info["country_code"]
 
-    # Neither present but location text given -> resolve it
     if not req.state and not req.country:
         text = (req.location or "").strip().lower()
         if text:
             import re as _re
             hit = None
-            # 1) whole text is a state name
+            # 0) whole text is a state name (exact state beats same-named city)
             if text in _STATE_INDEX:
                 hit = _STATE_INDEX[text]
-            # 2) a full state name appears as a standalone phrase in the text
+            # 1) whole text is a city name
+            if hit is None and text in city_index:
+                hit = city_index[text][0]
+            # 2) first comma segment is a city name ("City, State, Country")
+            if hit is None:
+                segs = [x.strip() for x in text.split(",") if x.strip()]
+                cands = city_index.get(segs[0]) if segs else None
+                if cands:
+                    hit = _pick_city(cands, segs[1:])
+            # 3) a full state name appears as a standalone phrase in the text
             if hit is None:
                 candidates = []
                 for name, cand in _STATE_INDEX.items():
@@ -823,28 +986,34 @@ def _resolve_request_location(req):
                 if candidates:
                     candidates.sort(key=lambda x: x[0])
                     hit = candidates[0][1]
-            # 3) whole text is a country name/code
+            # 4) whole text is a country name/code
             if hit is None:
-                try:
-                    from countrystatecity_countries import get_countries
-                    for c in get_countries():
-                        if c.name.lower() == text or c.iso2.lower() == text:
-                            hit = {"state": "", "country": c.name, "country_code": c.iso2.lower()}
-                            break
-                except Exception:
-                    pass
-            # 4) text is a prefix of a state name (e.g. "Andaman")
+                for code, name in _COUNTRY_CODE_TO_NAME.items():
+                    if name.lower() == text or code.lower() == text:
+                        hit = {"state": "", "country": name, "country_code": code}
+                        break
+            # 5) text is a prefix of a state name (e.g. "Andaman")
             if hit is None:
                 prefixes = [cand for name, cand in _STATE_INDEX.items()
                             if len(text) >= 3 and name.startswith(text)]
                 if prefixes:
                     prefixes.sort(key=lambda c: len(c["state"]))
                     hit = prefixes[0]
+            # 6) text is a prefix of a city name
+            if hit is None:
+                hit = _city_hit_for(text)
             if hit:
-                req.state = hit["state"] or ""
-                req.country = hit["country_code"]
-                if hit["state"]:
-                    req.location = f"{hit['state']}, {hit['country']}"
+                if hit.get("city"):
+                    req.city = hit["city"] or ""
+                    req.state = hit["state"] or ""
+                    req.country = hit["country_code"]
+                    req.location = ", ".join(
+                        p for p in (hit["city"], hit["state"], hit["country"]) if p)
+                else:
+                    req.state = hit["state"] or ""
+                    req.country = hit["country_code"]
+                    if hit["state"]:
+                        req.location = f"{hit['state']}, {hit['country']}"
     return req
 
 

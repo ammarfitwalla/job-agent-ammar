@@ -33,7 +33,7 @@ email-validator
 # API
 fastapi
 uvicorn[standard]
-countrystatecity-countries
+countrystatecity-countries==1.0.5
 
 # Job scraping (Indeed via JobSpy)
 python-jobspy

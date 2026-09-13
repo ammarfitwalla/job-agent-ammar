@@ -1041,6 +1041,105 @@ class TestJWTGuard(unittest.TestCase):
         self.assertEqual(r.status_code, 401)
 
 
+class TestCitySearch(unittest.TestCase):
+    def setUp(self):
+        _init_test_db()
+        self._conn_patcher = patch("db._get_conn", _make_conn_patch())
+        self._conn_patcher.start()
+        from fastapi.testclient import TestClient
+        from api.main import app
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        self._conn_patcher.stop()
+
+    def _cities_ready(self):
+        import api.routes.scrape as scrape_mod
+        deadline = time.time() + 30
+        while not scrape_mod._CITY_READY and time.time() < deadline:
+            time.sleep(0.1)
+        if not scrape_mod._CITY_READY:
+            scrape_mod._build_city_index()
+        self.assertTrue(scrape_mod._CITY_READY)
+
+    def test_cities_endpoint(self):
+        r = self.client.get("/cities")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["cities"], [])
+
+        r = self.client.get("/cities", params={"country": "in", "state": "KA"})
+        self.assertEqual(r.status_code, 200)
+        cities = r.json()["cities"]
+        names = [c["city"] for c in cities]
+        self.assertIn("Bengaluru", names)
+        self.assertTrue(all(c["state"] == "Karnataka" for c in cities))
+        self.assertTrue(all(c["country"] == "India" for c in cities))
+
+        r = self.client.get("/cities", params={"country": "in", "q": "Bengaluru"})
+        self.assertTrue(any(c["city"] == "Bengaluru" for c in r.json()["cities"]))
+
+    def test_cities_global_q_search(self):
+        r = self.client.get("/cities", params={"q": "mumbai"})
+        self.assertEqual(r.status_code, 200)
+        cities = r.json()["cities"]
+        self.assertTrue(any(c["city"] == "Mumbai" and c["country"] == "India" for c in cities))
+
+    def test_free_text_city_resolves(self):
+        self._cities_ready()
+        from api.schemas import ScrapeRequest
+        from api.routes.scrape import _resolve_request_location
+        req = ScrapeRequest(location="Bengaluru")
+        _resolve_request_location(req)
+        self.assertEqual(req.city, "Bengaluru")
+        self.assertEqual(req.state, "Karnataka")
+        self.assertEqual(req.country, "in")
+        self.assertEqual(req.location, "Bengaluru, Karnataka, India")
+
+    def test_structured_city_text_resolves_with_state_country_hints(self):
+        self._cities_ready()
+        from api.schemas import ScrapeRequest
+        from api.routes.scrape import _resolve_request_location
+        req = ScrapeRequest(location="Austin, TX, US")
+        _resolve_request_location(req)
+        self.assertEqual(req.city, "Austin")
+        self.assertEqual(req.state, "Texas")
+        self.assertEqual(req.country, "us")
+
+    def test_state_search_untouched(self):
+        self._cities_ready()
+        from api.schemas import ScrapeRequest
+        from api.routes.scrape import _resolve_request_location
+        req = ScrapeRequest(location="California")
+        _resolve_request_location(req)
+        self.assertEqual(req.city, "")
+        self.assertEqual(req.state, "California")
+        self.assertEqual(req.country, "us")
+
+    def test_city_keys_its_own_cache_cell(self):
+        self._cities_ready()
+        from api.schemas import ScrapeRequest
+        from api.routes.scrape import _resolve_request_location
+        from db import _cache_key
+        req = ScrapeRequest(location="Bengaluru")
+        _resolve_request_location(req)
+        city_key = _cache_key("software-engineer", "indeed", req.city, req.state, req.country, 0, 168)
+        national_key = _cache_key("software-engineer", "indeed", "", "", "", 0, 168)
+        state_key = _cache_key("software-engineer", "indeed", "", req.state, req.country, 0, 168)
+        self.assertNotEqual(city_key, national_key)
+        self.assertNotEqual(city_key, state_key)
+
+    def test_board_location_formats(self):
+        from api.routes.scrape import _board_location
+        base = {"city": "Bengaluru", "state": "Karnataka", "country": "in"}
+        self.assertEqual(_board_location("naukri", base), "Bengaluru")
+        self.assertEqual(_board_location("indeed", base), "Bengaluru, Karnataka, India")
+        self.assertEqual(_board_location("linkedin", base), "Bengaluru, Karnataka")
+        st = {"city": "", "state": "Texas", "country": "us"}
+        self.assertEqual(_board_location("naukri", st), "Texas")
+        self.assertEqual(_board_location("indeed", st), "Texas, United States")
+        self.assertEqual(_board_location("linkedin", st), "Texas")
+
+
 if __name__ == "__main__":
     try:
         unittest.main(verbosity=2)
