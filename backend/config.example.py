@@ -356,6 +356,14 @@ MAX_CONCURRENT_PER_BOARD = {"linkedin": 1, "indeed": 3, "naukri": 3}   # prewarm
 PREWARM_DELAY_SECONDS = 5.0
 PREWARM_MAX_COMBOS_PER_RUN = 500
 
+NAUKRI_USE_PROXY = True                  # route Naukri through free proxies (ProxyScrape)
+NAUKRI_PROXY_REFRESH_MINUTES = 15        # background pool refresher cadence
+NAUKRI_PROXY_TEST_TIMEOUT = 5            # seconds per proxy probe
+NAUKRI_PROXY_TEST_LIMIT = 30             # proxies probed per refresh
+NAUKRI_PROXIES_PER_SCRAPE = 8            # proxy batch drawn per scrape
+NAUKRI_PROXY_CLAIM_MINUTES = 10          # in_use lease before takeover eligible
+NAUKRI_PROXY_POOL_MAX = 50               # max rows kept per board
+
 SCHEDULER_ENABLED = False
 SCHEDULER_INTERVAL_MINUTES = 180
 

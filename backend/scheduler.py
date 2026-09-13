@@ -140,23 +140,24 @@ def _owner_alive(owner_id: str):
         return None
 
 
-def _heartbeat(stale_after_seconds: float = _STALE_LOCK_SECONDS) -> bool:
-    """Renew/acquire the single-owner prewarm lock. Returns True if we own it."""
+def _heartbeat(stale_after_seconds: float = _STALE_LOCK_SECONDS,
+               table: str = "scheduler_lock") -> bool:
+    """Renew/acquire the single-owner lock. Returns True if we own it."""
     from db import _get_conn
 
     now = datetime.utcnow().isoformat()
     with _get_conn() as (conn, cur):
-        cur.execute("SELECT owner, last_heartbeat FROM scheduler_lock WHERE id = 1")
+        cur.execute(f"SELECT owner, last_heartbeat FROM {table} WHERE id = 1")
         row = cur.fetchone()
         if row is None:
             cur.execute(
-                "INSERT INTO scheduler_lock (id, owner, started_at, last_heartbeat) VALUES (1, ?, ?, ?)",
+                f"INSERT INTO {table} (id, owner, started_at, last_heartbeat) VALUES (1, ?, ?, ?)",
                 (_OWNER, now, now),
             )
             conn.commit()
             return True
         if row["owner"] == _OWNER:
-            cur.execute("UPDATE scheduler_lock SET last_heartbeat = ? WHERE id = 1", (now,))
+            cur.execute(f"UPDATE {table} SET last_heartbeat = ? WHERE id = 1", (now,))
             conn.commit()
             return True
         try:
@@ -169,7 +170,7 @@ def _heartbeat(stale_after_seconds: float = _STALE_LOCK_SECONDS) -> bool:
         # unreachable/foreign and stale, or the owner is alive but ancient.
         if dead_same_host or age > stale_after_seconds or (alive is True and age > 6 * 3600):
             cur.execute(
-                "UPDATE scheduler_lock SET owner = ?, started_at = ?, last_heartbeat = ? WHERE id = 1",
+                f"UPDATE {table} SET owner = ?, started_at = ?, last_heartbeat = ? WHERE id = 1",
                 (_OWNER, now, now),
             )
             conn.commit()
@@ -177,12 +178,12 @@ def _heartbeat(stale_after_seconds: float = _STALE_LOCK_SECONDS) -> bool:
         return False
 
 
-def _release_lock():
+def _release_lock(table: str = "scheduler_lock"):
     """Clear the lock row only if we are the current owner."""
     from db import _get_conn
 
     with _get_conn() as (conn, cur):
-        cur.execute("DELETE FROM scheduler_lock WHERE id = 1 AND owner = ?", (_OWNER,))
+        cur.execute(f"DELETE FROM {table} WHERE id = 1 AND owner = ?", (_OWNER,))
         conn.commit()
 
 
@@ -421,3 +422,118 @@ def shutdown_scheduler():
             pass
         _own_lock = False
         log("[PREWARM] Scheduler stopped — lock released")
+
+
+# ── Proxy pool refresher (always-on) ──────────────────────────────
+#
+# Runs independent of SCHEDULER_ENABLED so a warm pool exists even with the
+# prewarm scheduler off. Uses its own leader lock (proxy_refresh_lock) so an
+# active prewarm owner can never strangle proxy refreshes.
+
+_PROXY_TESTERS = {}
+_PROXY_REFRESH_THREAD = None
+_PROXY_REFRESH_STOP = None
+
+
+def _register_proxy_testers():
+    if _PROXY_TESTERS:
+        return
+    try:
+        from scrapers import naukri_scraper
+        _PROXY_TESTERS["naukri"] = naukri_scraper._proxy_test_naukri
+        log(f"[PROXY-POOL] registered testers: {list(_PROXY_TESTERS)}")
+    except Exception as e:
+        log(f"[PROXY-POOL] tester registration failed: {e}")
+
+
+def refresh_proxy_pool(board: str = "naukri") -> int:
+    """One refresh pass: probe free proxies for `board`, upsert working ones.
+
+    Single-owner via the proxy_refresh_lock leader pattern. Returns -1 if we
+    don't own the lock, else the number of working proxies found."""
+    import config
+    from db import (refresh_pool, upsert_proxy, proxy_pool_stats)
+
+    if not _heartbeat(table="proxy_refresh_lock"):
+        return -1
+    try:
+        _register_proxy_testers()
+        tester = _PROXY_TESTERS.get(board)
+        if tester is None:
+            log(f"[PROXY-POOL] no tester for board {board}")
+            return 0
+        from scrapers.naukri_scraper import _fetch_free_proxies
+        all_proxies = _fetch_free_proxies()
+        if not all_proxies:
+            log(f"[PROXY-POOL] {board}: no proxies fetched")
+            return 0
+
+        tested = 0
+        working = 0
+        test_limit = getattr(config, "NAUKRI_PROXY_TEST_LIMIT", 30)
+        pool_max = getattr(config, "NAUKRI_PROXY_POOL_MAX", 50)
+        for p in all_proxies:
+            if tested >= test_limit:
+                break
+            proxy_url = p if p.startswith("http") else f"http://{p}"
+            tested += 1
+            if tester(proxy_url):
+                upsert_proxy(board, proxy_url, rekindle=True)
+                working += 1
+
+        refresh_pool(board, pool_max)
+        stats = proxy_pool_stats(board)
+        log(f"[PROXY-POOL] {board}: refresh {working}/{tested} working — "
+            f"pool={stats['free']} free, {stats['in_use']} in_use, {stats['dead']} dead")
+        return working
+    except Exception as e:
+        log(f"[PROXY-POOL] {board}: refresh failed: {e}")
+        return 0
+    finally:
+        try:
+            _release_lock(table="proxy_refresh_lock")
+        except Exception:
+            pass
+
+
+def _proxy_refresher_loop():
+    import config
+    import time
+
+    first_delay = getattr(config, "NAUKRI_PROXY_REFRESH_MINUTES", 15) * 60
+    time.sleep(max(5, min(first_delay, 60)))  # first pass ~1 min after boot
+    while True:
+        if _PROXY_REFRESH_STOP is not None and _PROXY_REFRESH_STOP.is_set():
+            break
+        refresh_proxy_pool("naukri")
+        if _PROXY_REFRESH_STOP is not None and _PROXY_REFRESH_STOP.wait(first_delay):
+            break
+
+
+def start_proxy_refresher():
+    """Start the always-on proxy pool refresher (idempotent). Gated only on
+    NAUKRI_USE_PROXY — NOT on SCHEDULER_ENABLED."""
+    global _PROXY_REFRESH_THREAD, _PROXY_REFRESH_STOP
+    if _PROXY_REFRESH_THREAD is not None:
+        return
+    try:
+        import config
+        if not config.NAUKRI_USE_PROXY:
+            log("[PROXY-POOL] disabled via NAUKRI_USE_PROXY=False")
+            return
+    except Exception:
+        pass
+    _PROXY_REFRESH_STOP = threading.Event()
+    t = threading.Thread(target=_proxy_refresher_loop, daemon=True,
+                         name="proxy-refresher")
+    t.start()
+    _PROXY_REFRESH_THREAD = t
+    log("[PROXY-POOL] always-on refresher started")
+
+
+def stop_proxy_refresher():
+    global _PROXY_REFRESH_THREAD, _PROXY_REFRESH_STOP
+    if _PROXY_REFRESH_STOP is not None:
+        _PROXY_REFRESH_STOP.set()
+        _PROXY_REFRESH_THREAD = None
+        _PROXY_REFRESH_STOP = None

@@ -6,7 +6,6 @@ jobspy's built-in Naukri scraper ships a stale static token and is currently
 broken upstream, so this module signs the token itself via tls-client.
 """
 import base64
-import random
 import time
 
 from Crypto.PublicKey import RSA
@@ -18,10 +17,7 @@ JOB_SEARCH_URL = "https://www.naukri.com/jobapi/v3/search"
 MAX_PAGES = 5
 PAGE_SIZE = 20
 NAUKRI_MAX_406_RETRIES = 2
-
-_PROXY_CACHE = []
-_PROXY_CACHE_TIME = 0.0
-_PROXY_REFRESH_SECONDS = 300  # re-fetch proxy list every 5 min
+_BOARD = "naukri"
 
 PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
 MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBALrlQ+djR0RjJwBF1xuisHmdFv334MIm
@@ -70,45 +66,113 @@ def _proxy_test_naukri(proxy_url):
 
 
 def _get_working_proxy():
-    """Fetch proxies from ProxyScrape, test against Naukri, cache working ones.
+    """Legacy no-op retained for import compatibility.
 
-    Returns a proxy URL string or empty string (direct connection)."""
-    global _PROXY_CACHE, _PROXY_CACHE_TIME
+    Proxy selection now flows through the DB-backed `_ProxyQueue` (see
+    `_ProxyQueue` below); nothing should call this anymore."""
+    from db import claim_proxies
+    drawn = claim_proxies(_BOARD, 1)
+    return drawn[0] if drawn else ""
 
-    try:
-        from config import NAUKRI_USE_PROXY
-        if not NAUKRI_USE_PROXY:
-            return ""
-    except ImportError:
-        return ""
 
-    now = time.time()
-    if _PROXY_CACHE and (now - _PROXY_CACHE_TIME) < _PROXY_REFRESH_SECONDS:
-        return random.choice(_PROXY_CACHE)
+class _ProxyExhausted(Exception):
+    """Raised when no usable proxy can be claimed and refresh yields nothing."""
 
-    # Refresh proxy list
-    all_proxies = _fetch_free_proxies()
-    if not all_proxies:
-        print("[NAUKRI] No proxies fetched, using direct connection")
-        _PROXY_CACHE = []
-        _PROXY_CACHE_TIME = now
-        return ""
 
-    tested = 0
-    working = []
-    for p in all_proxies:
-        if tested >= 30 or len(working) >= 10:
-            break
-        proxy_url = p if p.startswith("http") else f"http://{p}"
-        tested += 1
-        if _proxy_test_naukri(proxy_url):
-            working.append(proxy_url)
-            print(f"[NAUKRI] Proxy OK: {proxy_url}")
+class _ProxyQueue:
+    """Per-scrape working-proxy queue backed by the DB pool.
 
-    _PROXY_CACHE = working
-    _PROXY_CACHE_TIME = now
-    print(f"[NAUKRI] Proxy refresh: {len(working)}/{tested} working")
-    return random.choice(working) if working else ""
+    Draws a batch via `db.claim_proxies` (free rows first, expired-lease
+    `in_use` rows as a last resort — a live `in_use` row is never touched). On
+    failure the caller skips straight to the next proxy. When the batch runs
+    out, we refill from the DB; if the DB is empty we trigger one inline pool
+    refresh; only if that still yields nothing do we raise `_ProxyExhausted`
+    (requests NEVER go direct in proxy mode).
+    """
+
+    def __init__(self, board=_BOARD, n=None, lease_minutes=None):
+        import config
+        self.board = board
+        self.n = n if n is not None else getattr(config, "NAUKRI_PROXIES_PER_SCRAPE", 8)
+        self.lease = (lease_minutes if lease_minutes is not None
+                      else getattr(config, "NAUKRI_PROXY_CLAIM_MINUTES", 10))
+        self._queue = []
+        self._tried = set()
+        self._refilled_inline = False
+        self._stats = {"drew": 0, "used": 0, "skipped": 0, "refilled": 0}
+        self._refill()
+
+    # ── drawing / refilling ───────────────────────────────────────
+    def _refill(self):
+        from db import claim_proxies
+        allowed = claim_proxies(self.board, self.n, exclude=tuple(self._tried),
+                                lease_minutes=self.lease)
+        fresh = [u for u in allowed if u not in self._tried]
+        self._tried.update(fresh)
+        self._queue.extend(fresh)
+        self._stats["drew"] += len(fresh)
+        if fresh:
+            self._stats["refilled"] += 1
+        return fresh
+
+    def _inline_refresh(self):
+        try:
+            from scheduler import refresh_proxy_pool
+            refresh_proxy_pool(self.board)
+        except Exception as e:
+            print(f"[NAUKRI] inline proxy refresh failed: {e}")
+        self._refill()
+
+    def next(self) -> str:
+        if not self._queue:
+            if not self._refilled_inline:
+                self._refilled_inline = True
+                self._inline_refresh()
+            if not self._queue:
+                raise _ProxyExhausted(self.board)
+        return self._queue.pop(0)
+
+    # ── lifecycle hooks for the caller ─────────────────────────────
+    def mark_ok(self, proxy_url: str):
+        from db import mark_proxy_success
+        self._stats["used"] += 1
+        try:
+            mark_proxy_success(self.board, proxy_url)
+        except Exception:
+            pass
+
+    def mark_fail(self, proxy_url: str):
+        from db import mark_proxy_fail
+        self._stats["skipped"] += 1
+        try:
+            mark_proxy_fail(self.board, proxy_url)
+        except Exception:
+            pass
+
+    def release(self, proxy_url: str):
+        from db import release_proxy
+        try:
+            release_proxy(self.board, proxy_url)
+        except Exception:
+            pass
+
+    def cleanup(self) -> int:
+        """Release claimed-but-unused proxies back to the pool.
+
+        A scrape typically draws a batch but only exercises 1-2 of them; without
+        this, the untouched claims would sit `in_use` until their lease expires,
+        starving concurrent/rapid scrapes. Returns how many were freed."""
+        freed = 0
+        while self._queue:
+            url = self._queue.pop(0)
+            self.release(url)
+            freed += 1
+        return freed
+
+    def report(self) -> str:
+        s = self._stats
+        return (f"drew {s['drew']}, used {s['used']}, skipped {s['skipped']}, "
+                f"refilled {s['refilled']}")
 
 
 # ── End proxy support ──────────────────────────────────────────────
@@ -219,7 +283,8 @@ def _parse_search_response(data: dict) -> list[dict]:
     return jobs
 
 
-def _search_term(session, term, location, job_age, term_wanted, tls, seen):
+def _search_term(pqueue, term, location, job_age, term_wanted, seen):
+    """Search one term. `pqueue` is a `_ProxyQueue` (or None → direct session)."""
     jobs = []
     got = 0
     consecutive_406 = 0
@@ -246,23 +311,34 @@ def _search_term(session, term, location, job_age, term_wanted, tls, seen):
         }
         params = {k: v for k, v in params.items() if v not in (None, "")}
 
+        resp = None
+        proxy_url = None
+        page_406 = False
         try:
-            resp = None
             for attempt in range(NAUKRI_MAX_406_RETRIES + 1):
-                if attempt > 0:
-                    backoff = 28 * attempt
-                    print(f"[NAUKRI] '{term}' page {page} 406 — retry {attempt}/{NAUKRI_MAX_406_RETRIES}, backoff {backoff}s...")
-                    delay(backoff, backoff + 20)
-                    proxy = _get_working_proxy()
-                    session, tls = _build_session(proxy)
-                    _warm_up(session, location)
                 try:
+                    proxy_url = pqueue.next() if pqueue is not None else ""
+                except _ProxyExhausted:
+                    print(f"[NAUKRI] '{term}' page {page} — proxy pool exhausted, stopping combo")
+                    return jobs
+                try:
+                    session, tls = _build_session(proxy_url)
+                    try:
+                        _warm_up(session, location)
+                    except Exception:
+                        pass
                     resp = _get(session, JOB_SEARCH_URL, _search_headers(), params, tls)
                 except Exception as e:
-                    print(f"[NAUKRI] Search '{term}' page {page} failed: {e}")
+                    print(f"[NAUKRI] Search '{term}' page {page} proxy {proxy_url} failed: {e}")
+                    if pqueue is not None:
+                        pqueue.mark_fail(proxy_url)
                     resp = None
-                    break
-                if resp is not None and resp.status_code == 406 and attempt < NAUKRI_MAX_406_RETRIES:
+                    continue
+                if resp is not None and resp.status_code == 406:
+                    if pqueue is not None:
+                        pqueue.mark_fail(proxy_url)
+                    resp = None
+                    page_406 = True
                     continue
                 break
         except Exception as e:
@@ -270,16 +346,19 @@ def _search_term(session, term, location, job_age, term_wanted, tls, seen):
             break
 
         if resp is None:
-            break
-        if resp.status_code == 406:
-            consecutive_406 += 1
-            print(f"[NAUKRI] Search '{term}' rate-limited (406): {resp.text[:120]}")
+            if page_406:
+                consecutive_406 += 1
+                print(f"[NAUKRI] Search '{term}' rate-limited (406) on all proxies for page {page}")
             break
         if resp.status_code != 200:
             print(f"[NAUKRI] Search '{term}' page {page}: HTTP {resp.status_code}")
+            if pqueue is not None:
+                pqueue.release(proxy_url)
             break
 
         consecutive_406 = 0
+        if pqueue is not None:
+            pqueue.mark_ok(proxy_url)
         batch = _parse_search_response(resp.json())
         if not batch:
             break
@@ -298,15 +377,14 @@ def _search_term(session, term, location, job_age, term_wanted, tls, seen):
 
 def scrape_naukri(roles=None, location="", internship_mode=False, results_wanted=20, hours_old=72):
     """Scrape Naukri jobs via its internal search API."""
+    if not roles:
+        return []
+
+    import config
+    use_proxy = bool(getattr(config, "NAUKRI_USE_PROXY", True))
+    pqueue = _ProxyQueue() if use_proxy else None
     try:
-        if not roles:
-            return []
-
-        proxy = _get_working_proxy()
-        session, tls = _build_session(proxy)
         loc = _naukri_location(location)
-        _warm_up(session, loc)
-
         results_wanted = results_wanted * 2 if internship_mode else results_wanted
         per_role = max(1, results_wanted // len(roles))
         term_wanted = min(per_role, PAGE_SIZE * 2)
@@ -327,7 +405,7 @@ def scrape_naukri(roles=None, location="", internship_mode=False, results_wanted
                 search_terms = [role]
 
             for term in search_terms:
-                jobs = _search_term(session, term, loc, job_age, term_wanted, tls, seen_urls)
+                jobs = _search_term(pqueue, term, loc, job_age, term_wanted, seen_urls)
                 all_jobs.extend(jobs)
                 print(f"[NAUKRI] '{term}': {len(jobs)} new unique jobs")
 
@@ -336,3 +414,7 @@ def scrape_naukri(roles=None, location="", internship_mode=False, results_wanted
     except Exception as e:
         print(f"[NAUKRI] Error: {e}")
         return []
+    finally:
+        if pqueue is not None:
+            freed = pqueue.cleanup()
+            print(f"[NAUKRI] pool: {pqueue.report()} — released {freed} unused")

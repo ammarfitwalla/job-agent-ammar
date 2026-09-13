@@ -217,6 +217,28 @@ def init_db():
                 started_at TEXT NOT NULL,
                 last_heartbeat TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS proxy_refresh_lock (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                owner TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                last_heartbeat TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS proxies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                board TEXT NOT NULL,
+                proxy_url TEXT NOT NULL,
+                protocol TEXT NOT NULL DEFAULT 'http',
+                status TEXT NOT NULL DEFAULT 'free',
+                source TEXT NOT NULL DEFAULT 'proxyscrape',
+                success_count INTEGER NOT NULL DEFAULT 0,
+                fail_count INTEGER NOT NULL DEFAULT 0,
+                consecutive_fails INTEGER NOT NULL DEFAULT 0,
+                tested_at TEXT,
+                last_success_at TEXT,
+                claimed_until TEXT,
+                UNIQUE(board, proxy_url)
+            );
+            CREATE INDEX IF NOT EXISTS idx_proxies_pick ON proxies(board, status, claimed_until);
             CREATE TABLE IF NOT EXISTS referral_requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 from_email TEXT NOT NULL,
@@ -1890,3 +1912,146 @@ def get_custom_companies() -> list[str]:
     with _get_conn() as (conn, cur):
         cur.execute("SELECT name FROM custom_companies ORDER BY name")
         return [r["name"] for r in cur.fetchall()]
+
+
+# ── Proxy pool ──────────────────────────────────────────────────
+
+def _now_plus_lease(lease_minutes: float) -> str:
+    return (datetime.utcnow() + timedelta(minutes=lease_minutes)).isoformat()
+
+
+def upsert_proxy(board: str, proxy_url: str, protocol: str = "http",
+                 source: str = "proxyscrape", rekindle: bool = False) -> None:
+    """Insert a tested-working proxy (or refresh tested_at). If `rekindle`,
+    resurrect a previously `dead` row back to `free` on a successful probe."""
+    now = _now()
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute(
+                "INSERT INTO proxies (board, proxy_url, protocol, status, source, tested_at) "
+                "VALUES (?, ?, ?, 'free', ?, ?) "
+                "ON CONFLICT(board, proxy_url) DO UPDATE SET tested_at = excluded.tested_at, "
+                "source = excluded.source",
+                (board, proxy_url, protocol, source, now),
+            )
+            if rekindle:
+                cur.execute(
+                    "UPDATE proxies SET status = 'free', consecutive_fails = 0 "
+                    "WHERE board = ? AND proxy_url = ? AND status = 'dead'",
+                    (board, proxy_url),
+                )
+            conn.commit()
+
+
+def claim_proxies(board: str, n: int, exclude: tuple = (),
+                  lease_minutes: float = 10.0) -> list[str]:
+    """Atomically claim up to `n` proxies for `board` and mark them `in_use`.
+
+    Prefers `free` rows. When the pool is short, falls back to `in_use` rows
+    whose lease has expired (crashed runs). Live `in_use` rows are never taken."""
+    if n <= 0:
+        return []
+    now = _now()
+    leasetime = _now_plus_lease(lease_minutes)
+    exclude = tuple(set(exclude or ()))
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            if exclude:
+                ph = ",".join("?" * len(exclude))
+                q_free = (f"SELECT proxy_url FROM proxies WHERE board=? AND status='free' "
+                          f"AND proxy_url NOT IN ({ph}) ORDER BY id LIMIT ?")
+                args_free = [board, *exclude, n]
+                q_stale = (f"SELECT proxy_url FROM proxies WHERE board=? AND status='in_use' "
+                           f"AND claimed_until IS NOT NULL AND claimed_until < ? "
+                           f"AND proxy_url NOT IN ({ph}) ORDER BY id LIMIT ?")
+                args_stale = [board, now, *exclude, n]
+            else:
+                q_free = ("SELECT proxy_url FROM proxies WHERE board=? AND status='free' "
+                          "ORDER BY id LIMIT ?")
+                args_free = [board, n]
+                q_stale = (f"SELECT proxy_url FROM proxies WHERE board=? AND status='in_use' "
+                           f"AND claimed_until IS NOT NULL AND claimed_until < ? "
+                           f"ORDER BY id LIMIT ?")
+                args_stale = [board, now, n]
+
+            picked = [r["proxy_url"] for r in cur.execute(q_free, args_free).fetchall()]
+            if len(picked) < n:
+                room = n - len(picked)
+                for r in cur.execute(q_stale, args_stale).fetchall():
+                    if len(picked) >= n:
+                        break
+                    if r["proxy_url"] not in picked:
+                        picked.append(r["proxy_url"])
+
+            if picked:
+                ph = ",".join("?" * len(picked))
+                cur.execute(
+                    "UPDATE proxies SET status = 'in_use', claimed_until = ? "
+                    f"WHERE board = ? AND proxy_url IN ({ph}) "
+                    "AND (status = 'free' OR claimed_until IS NULL OR claimed_until < ?)",
+                    [leasetime, board, *picked, now],
+                )
+            conn.commit()
+    return picked
+
+
+def release_proxy(board: str, proxy_url: str) -> None:
+    """Free an `in_use` proxy back to `free` (wrapped in finally on scrape side)."""
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute("UPDATE proxies SET status = 'free', claimed_until = NULL "
+                        "WHERE board = ? AND proxy_url = ?", (board, proxy_url))
+            conn.commit()
+
+
+def mark_proxy_success(board: str, proxy_url: str) -> None:
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute(
+                "UPDATE proxies SET status = 'free', claimed_until = NULL, "
+                "success_count = success_count + 1, consecutive_fails = 0, "
+                "last_success_at = ? WHERE board = ? AND proxy_url = ?",
+                (_now(), board, proxy_url),
+            )
+            conn.commit()
+
+
+def mark_proxy_fail(board: str, proxy_url: str, max_fails: int = 3) -> None:
+    """Bump fail counters. >= `max_fails` consecutive failures → `dead`,
+    else back to `free` (temp cool-off via tested_at refresh)."""
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute("SELECT consecutive_fails FROM proxies WHERE board = ? AND proxy_url = ?",
+                        (board, proxy_url))
+            row = cur.fetchone()
+            fails = (row["consecutive_fails"] if row else 0) + 1
+            if fails >= max_fails:
+                cur.execute("UPDATE proxies SET status = 'dead', claimed_until = NULL, "
+                            "fail_count = fail_count + 1, consecutive_fails = ? "
+                            "WHERE board = ? AND proxy_url = ?", (fails, board, proxy_url))
+            else:
+                cur.execute("UPDATE proxies SET status = 'free', claimed_until = NULL, "
+                            "tested_at = ?, fail_count = fail_count + 1, consecutive_fails = ? "
+                            "WHERE board = ? AND proxy_url = ?", (_now(), fails, board, proxy_url))
+            conn.commit()
+
+
+def refresh_pool(board: str, max_pool: int = 50) -> None:
+    """Prune stale rows and cap the pool at `max_pool` rows per board."""
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute("SELECT id FROM proxies WHERE board = ? ORDER BY id DESC LIMIT 1 OFFSET ?",
+                        (board, max_pool))
+            row = cur.fetchone()
+            if row:
+                cur.execute("DELETE FROM proxies WHERE board = ? AND id < ?", (board, row["id"]))
+            conn.commit()
+
+
+def proxy_pool_stats(board: str) -> dict:
+    with _get_conn() as (conn, cur):
+        cur.execute("SELECT status, COUNT(*) AS c FROM proxies WHERE board = ? GROUP BY status",
+                    (board,))
+        counts = {r["status"]: r["c"] for r in cur.fetchall()}
+    return {"board": board, "free": counts.get("free", 0),
+            "in_use": counts.get("in_use", 0), "dead": counts.get("dead", 0)}

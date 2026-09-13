@@ -35,10 +35,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         import traceback
         traceback.print_exc()
+    try:
+        from scheduler import start_proxy_refresher
+        start_proxy_refresher()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
     yield
     try:
-        from scheduler import shutdown_scheduler
+        from scheduler import shutdown_scheduler, stop_proxy_refresher
         shutdown_scheduler()
+        stop_proxy_refresher()
     except Exception:
         pass
 
