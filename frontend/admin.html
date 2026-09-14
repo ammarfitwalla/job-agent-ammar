@@ -615,7 +615,7 @@ tr.clickable:hover td { background: #f8fafc; }
           <h3 style="margin:0;font-size:16px;font-weight:800;color:#1e293b">User Registrations</h3>
           <button class="btn btn-primary" onclick="openUserModal()">+ Add User</button>
         </div>
-        <div class="table-wrap"><table><thead><tr><th></th><th>Date</th><th>Name</th><th>Email</th><th>Status</th><th>Company</th><th>Position</th><th>Location</th><th>Resume</th><th>Jobs</th><th>Credits</th><th>Last Updated</th></tr></thead><tbody id="registrationBody"></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th></th><th>Date</th><th>Name</th><th>Email</th><th>Admin</th><th>Status</th><th>Company</th><th>Position</th><th>Location</th><th>Resume</th><th>Jobs</th><th>Credits</th><th>Last Updated</th><th>Last Login</th></tr></thead><tbody id="registrationBody"></tbody></table></div>
       </div>
 
       <div class="tab-content" data-group="inner" data-tab="visits">
@@ -635,23 +635,11 @@ tr.clickable:hover td { background: #f8fafc; }
 
 <div class="footer">JobAwn Admin &middot; <a href="#" onclick="window.openTerms('terms'); return false;">Terms</a> &middot; <a href="#" onclick="window.openTerms('privacy'); return false;">Privacy</a> &middot; <a href="/app" target="_blank">Main App <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg></a></div>
 
-<!-- Admin login gate -->
-<div id="adminAuthGate" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(15,23,42,0.6);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:20px">
-  <div style="background:#fff;border-radius:16px;padding:28px;width:400px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);text-align:center">
-    <div style="font-size:22px;font-weight:800;letter-spacing:-0.02em;color:#0f172a;display:flex;align-items:center;justify-content:center;gap:10px">
-      <span style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;background:#eef2ff;color:#4f46e5;border-radius:9px;font-size:13px;border:1px solid #e0e7ff">JA</span>
-      Admin Sign&nbsp;In
-    </div>
-    <p style="font-size:13px;color:#64748b;margin:10px 0 20px">Verify your email to unlock the admin dashboard.</p>
-    <input id="adminGateEmail" type="email" placeholder="Admin email" autocomplete="email"
-      style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:10px;box-sizing:border-box">
-    <button class="btn btn-primary" id="adminGateSendBtn" style="width:100%" onclick="sendAdminCode()">Send Code</button>
-    <div id="adminGateOtpWrap" style="display:none;margin-top:12px">
-      <input id="adminGateOtp" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code"
-        style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;box-sizing:border-box;text-align:center;letter-spacing:6px">
-      <button class="btn btn-primary" id="adminGateVerifyBtn" style="width:100%;margin-top:10px" onclick="verifyAdminCode()">Verify &amp; Enter</button>
-    </div>
-    <div id="adminGateError" style="display:none;color:#dc2626;font-size:13px;font-weight:600;padding:8px 12px;background:#fef2f2;border-radius:8px;margin-top:12px;text-align:left"></div>
+<!-- Not found (non-admins see only this) -->
+<div id="adminNotFound" style="display:none;position:fixed;inset:0;z-index:3000;background:#f8fafc;align-items:center;justify-content:center;padding:20px">
+  <div style="text-align:center">
+    <div style="font-size:64px;font-weight:800;letter-spacing:-0.03em;color:#e2e8f0;line-height:1">404</div>
+    <div style="font-size:15px;font-weight:600;color:#64748b;margin-top:8px">Page not found.</div>
   </div>
 </div>
 
@@ -683,6 +671,9 @@ tr.clickable:hover td { background: #f8fafc; }
     <input id="userCreditsInput" type="number" min="0" placeholder="Referral credits" autocomplete="off" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
     <label id="userOptInWrap" style="display:flex;align-items:center;gap:10px;padding:12px 0;font-size:14px;font-weight:600;color:#334155;cursor:pointer">
       <input id="userOptInInput" type="checkbox" style="width:16px;height:16px;accent-color:#4f46e5"> Referral opt-in
+    </label>
+    <label id="userAdminGroup" style="display:none;align-items:center;gap:10px;padding:12px 0;font-size:14px;font-weight:600;color:#334155;cursor:pointer;border-top:1px solid #e2e8f0;margin-top:4px">
+      <input id="userAdminInput" type="checkbox" style="width:16px;height:16px;accent-color:#4f46e5"> Admin access
     </label>
     <div id="userModalError" style="display:none;color:#dc2626;font-size:13px;font-weight:600;padding:8px 12px;background:#fef2f2;border-radius:8px;margin-bottom:12px"></div>
     <div style="display:flex;gap:12px;margin-top:8px">

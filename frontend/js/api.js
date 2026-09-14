@@ -51,6 +51,9 @@
   window.getAuthToken = getToken;
   window.setAuthToken = setToken;
   window.clearAuthToken = function () { setToken(null); };
+  window.clearAuthCookie = function () {
+    try { fetch("/logout", { method: "GET", credentials: "same-origin" }).catch(function () {}); } catch (e) {}
+  };
   window.setAuthSession = function (tok, email) {
     setToken(tok);
     setEmail(email || "");
@@ -106,6 +109,7 @@
       resp = await apiOnce(path, opts);
       if (resp.status === 401) {
         window.clearAuthToken();
+        if (window.clearAuthCookie) window.clearAuthCookie();
         document.dispatchEvent(new CustomEvent("ja:auth-required", { detail: { status: 401, path: path } }));
       }
     }

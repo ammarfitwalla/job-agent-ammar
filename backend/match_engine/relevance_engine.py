@@ -113,7 +113,6 @@ def _apply_scoring(
 ) -> Optional[dict]:
     """Apply parsed AI result and keyword score to a single job."""
     kw_score = keyword_score(job["title"], job["description"], job.get("tags"), keywords)
-    # print(f"[DBG RE] kw_score={kw_score}")
 
     ai_score = int(ai_result.get("score", 0))
     ai_relevant = ai_result.get("is_relevant", False)
@@ -122,7 +121,6 @@ def _apply_scoring(
     if internship_mode and required_years is not None:
         try:
             if int(required_years) >= 3:
-                # print(f"[DBG RE] YOE>=3 REJECT ('{job['title']}')")
                 log(f"[YOE-LLM] '{job['title']}': required_years={required_years} — rejecting")
                 return None
         except (ValueError, TypeError):
@@ -132,22 +130,17 @@ def _apply_scoring(
     title_lower = (job.get("title") or "").lower()
     verified = [s for s in matched if s.lower() in jd_lower or s.lower() in title_lower]
     hallucinated = len(matched) - len(verified)
-    # print(f"[DBG RE] verified={len(verified)}/{len(matched)} skills in JD, hallucinated={hallucinated}")
 
     if internship_mode and len(verified) == 0 and len(matched) > 0:
-        # print(f"[DBG RE] internship zero-match override — score=20, relevant=False")
         ai_score = 20
         ai_relevant = False
 
     kw_norm = min(kw_score, 100)
     total_score = round(ai_score * llm_weight + kw_norm * kw_weight)
-    # print(f"[DBG RE] total_score={total_score} = ai({ai_score})*{llm_weight} + kw({kw_norm})*{kw_weight}, threshold={min_score}, ai_relevant={ai_relevant}")
 
     if total_score < min_score or not ai_relevant:
-        # print(f"[DBG RE] REJECTED (score={total_score} < {min_score} or relevant={ai_relevant})")
         return None
 
-    # print(f"[DBG RE] PASS — total_score={total_score}")
     return {
         **copy.copy(job),
         "ai_score": ai_score,
@@ -170,22 +163,18 @@ def _score_one(
     sid: str = None,
     cancel_check: Optional[callable] = None,
 ) -> Optional[dict]:
-    # print(f"[DBG RE] _score_one entry: job='{job['title']}', internship={internship_mode}")
     if cancel_check and cancel_check():
         return None
     prompt = (internship_relevance_prompt if internship_mode else relevance_prompt)(
         job["title"], job["description"], job.get("tags"), resume=resume)
-    # print(f"[DBG RE] _score_one: prompt built, len={len(prompt)}, mode={'internship' if internship_mode else 'normal'}")
     response = LLMClient.chat(prompt, cancel_check=cancel_check)
 
     ai_result = extract_json(response)
-    # print(f"[DBG RE] _score_one: extract_json type={type(ai_result).__name__}, is_dict={isinstance(ai_result, dict)}")
     if not isinstance(ai_result, dict):
         log(f"[WARN] Unparseable AI response for: {job['title']}", sid)
         return None
 
     r = _apply_scoring(job, ai_result, min_score, keywords, llm_weight, kw_weight, internship_mode)
-    # print(f"[DBG RE] _score_one: result={'PASS' if r else 'REJECTED'}")
     return r
 
 
@@ -207,14 +196,11 @@ def _score_batch(
         resume=resume,
         internship_mode=internship_mode,
     )
-    # print(f"[DBG RE] _score_batch: prompt built, len={len(prompt)}, mode={'internship' if internship_mode else 'normal'}")
     response = LLMClient.batch_chat(prompt, max_tokens=3000, cancel_check=cancel_check)
 
     parsed = extract_json(response)
-    # print(f"[DBG RE] _score_batch: extract_json type={type(parsed).__name__}, is_list={isinstance(parsed, list)}, len={len(parsed) if isinstance(parsed, list) else 'N/A'}")
     if not isinstance(parsed, list):
         log(f"[BATCH WARN] Response is not a list — falling back to per-job scoring", sid)
-        # print(f"[DBG RE] _score_batch: not a list, falling back to per-job scoring")
         results = []
         for job in batch_jobs:
             if cancel_check and cancel_check():
@@ -222,21 +208,17 @@ def _score_batch(
             r = _score_one(job, min_score, keywords, resume, llm_weight, kw_weight, internship_mode, sid=sid, cancel_check=cancel_check)
             if r:
                 results.append(r)
-        # print(f"[DBG RE] _score_batch: per-job fallback returned {len(results)} results")
         return results
 
     results = []
     for job, ai_result in zip(batch_jobs, parsed):
         if not isinstance(ai_result, dict):
             log(f"[BATCH WARN] Invalid entry for '{job['title']}' — skipping", sid)
-            # print(f"[DBG RE] _score_batch: invalid entry for '{job['title']}', type={type(ai_result).__name__}")
             continue
         r = _apply_scoring(job, ai_result, min_score, keywords, llm_weight, kw_weight, internship_mode)
-        # print(f"[DBG RE] _score_batch: job '{job['title']}' -> {'PASS' if r else 'REJECTED'}")
         if r:
             results.append(r)
 
-    # print(f"[DBG RE] _score_batch: returning {len(results)} results")
     return results
 
 
@@ -262,7 +244,6 @@ def filter_jobs(
     log(f"[MATCH ENGINE] {len(jobs)} jobs received", sid)
 
     limit = min(llm_candidate_limit * 2, 30) if internship_mode else llm_candidate_limit
-    # print(f"[DBG RE] filter_jobs: limit={limit} (internship_boost={'yes' if internship_mode else 'no'})")
 
     scored = [
         (job, keyword_score(job["title"], job["description"], job.get("tags"), keywords), role_match_count(job["title"], roles))
@@ -277,7 +258,6 @@ def filter_jobs(
     ), reverse=True)[:limit]
 
     batch_size = BATCH_SIZE_RATIO[internship_mode]
-    # print(f"[DBG RE] filter_jobs: batch_size={batch_size} (internship={internship_mode})")
 
     log(f"[MATCH ENGINE] {len(candidates)}/{len(jobs)} sent to LLM (limit={llm_candidate_limit}, batch_size={batch_size})", sid)
 

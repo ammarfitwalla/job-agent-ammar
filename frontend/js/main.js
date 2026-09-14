@@ -11,6 +11,7 @@ function logout() {
 function confirmLogout() {
   document.getElementById("logoutModal").classList.add("hidden");
   clearProfile();
+  if (window.clearAuthCookie) window.clearAuthCookie();
   window.location.href = "/app";
 }
 

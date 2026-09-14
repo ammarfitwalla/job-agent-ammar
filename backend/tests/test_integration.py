@@ -43,7 +43,8 @@ def _init_test_db():
             invited_by TEXT DEFAULT '',
             resume_filename TEXT DEFAULT '',
             created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            updated_at TEXT NOT NULL,
+            last_login TEXT DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS referral_notifies (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,6 +63,12 @@ def _init_test_db():
             created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_vcodes_email ON verification_codes(email);
+        CREATE TABLE IF NOT EXISTS admin_users (
+            email TEXT PRIMARY KEY REFERENCES users(email),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            granted_by TEXT DEFAULT ''
+        );
         CREATE TABLE IF NOT EXISTS referral_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             from_email TEXT NOT NULL,
@@ -222,6 +229,17 @@ class TestIntegrationAuthFlow(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["user"]["name"], "Test User")
         self.assertEqual(data["user"]["company"], "Google")
+
+    def test_last_login_stamped_on_verify(self):
+        email = "llogin@example.com"
+        r = self._verify_code(email)
+        self.assertEqual(r.status_code, 200)
+
+        r = self.client.get("/api/admin/registrations", headers=_auth("ammarfitwalla@gmail.com"))
+        self.assertEqual(r.status_code, 200)
+        user = [u for u in r.json()["registrations"] if u["email"] == email][0]
+        self.assertIsInstance(user["last_login"], str)
+        self.assertTrue(user["last_login"])
 
     def test_02_verify_creates_user_auto(self):
         email = "newauto@example.com"
@@ -983,6 +1001,70 @@ class TestAdminUserCRU(unittest.TestCase):
         r = self.client.patch("/api/admin/users/nope@example.com", headers=_auth(self._ADMIN), json={"name": "X"})
         self.assertEqual(r.status_code, 404)
 
+    def test_non_admin_and_granted_admin_access(self):
+        email = "granted@example.com"
+        self.client.post("/api/admin/users", headers=_auth(self._ADMIN), json={
+            "email": email, "name": "Granted", "company": "Infosys", "position": "Dev",
+        })
+
+        r = self.client.get("/api/admin/registrations", headers=_auth(email))
+        self.assertEqual(r.status_code, 403)
+
+        r = self.client.patch(f"/api/admin/users/{email}", headers=_auth(self._ADMIN), json={"is_admin": True})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["ok"])
+
+        r = self.client.get("/api/admin/registrations", headers=_auth(email))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("registrations", r.json())
+        granted = [u for u in r.json()["registrations"] if u["email"] == email][0]
+        self.assertIs(granted["is_admin"], True)
+
+        r = self.client.patch(f"/api/admin/users/{email}", headers=_auth(self._ADMIN), json={"is_admin": False})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["ok"])
+
+        r = self.client.get("/api/admin/registrations", headers=_auth(email))
+        self.assertEqual(r.status_code, 403)
+
+    def test_registrations_default_is_admin_false(self):
+        email = "notadmin@example.com"
+        self.client.post("/api/admin/users", headers=_auth(self._ADMIN), json={
+            "email": email, "name": "Not Admin", "company": "TCS", "position": "Dev",
+        })
+        r = self.client.get("/api/admin/registrations", headers=_auth(self._ADMIN))
+        user = [u for u in r.json()["registrations"] if u["email"] == email][0]
+        self.assertIs(user["is_admin"], False)
+        self.assertEqual(user["last_login"], "")
+
+    def test_owner_cannot_be_demoted(self):
+        self.client.post("/api/admin/users", headers=_auth(self._ADMIN), json={
+            "email": self._ADMIN, "name": "Owner", "company": "JobAwn", "position": "Owner",
+        })
+        r = self.client.patch(f"/api/admin/users/{self._ADMIN}", headers=_auth(self._ADMIN), json={"is_admin": False})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["detail"], "The owner account cannot be demoted")
+        r = self.client.get("/api/admin/registrations", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+
+    def test_self_revoke_blocked(self):
+        email = "selfrevoke@example.com"
+        self.client.post("/api/admin/users", headers=_auth(self._ADMIN), json={
+            "email": email, "name": "Self Revoke", "company": "Google", "position": "Dev",
+        })
+        self.client.patch(f"/api/admin/users/{email}", headers=_auth(self._ADMIN), json={"is_admin": True})
+
+        r = self.client.patch(f"/api/admin/users/{email}", headers=_auth(email), json={"is_admin": False})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["detail"], "You cannot remove admin access from your own account")
+
+        r = self.client.get("/api/admin/registrations", headers=_auth(email))
+        self.assertEqual(r.status_code, 200)
+
+    def test_grant_missing_user_404(self):
+        r = self.client.patch("/api/admin/users/noone@example.com", headers=_auth(self._ADMIN), json={"is_admin": True})
+        self.assertEqual(r.status_code, 404)
+
     def test_create_requires_valid_admin(self):
         r = self.client.post("/api/admin/users", headers=_auth("hacker@evil.com"), json={
             "email": "h@evil.com", "name": "Hacker",
@@ -1081,6 +1163,72 @@ class TestAdminBackup(unittest.TestCase):
     def test_backup_non_admin_forbidden(self):
         r = self.client.get("/api/admin/backup", headers=_auth("hacker@evil.com"))
         self.assertEqual(r.status_code, 403)
+
+
+class TestAdminPageGate(unittest.TestCase):
+    _ADMIN = "ammarfitwalla@gmail.com"
+
+    def setUp(self):
+        _init_test_db()
+        self._conn_patcher = patch("db._get_conn", _make_conn_patch())
+        self._conn_patcher.start()
+
+        from fastapi.testclient import TestClient
+        from api.main import app
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        self._conn_patcher.stop()
+
+    def test_admin_page_logged_out_404(self):
+        r = self.client.get("/admin")
+        self.assertEqual(r.status_code, 404)
+        self.assertNotIn("Admin Dashboard", r.text)
+
+    def test_admin_page_malformed_cookie_404(self):
+        self.client.cookies.set("ja_token", "not.a.jwt")
+        r = self.client.get("/admin")
+        self.assertEqual(r.status_code, 404)
+
+    def test_admin_page_expired_cookie_404(self):
+        from utils.jwt import create_token as _mk_token
+        expired = _mk_token("expiredpage@example.com", expires_minutes=-1)
+        self.client.cookies.set("ja_token", expired)
+        r = self.client.get("/admin")
+        self.assertEqual(r.status_code, 404)
+
+    def test_admin_page_non_admin_cookie_404(self):
+        self.client.cookies.set("ja_token", _auth_token("regular@example.com"))
+        r = self.client.get("/admin")
+        self.assertEqual(r.status_code, 404)
+        self.assertNotIn("Admin Dashboard", r.text)
+
+    def test_admin_page_admin_cookie_200(self):
+        self.client.cookies.set("ja_token", _auth_token(self._ADMIN))
+        r = self.client.get("/admin")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Admin Dashboard", r.text)
+
+    def test_logout_clears_cookie_then_404(self):
+        self.client.cookies.set("ja_token", _auth_token(self._ADMIN))
+        self.assertEqual(self.client.get("/admin").status_code, 200)
+        r = self.client.get("/logout")
+        self.assertEqual(r.status_code, 200)
+        sc = r.headers.get("set-cookie", "")
+        self.assertTrue(sc.lower().startswith("ja_token="))
+        self.assertIn("Max-Age=0", sc)
+        # Browser honors the delete, so a subsequent GET has no cookie jar entry.
+        self.client.cookies.clear()
+        self.assertEqual(self.client.get("/admin").status_code, 404)
+
+    def test_admin_html_alias_gated(self):
+        r = self.client.get("/admin.html")
+        self.assertEqual(r.status_code, 404)
+        self.assertNotIn("Admin Dashboard", r.text)
+        self.client.cookies.set("ja_token", _auth_token(self._ADMIN))
+        r = self.client.get("/admin.html")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Admin Dashboard", r.text)
 
 
 class TestJWTGuard(unittest.TestCase):

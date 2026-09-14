@@ -11,10 +11,12 @@ from api.deps import get_current_user
 
 from db import get_user, create_user, save_verification_code, verify_code, get_custom_companies, add_custom_company
 from db import update_user_refer_opt_in, set_user_invited_by, credit_invite_bonus
+from db import update_user_last_login
 from config import COMPANIES
 from utils.client_ip import get_client_ip
 from utils.rate_limiter import check_rate_limit
 from utils.jwt import create_token
+from config import JWT_ACCESS_TOKEN_MINUTES
 
 DEV_MODE = False  # Set to True for development mode, False for production
 
@@ -48,6 +50,38 @@ def _copy_search_resume(search_id: str, email: str):
         return
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def _token_response(request: Request, user: dict) -> JSONResponse:
+    """JSON token response that also drops the session token into an HttpOnly
+    cookie so server-side page routes (/admin) can check login state on a plain
+    navigation GET, which carries no Authorization header."""
+    # A token is only ever issued on a successful login (OTP verify), so this is
+    # the authoritative "last login" moment.
+    update_user_last_login(user["email"])
+    token = create_token(user["email"])
+    resp = JSONResponse({
+        "ok": True,
+        "token": token,
+        "user": {
+            "email": user["email"],
+            "name": user["name"],
+            "company": user.get("company", ""),
+            "position": user.get("position", ""),
+            "linkedin_url": user.get("linkedin_url", ""),
+            "referral_credits": user.get("referral_credits", 0),
+            "refer_opt_in": user.get("refer_opt_in", 0),
+        },
+    })
+    resp.set_cookie(
+        "ja_token", token,
+        max_age=max(JWT_ACCESS_TOKEN_MINUTES * 60, 0),
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+        path="/",
+    )
+    return resp
 
 
 class SendCodeRequest(BaseModel):
@@ -93,7 +127,7 @@ async def auth_send_code(req: SendCodeRequest):
 
 
 @router.post("/verify-code")
-async def auth_verify_code(req: VerifyCodeRequest):
+async def auth_verify_code(request: Request, req: VerifyCodeRequest):
     req.email = req.email.strip().lower()
     if not check_rate_limit(f"verify_code:{req.email}", 5, 300):
         return JSONResponse(status_code=429, content={"ok": False, "error": "Too many attempts. Try again later."})
@@ -102,14 +136,14 @@ async def auth_verify_code(req: VerifyCodeRequest):
         if not user:
             name = req.email.split("@")[0]
             user = create_user(req.email, name)
-        return {"ok": True, "token": create_token(user["email"]), "user": {"email": user["email"], "name": user["name"], "company": user.get("company", ""), "position": user.get("position", ""), "linkedin_url": user.get("linkedin_url", ""), "referral_credits": user.get("referral_credits", 0), "refer_opt_in": user.get("refer_opt_in", 0)}}
+        return _token_response(request, user)
     if not verify_code(req.email, req.code):
         return {"ok": False, "error": "Invalid or expired code"}
     user = get_user(req.email)
     if not user:
         name = req.email.split("@")[0]
         user = create_user(req.email, name)
-    return {"ok": True, "token": create_token(user["email"]), "user": {"email": user["email"], "name": user["name"], "company": user.get("company", ""), "position": user.get("position", ""), "linkedin_url": user.get("linkedin_url", ""), "referral_credits": user.get("referral_credits", 0), "refer_opt_in": user.get("refer_opt_in", 0)}}
+    return _token_response(request, user)
 
 
 @router.post("/register")

@@ -2,8 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from api.deps import get_current_user
-from config import ADMIN_EMAIL
-from db import add_saved_job, is_job_saved, get_saved_jobs, get_saved_job_owner, update_saved_job_status, delete_saved_job, batch_check_saved, get_latest_referral_scores
+from db import add_saved_job, is_job_saved, get_saved_jobs, get_saved_job_owner, update_saved_job_status, delete_saved_job, batch_check_saved, get_latest_referral_scores, is_admin_user
 
 router = APIRouter(prefix="/api/saved-jobs", tags=["saved-jobs"])
 
@@ -42,7 +41,7 @@ async def saved_jobs_create(req: SaveJobRequest, user: dict = Depends(get_curren
 async def saved_jobs_list(email: str = Query(""), status: str = Query(""),
                           user: dict = Depends(get_current_user)):
     # Admin may view any user's saved jobs via the email query; everyone else is scoped to their own token.
-    if email and email.lower() != user["email"].lower() and user["email"].lower() != ADMIN_EMAIL.lower():
+    if email and email.lower() != user["email"].lower() and not is_admin_user(user["email"]):
         raise HTTPException(status_code=403, detail="Not authorized")
     email = email or user["email"]
     jobs = get_saved_jobs(email, status)
@@ -73,7 +72,7 @@ async def saved_jobs_batch_check(req: BatchCheckRequest, user: dict = Depends(ge
 @router.patch("/{job_id}/status")
 async def saved_jobs_update_status(job_id: int, req: UpdateStatusRequest, user: dict = Depends(get_current_user)):
     owner = get_saved_job_owner(job_id)
-    if owner and owner.lower() != user["email"].lower() and user["email"].lower() != ADMIN_EMAIL.lower():
+    if owner and owner.lower() != user["email"].lower() and not is_admin_user(user["email"]):
         raise HTTPException(status_code=403, detail="Not authorized")
     ok = update_saved_job_status(job_id, req.status)
     return {"ok": ok}
@@ -82,7 +81,7 @@ async def saved_jobs_update_status(job_id: int, req: UpdateStatusRequest, user: 
 @router.delete("/{job_id}")
 async def saved_jobs_delete(job_id: int, user: dict = Depends(get_current_user)):
     owner = get_saved_job_owner(job_id)
-    if owner and owner.lower() != user["email"].lower() and user["email"].lower() != ADMIN_EMAIL.lower():
+    if owner and owner.lower() != user["email"].lower() and not is_admin_user(user["email"]):
         raise HTTPException(status_code=403, detail="Not authorized")
     ok = delete_saved_job(job_id)
     return {"deleted": ok}

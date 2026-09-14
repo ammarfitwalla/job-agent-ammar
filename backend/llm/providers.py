@@ -65,7 +65,6 @@ class GroqProvider(BaseProvider):
         self._last_usage = None
 
     def chat(self, prompt: str, max_tokens: int = 600, cancel_check: Optional[Callable[[], bool]] = None) -> str:
-        print(f"[GROQ DBG] key='{self._api_key[:12]}...' model='{self._model}' prompt_len={len(prompt)}")
         for attempt in range(3):
             if cancel_check and cancel_check():
                 log(f"[GROQ] Cancelled during retry — aborting")
@@ -84,7 +83,6 @@ class GroqProvider(BaseProvider):
                 )
                 content = completion.choices[0].message.content
                 self._last_usage = completion.usage
-                print(f"[GROQ DBG] attempt={attempt+1} finish={completion.choices[0].finish_reason} content_len={len(content) if content else 0} content_none={content is None}")
                 return content or ""
             except RateLimitError as e:
                 wait = self._backoff(attempt, base=10.0, max_wait=60.0)
@@ -95,7 +93,6 @@ class GroqProvider(BaseProvider):
                         return ""
                     time.sleep(0.5)
             except Exception as e:
-                print(f"[GROQ DBG] EXCEPTION: {type(e).__name__}: {e}")
                 log(f"[GROQ ERROR] {e}")
                 return ""
         log("[GROQ] All retries exhausted")

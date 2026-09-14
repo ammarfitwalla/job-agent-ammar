@@ -8,7 +8,6 @@ from typing import Optional
 from fastapi.responses import JSONResponse, FileResponse
 
 from api.deps import get_current_user
-from config import ADMIN_EMAIL
 from db import (
     create_referral_request, get_incoming_referrals, get_outgoing_referrals,
     update_referral_status, get_referral_request, get_user, confirm_referral,
@@ -16,6 +15,7 @@ from db import (
     get_referral_score, upsert_referral_score,
     add_referral_notify, get_referral_notifies,
     get_user_by_referrer_key, referrer_key,
+    is_admin_user,
 )
 from utils.client_ip import get_client_ip
 from utils.rate_limiter import check_rate_limit
@@ -321,7 +321,7 @@ async def referral_resume(request_id: int = Query(...), user: dict = Depends(get
     if req.get("status") != "accepted":
         raise HTTPException(403, "Resume is only available after the request is accepted")
     allowed = {req.get("from_email", "").lower(), req.get("to_email", "").lower()}
-    if user["email"].lower() not in allowed and user["email"].lower() != ADMIN_EMAIL.lower():
+    if user["email"].lower() not in allowed and not is_admin_user(user["email"]):
         raise HTTPException(403, "Not authorized")
     fname = req.get("resume_filename") or ""
     if not fname:

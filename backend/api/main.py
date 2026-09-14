@@ -13,7 +13,8 @@ from fastapi.staticfiles import StaticFiles
 from api.routes import jobs, scrape, resume, roles, states, cities, events, leads, admin, auth, profile, saved_jobs, visits, users, referrals, stats, joblink
 import json
 from db import init_db
-from config import ADMIN_EMAIL, JWT_ALLOW_DEV_SECRET
+from config import JWT_ALLOW_DEV_SECRET
+from db import is_admin_user
 from utils.jwt import JwtError, decode_token, ensure_secret
 
 VOTE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "votes.json")
@@ -192,7 +193,7 @@ async def auth_guard(request: Request, call_next):
     if _is_admin_class(request.method, path):
         if not user:
             return JSONResponse(status_code=401, content={"detail": "Invalid or missing credentials"})
-        if user["email"].lower() != ADMIN_EMAIL.lower():
+        if not is_admin_user(user["email"]):
             return JSONResponse(status_code=403, content={"detail": "Not authorized"})
         return await call_next(request)
 
@@ -272,12 +273,47 @@ _landing_html = os.path.join(_frontend_dir, "landing.html")
 _app_html = os.path.join(_frontend_dir, "index.html")
 _profile_html = os.path.join(_frontend_dir, "profile.html")
 
+_NOT_FOUND_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Page not found</title></head>
+<body style="margin:0;min-height:100vh;background:#f8fafc;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif">
+  <div style="text-align:center;padding:20px">
+    <div style="font-size:64px;font-weight:800;letter-spacing:-0.03em;color:#e2e8f0;line-height:1">404</div>
+    <div style="font-size:15px;font-weight:600;color:#64748b;margin-top:8px">Page not found.</div>
+  </div>
+</body>
+</html>"""
+
 
 @app.get("/admin")
-async def admin_redirect():
-    if os.path.isfile(_admin_html):
-        return FileResponse(_admin_html)
-    return PlainTextResponse("admin.html not found", status_code=404)
+async def admin_redirect(request: Request):
+    # Server-side gate: only a signed-in admin sees the panel. A plain GET has no
+    # Authorization header, so login state comes from the HttpOnly ja_token cookie
+    # set at verify-code; everyone else gets an innocuous 404 page.
+    token = request.cookies.get("ja_token")
+    if token:
+        try:
+            payload = decode_token(token.strip())
+            sub = (payload.get("sub") or "").strip()
+            if sub and is_admin_user(sub):
+                if os.path.isfile(_admin_html):
+                    return FileResponse(_admin_html)
+        except JwtError:
+            pass
+    return PlainTextResponse(_NOT_FOUND_HTML, status_code=404, media_type="text/html")
+
+
+@app.get("/admin.html")
+async def admin_html_redirect(request: Request):
+    # Same gate for the raw static-file alias so the panel isn't fetchable directly.
+    return await admin_redirect(request)
+
+
+@app.get("/logout")
+async def logout_clear_cookie():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie("ja_token", path="/")
+    return resp
 
 
 @app.get("/app")

@@ -111,7 +111,14 @@ def init_db():
                 refer_opt_in INTEGER DEFAULT 0,
                 invited_by TEXT DEFAULT '',
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                last_login TEXT DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS admin_users (
+                email TEXT PRIMARY KEY REFERENCES users(email),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                granted_by TEXT DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS verification_codes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -407,6 +414,11 @@ def init_db():
             cur.execute("ALTER TABLE users ADD COLUMN employment_status TEXT DEFAULT ''")
         except Exception:
             pass
+        # Migrate existing users table — add last_login column
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN last_login TEXT DEFAULT ''")
+        except Exception:
+            pass
         try:
             cur.execute("""UPDATE users SET employment_status = CASE company
                 WHEN 'Student' THEN 'student'
@@ -415,6 +427,40 @@ def init_db():
                 WHEN 'Career Break' THEN 'career_break'
                 ELSE employment_status END
                 WHERE employment_status = ''""")
+        except Exception:
+            pass
+        # Migrate users — dedicated admin membership table. Rows only ever
+        # reference existing users; the owner (ADMIN_EMAIL) is seeded so it
+        # shows up in admin listings and is always admin regardless.
+        try:
+            cur.execute("""CREATE TABLE IF NOT EXISTS admin_users (
+                email TEXT PRIMARY KEY REFERENCES users(email),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                granted_by TEXT DEFAULT ''
+            )""")
+        except Exception:
+            pass
+        try:
+            from config import ADMIN_EMAIL
+            owner = (ADMIN_EMAIL or "").strip().lower()
+            if owner:
+                cur.execute(
+                    "INSERT OR IGNORE INTO admin_users (email, created_at, updated_at, granted_by) VALUES (?, ?, ?, ?)",
+                    (owner, _now(), _now(), "seed"),
+                )
+        except Exception:
+            pass
+        # admin_users must only ever contain accounts that exist in users:
+        # drop orphans, but keep the owner (its admin access is implicit).
+        try:
+            from config import ADMIN_EMAIL
+            owner = (ADMIN_EMAIL or "").strip().lower()
+            if owner:
+                cur.execute(
+                    "DELETE FROM admin_users WHERE LOWER(email) != ? AND email NOT IN (SELECT email FROM users)",
+                    (owner,),
+                )
         except Exception:
             pass
         # Migrate existing referral_requests table — add dual-confirmation columns
@@ -1193,6 +1239,14 @@ def update_user_name(email: str, name: str):
                          (name, _now(), email))
             conn.commit()
 
+
+def update_user_last_login(email: str):
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute("UPDATE users SET last_login = ? WHERE email = ?",
+                         (_now(), email))
+            conn.commit()
+
 def update_user_profile(email: str, name: str = None, company: str = None, position: str = None, employment_status: str = None, linkedin_url: str = None, resume_filename: str = None, city: str = None, state: str = None, country: str = None):
     fields = []
     values = []
@@ -1363,6 +1417,50 @@ def update_user_admin(email: str, name: str = None, company: str = None, positio
     with _write_lock:
         with _get_conn() as (conn, cur):
             cur.execute(f"UPDATE users SET {', '.join(fields)} WHERE email = ?", values)
+            conn.commit()
+            return cur.rowcount > 0
+
+
+def is_admin_user(email: str) -> bool:
+    """True if the email is the configured owner or belongs to an account
+    present in the admin_users table (case-insensitive)."""
+    if not email:
+        return False
+    email_l = email.strip().lower()
+    try:
+        from config import ADMIN_EMAIL
+        if email_l == (ADMIN_EMAIL or "").strip().lower():
+            return True
+    except Exception:
+        pass
+    with _get_conn() as (conn, cur):
+        cur.execute("SELECT 1 FROM admin_users WHERE LOWER(email) = ?", (email_l,))
+        return cur.fetchone() is not None
+
+
+def grant_admin(email: str, granted_by: str = "") -> bool:
+    """Add an existing user to the admin list. Only users already in the users
+    table can be granted admin (the admin list references users only)."""
+    email = (email or "").strip().lower()
+    if not email or not get_user(email):
+        return False
+    now = _now()
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute(
+                "INSERT OR IGNORE INTO admin_users (email, created_at, updated_at, granted_by) VALUES (?, ?, ?, ?)",
+                (email, now, now, granted_by or ""),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+
+def revoke_admin(email: str) -> bool:
+    """Remove an account from the admin list."""
+    email = (email or "").strip().lower()
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute("DELETE FROM admin_users WHERE LOWER(email) = ?", (email,))
             conn.commit()
             return cur.rowcount > 0
 

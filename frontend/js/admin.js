@@ -1,31 +1,15 @@
 // ── Auth Guard ──
-const _adminEmail = "ammarfitwalla@gmail.com";
-let _lastGatePromptAt = 0;
-const _GATE_PROMPT_DEBOUNCE_MS = 60000;
-
-function showAdminLoginGate(message) {
-  const gate = document.getElementById("adminAuthGate");
-  if (!gate) return;
-  const now = Date.now();
-  if (now - _lastGatePromptAt < _GATE_PROMPT_DEBOUNCE_MS) return;
-  _lastGatePromptAt = now;
+function showNotFound() {
+  const el = document.getElementById("adminNotFound");
+  if (el) el.style.display = "flex";
+  const real = document.getElementById("realContent");
+  if (real) real.style.display = "none";
   stopRefresh();
-  const emailInput = document.getElementById("adminGateEmail");
-  if (emailInput && !emailInput.value) emailInput.value = window.getAuthEmail() || _adminEmail;
-  const err = document.getElementById("adminGateError");
-  if (err) { err.textContent = message || ""; err.style.display = message ? "block" : "none"; }
-  gate.style.display = "flex";
-}
-
-function hideAdminLoginGate() {
-  const gate = document.getElementById("adminAuthGate");
-  if (!gate) return;
-  gate.style.display = "none";
 }
 
 function _gateIfNeeded(r) {
   if (r && (r.status === 401 || r.status === 403)) {
-    showAdminLoginGate(r.status === 403 ? "Not authorized for admin access." : "Please sign in to continue.");
+    showNotFound();
     return true;
   }
   return false;
@@ -36,68 +20,6 @@ async function adminApi(path, opts) {
   if (_gateIfNeeded(r)) return null;
   return r;
 }
-
-function _gateError(msg) {
-  const err = document.getElementById("adminGateError");
-  if (err) { err.textContent = msg || ""; err.style.display = msg ? "block" : "none"; }
-}
-
-// ── OTP Login Gate ──
-async function sendAdminCode() {
-  const email = document.getElementById("adminGateEmail").value.trim();
-  _gateError("");
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { _gateError("Enter a valid email."); return; }
-  const btn = document.getElementById("adminGateSendBtn");
-  const orig = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = "Sending...";
-  try {
-    const r = await fetch("/api/auth/send-code", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    const d = await r.json();
-    if (!d.ok) { _gateError(d.error || "Could not send code."); return; }
-    const wrap = document.getElementById("adminGateOtpWrap");
-    if (wrap) { wrap.style.display = "block"; }
-    if (d.code) { document.getElementById("adminGateOtp").value = d.code; }
-    const otp = document.getElementById("adminGateOtp");
-    if (otp) otp.focus();
-  } catch {
-    _gateError("Network error.");
-  } finally {
-    btn.disabled = false;
-    btn.textContent = orig;
-  }
-}
-
-async function verifyAdminCode() {
-  const email = document.getElementById("adminGateEmail").value.trim();
-  const code = document.getElementById("adminGateOtp").value.trim();
-  if (!code) { _gateError("Enter the code you received."); return; }
-  const btn = document.getElementById("adminGateVerifyBtn");
-  const orig = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = "Verifying...";
-  try {
-    const r = await fetch("/api/auth/verify-code", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, code }),
-    });
-    const d = await r.json();
-    if (!d.ok || !d.token) { _gateError(d.error || "Invalid code."); return; }
-    window.setAuthSession(d.token, (d.user && d.user.email) || email);
-    hideAdminLoginGate();
-    location.reload();
-  } catch {
-    _gateError("Network error.");
-  } finally {
-    btn.disabled = false;
-    btn.textContent = orig;
-  }
-}
-
-window.addEventListener("ja:auth-required", () => showAdminLoginGate());
 
 function _esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
@@ -608,7 +530,7 @@ async function loadRegistrations() {
     }
 
     if (!regs.length) {
-      document.getElementById("registrationBody").innerHTML = '<tr><td colspan="12"><div class="empty">No registrations yet</div></td></tr>';
+      document.getElementById("registrationBody").innerHTML = '<tr><td colspan="14"><div class="empty">No registrations yet</div></td></tr>';
       return;
     }
 
@@ -627,6 +549,7 @@ async function loadRegistrations() {
           <td style="white-space:nowrap">${u.created_at ? formatDate(u.created_at) : "\u2014"}</td>
           <td>${esc(u.name) || "\u2014"}</td>
           <td>${esc(u.email)}</td>
+          <td style="text-align:center">${u.is_admin ? `<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#4f46e5;background:#eef2ff;border:1px solid #e0e7ff">Admin</span>` : ""}</td>
           <td>${status}</td>
           <td>${esc(u.company) || "\u2014"}</td>
           <td>${esc(u.position) || "\u2014"}</td>
@@ -635,9 +558,10 @@ async function loadRegistrations() {
           <td class="jobs-count" data-email="${esc(u.email)}">...</td>
           <td style="text-align:center">${u.referral_credits ?? 0}</td>
           <td style="white-space:nowrap">${u.updated_at ? formatDate(u.updated_at) : "\u2014"}</td>
+          <td style="white-space:nowrap">${u.last_login ? formatDate(u.last_login) : "\u2014"}</td>
         </tr>
         <tr class="jobs-detail-row" id="jobs-detail-${i}" style="display:none">
-          <td colspan="12" style="padding:0"><div class="jobs-detail-cell"><div class="jobs-loading">Loading...</div></div></td>
+          <td colspan="14" style="padding:0"><div class="jobs-detail-cell"><div class="jobs-loading">Loading...</div></div></td>
         </tr>`;
     }
 
@@ -726,6 +650,8 @@ function openUserModal(user) {
   document.getElementById("userCreditsInput").value = user ? (user.referral_credits ?? 0) : "";
   document.getElementById("userOptInWrap").style.display = user ? "flex" : "none";
   document.getElementById("userOptInInput").checked = user ? !!user.refer_opt_in : false;
+  document.getElementById("userAdminGroup").style.display = user ? "flex" : "none";
+  document.getElementById("userAdminInput").checked = user ? !!user.is_admin : false;
   _userModalError("");
   const modal = document.getElementById("userModal");
   modal.style.display = "flex";
@@ -737,8 +663,6 @@ function selectUserStatus(status) {
   const showPosition = status === "employed" || status === "laid_off";
   document.getElementById("userCompanyGroup").style.display = showCompany ? "block" : "none";
   document.getElementById("userPositionGroup").style.display = showPosition ? "block" : "none";
-  if (!showCompany) document.getElementById("userCompanyInput").value = "";
-  if (!showPosition) document.getElementById("userPositionInput").value = "";
   _userModalError("");
 }
 
@@ -761,9 +685,15 @@ async function saveUser() {
     _userModalError("Enter a company name, or choose a different status.");
     return;
   }
-  const company = selectedStatus === "employed" ? companyText : "";
+  const editing = !!_editingUserEmail;
+  const origUser = _editingUser || {};
+  // Never wipe an existing company/position just because the selected status hides
+  // those fields — preserve what's already stored unless the field is active.
+  const company = selectedStatus === "employed" ? companyText : (editing ? (origUser.company || "") : "");
+  const position = selectedStatus === "employed" || selectedStatus === "laid_off"
+    ? document.getElementById("userPositionInput").value.trim()
+    : (editing ? (origUser.position || "") : "");
   const employment_status = selectedStatus === "not_specified" ? "" : selectedStatus;
-  const position = document.getElementById("userPositionInput").value.trim();
   const linkedin_url = document.getElementById("userLinkedinInput").value.trim();
   const base = { name, company, position, employment_status, linkedin_url };
 
@@ -778,7 +708,6 @@ async function saveUser() {
       const credits = parseInt(document.getElementById("userCreditsInput").value, 10) || 0;
       const optIn = document.getElementById("userOptInInput").checked ? 1 : 0;
       const payload = {};
-      const origUser = _editingUser || {};
       if (name !== (origUser.name || "")) payload.name = name;
       if (company !== (origUser.company || "")) payload.company = company;
       if (position !== (origUser.position || "")) payload.position = position;
@@ -786,6 +715,8 @@ async function saveUser() {
       if (linkedin_url !== (origUser.linkedin_url || "")) payload.linkedin_url = linkedin_url;
       if (credits !== (origUser.referral_credits ?? 0)) payload.referral_credits = credits;
       if (optIn !== (origUser.refer_opt_in ? 1 : 0)) payload.refer_opt_in = optIn;
+      const wantsAdmin = document.getElementById("userAdminInput").checked;
+      if (!!wantsAdmin !== !!origUser.is_admin) payload.is_admin = wantsAdmin;
       if (Object.keys(payload).length === 0) {
         closeUserModal();
         loadRegistrations();
@@ -1016,13 +947,16 @@ window.loadDbInfo = loadDbInfo;
 window.restoreDB = restoreDB;
 window.mergeDB = mergeDB;
 window.downloadBackup = downloadBackup;
-window.sendAdminCode = sendAdminCode;
-window.verifyAdminCode = verifyAdminCode;
 
 // ── Init ──
-if (!window.getAuthToken()) {
-  showAdminLoginGate();
-} else {
-  loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage(); loadDbInfo(); loadCacheStats(); loadServerStats();
-  startRefresh();
-}
+// The first admin API call decides the page: 200 = dashboard, 401/403 =
+// not-found (no admin hints). Admins sign in through the main app first.
+loadStats();
+loadSessions();
+loadRegistrations();
+loadVisits();
+loadComboUsage();
+loadDbInfo();
+loadCacheStats();
+loadServerStats();
+startRefresh();

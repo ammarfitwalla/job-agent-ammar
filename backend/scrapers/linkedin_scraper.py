@@ -51,9 +51,8 @@ def _save_debug_response(resp: requests.Response, label: str):
             f.write(f"<!-- Status: {resp.status_code} -->\n")
             f.write(f"<!-- Label: {label} -->\n")
             f.write(resp.text)
-        print(f"[LINKEDIN-DEBUG] Saved {label} response to {path}")
-    except Exception as e:
-        print(f"[LINKEDIN-DEBUG] Failed to save debug response: {e}")
+    except Exception:
+        pass
 
 
 USER_AGENTS = [

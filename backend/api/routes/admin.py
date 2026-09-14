@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from api.deps import get_current_user
-from config import ADMIN_EMAIL
+from db import is_admin_user
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -33,6 +33,7 @@ class UpdateUserRequest(BaseModel):
     linkedin_url: str | None = None
     referral_credits: int | None = None
     refer_opt_in: int | None = None
+    is_admin: bool | None = None
 
 
 def _classify(s):
@@ -342,13 +343,24 @@ async def admin_scores():
 
 @router.get("/registrations")
 async def admin_registrations():
-    from db import get_all_users
+    from db import _get_conn
 
-    return {"registrations": get_all_users(limit=500)}
+    with _get_conn() as (conn, cur):
+        cur.execute("""
+            SELECT u.*, (a.email IS NOT NULL) AS is_admin
+            FROM users u
+            LEFT JOIN admin_users a ON LOWER(a.email) = LOWER(u.email)
+            ORDER BY u.created_at DESC LIMIT 500
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
+    for u in rows:
+        u["is_admin"] = bool(u.get("is_admin"))
+    return {"registrations": rows}
 
 
 def _check_admin(email: str):
-    if email.lower() != ADMIN_EMAIL.lower():
+    from db import is_admin_user
+    if not is_admin_user(email):
         raise HTTPException(403, "Unauthorized")
 
 
@@ -370,10 +382,27 @@ async def admin_create_user(req: CreateUserRequest, user: dict = Depends(get_cur
 @router.patch("/users/{user_email}")
 async def admin_update_user(user_email: str, req: UpdateUserRequest, user: dict = Depends(get_current_user)):
     _check_admin(user["email"])
-    from db import update_user_admin, get_user
+    from db import update_user_admin, get_user, is_admin_user
     target = get_user(user_email)
     if not target:
         raise HTTPException(404, "User not found")
+    target_email = target["email"]
+    caller_email = user["email"]
+    if req.is_admin is not None:
+        # Owner (configured admin email) can never be demoted.
+        from config import ADMIN_EMAIL
+        if not req.is_admin and target_email.strip().lower() == (ADMIN_EMAIL or "").strip().lower():
+            raise HTTPException(400, "The owner account cannot be demoted")
+        # Prevent an admin from locking themselves out.
+        if not req.is_admin and target_email.strip().lower() == caller_email.strip().lower():
+            raise HTTPException(400, "You cannot remove admin access from your own account")
+        if req.is_admin:
+            if not is_admin_user(target_email):
+                from db import grant_admin
+                grant_admin(target_email, granted_by=caller_email)
+        else:
+            from db import revoke_admin
+            revoke_admin(target_email)
     update_user_admin(
         user_email,
         name=req.name,
@@ -417,7 +446,7 @@ async def admin_leads():
 
 @router.get("/db/info")
 async def admin_db_info(user: dict = Depends(get_current_user)):
-    if user["email"].lower() != ADMIN_EMAIL.lower():
+    if not is_admin_user(user["email"]):
         return JSONResponse(status_code=403, content={"error": "Unauthorized"})
     from db import _get_conn, _DB_PATH
 
@@ -433,7 +462,7 @@ async def admin_db_info(user: dict = Depends(get_current_user)):
 
 @router.get("/backup")
 async def admin_download_backup(user: dict = Depends(get_current_user)):
-    if user["email"].lower() != ADMIN_EMAIL.lower():
+    if not is_admin_user(user["email"]):
         return JSONResponse(status_code=403, content={"error": "Unauthorized"})
     from db import _get_conn
 
@@ -483,7 +512,7 @@ async def admin_download_backup(user: dict = Depends(get_current_user)):
 
 @router.post("/db/restore")
 async def admin_db_restore(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    if user["email"].lower() != ADMIN_EMAIL.lower():
+    if not is_admin_user(user["email"]):
         return {"ok": False, "error": "Unauthorized"}
     from db import _DB_PATH, init_db
 
@@ -512,7 +541,7 @@ async def admin_db_restore(file: UploadFile = File(...), user: dict = Depends(ge
 
 @router.post("/db/merge")
 async def admin_db_merge(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    if user["email"].lower() != ADMIN_EMAIL.lower():
+    if not is_admin_user(user["email"]):
         return {"ok": False, "error": "Unauthorized"}
     from db import _get_conn
     import tempfile, os, uuid
@@ -568,7 +597,7 @@ async def admin_db_merge(file: UploadFile = File(...), user: dict = Depends(get_
 
 @router.post("/resume/upload")
 async def admin_resume_upload(files: list[UploadFile] = File(...), user: dict = Depends(get_current_user)):
-    if user["email"].lower() != ADMIN_EMAIL.lower():
+    if not is_admin_user(user["email"]):
         return {"ok": False, "error": "Unauthorized"}
     resumes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resumes")
     os.makedirs(resumes_dir, exist_ok=True)

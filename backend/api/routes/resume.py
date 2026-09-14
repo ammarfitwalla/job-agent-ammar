@@ -132,33 +132,22 @@ async def extract_keywords(req: ResumeKeywordsRequest, request: Request = None):
     for attempt in range(2):
         try:
             prompt = EXTRACT_PROMPT.format(available_roles=json.dumps(TARGET_ROLES), resume=sanitize_resume_text(req.resume_text))
-            print(f"[KEYWORDS] Calling LLM attempt {attempt+1}/2 (prompt_len={len(prompt)})")
             response = LLMClient.keyword_chat(prompt, max_tokens=4000)
-            print(f"[KEYWORDS] LLM response received ({len(response)} chars)")
             if response:
-                print(f"[KEYWORDS] First 200 chars: {response[:200]}")
                 parsed = extract_json(response)
                 if isinstance(parsed, dict):
                     words = parsed.get("keywords", [])[:30]
                     attempt_roles = parsed.get("suggested_roles", [])[:3]
                     if attempt_roles and not suggested:
                         suggested = attempt_roles
-                    print(f"[KEYWORDS] Parsed: {len(words)} keywords, {len(attempt_roles)} suggested roles (kept {len(suggested)})")
                     if words:
                         break
-                    print(f"[KEYWORDS] Dict parsed but empty keywords, attempt {attempt+1}/2")
                 elif isinstance(parsed, list):
                     words = parsed[:30]
-                    print(f"[KEYWORDS] Legacy list format, attempt {attempt+1}/2")
                     if words:
                         break
-                else:
-                    print(f"[KEYWORDS] Parse failed type={type(parsed).__name__}, attempt {attempt+1}/2")
-            else:
-                print(f"[KEYWORDS] Empty response, attempt {attempt+1}/2")
-        except Exception as e:
-            print(f"[KEYWORDS] Exception on attempt {attempt+1}/2: {e}")
+        except Exception:
+            pass
 
     keywords = [{"word": w, "suggested": True, "selected": True} for w in words]
-    print(f"[KEYWORDS] Final: {len(keywords)} keywords, {len(suggested)} suggested roles: {suggested}")
     return ResumeKeywordsResponse(keywords=keywords, suggested_roles=suggested)
