@@ -1,10 +1,12 @@
 import smtplib
 import gzip
 import html
+import uuid
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
+from email.utils import formatdate
 import logging
 import os
 
@@ -46,8 +48,11 @@ def send_email(to: str, subject: str, html_body: str, text_body: str | None = No
             msg.attach(MIMEText(text_body, "plain"))
             msg.attach(MIMEText(html_body, "html"))
         msg["Subject"] = subject
-        msg["From"] = EMAIL_USER
+        msg["From"] = f"JobAwn <{EMAIL_USER}>"
         msg["To"] = to
+        msg["Reply-To"] = EMAIL_USER
+        msg["Message-ID"] = f"<{uuid.uuid4()}@{EMAIL_USER.split('@')[-1]}>"
+        msg["Date"] = formatdate(localtime=True)
         return _send_msg_with_retry(msg, to)
     except Exception as e:
         log.warning(f"SMTP failed for {to}: {e}")
