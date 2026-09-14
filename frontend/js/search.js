@@ -60,6 +60,72 @@ let _refreshCooldown = false;
 let _currentPage = 1;
 const _pageSize = 10;
 
+const LOW_RESULTS_THRESHOLD = 10;
+const LOW_RESULTS_CHECK_DELAY_MS = 60 * 1000;
+let _lastSearchLoc = null;
+
+function hideLowResultsBanner() {
+  const b = document.getElementById("lowResultsBanner");
+  if (b) b.classList.add("hidden");
+}
+
+function chipHtml(label, structured) {
+  return `<button type="button" class="low-res-chip inline-flex items-center rounded-full bg-emerald-600 text-white px-3 py-0.5 mx-0.5 text-xs font-bold hover:bg-emerald-700 active:bg-emerald-800 transition-colors" data-loc='${_esc(JSON.stringify(structured))}' data-label="${_esc(label)}">${_esc(label)} &nearr;</button>`;
+}
+
+function showLowResultsBanner(totalJobs) {
+  const b = document.getElementById("lowResultsBanner");
+  if (!b || !_lastSearchLoc) return;
+  if (totalJobs >= LOW_RESULTS_THRESHOLD) return;
+  const loc = _lastSearchLoc;
+  const city = (loc.city || "").trim();
+  const state = (loc.state || "").trim();
+  const country = (loc.country || "").trim();
+  const jobsWord = totalJobs === 1 ? "job" : "jobs";
+  let msg, chips;
+if (city) {
+    msg = `${totalJobs} ${jobsWord} found for ${_esc(city)} yet. Try another city or click to broaden the search to`;
+    chips = [];
+    if (state) chips.push(chipHtml(`${state}, ${country}`, { city: "", state, country, country_code: loc.country_code }));
+    if (country) chips.push(chipHtml(country, { city: "", state: "", country, country_code: loc.country_code }));
+  } else if (state) {
+    msg = `${totalJobs} ${jobsWord} found in ${_esc(state)} yet. Click to broaden the search to`;
+    chips = country ? [chipHtml(country, { city: "", state: "", country, country_code: loc.country_code })] : [];
+  } else {
+    return;
+  }
+  if (!chips.length) return;
+  b.innerHTML = `<div class="flex-1 min-w-0">${msg} ${chips.join(" ")}</div>` +
+    `<button type="button" class="shrink-0 text-amber-600/70 hover:text-amber-900 font-bold leading-none" onclick="hideLowResultsBanner()" aria-label="Dismiss">&times;</button>`;
+  b.classList.remove("hidden");
+}
+
+(function initLowResultsBanner() {
+  const b = document.getElementById("lowResultsBanner");
+  if (!b) return;
+  b.addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-loc]");
+    if (!chip) return;
+    let loc;
+    try { loc = JSON.parse(chip.dataset.loc); } catch { return; }
+    if (_locUI && _locUI.setValue) {
+      _locUI.setValue(chip.dataset.label || "", {
+        city: loc.city || "",
+        state: loc.state || "",
+        country: loc.country || "",
+        country_code: loc.country_code || "",
+      });
+    }
+    cancelActiveSearch();
+    hideLowResultsBanner();
+    const btn = document.getElementById("searchBtn");
+    if (btn) {
+      btn.disabled = false;
+      btn.click();
+    }
+  });
+})();
+
 let suggestedRoles = [];
 let searchIds = [];
 
@@ -1400,6 +1466,7 @@ document.getElementById("internshipToggle").addEventListener("click", () => {
 
 // ===== SEARCH =====
 document.getElementById("searchBtn").addEventListener("click", async () => {
+  hideLowResultsBanner();
   const resume = document.getElementById("resume").value.trim();
   if (!resume) return setStatus("Missing required field: Please paste or upload your resume.", "red");
 
@@ -1471,6 +1538,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   try {
     searchIds = [_searchId];
     const loc = (_locUI && _locUI.getSelected()) || (_locUI ? _resolveLocation() : null);
+    _lastSearchLoc = loc;
     await fetch("/scrape", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1604,6 +1672,11 @@ function pollAllScrapes() {
 
     const totalJobs = allJobs.length;
 
+    if (Date.now() - _searchStart >= LOW_RESULTS_CHECK_DELAY_MS) {
+      if (totalJobs < LOW_RESULTS_THRESHOLD) showLowResultsBanner(totalJobs);
+      else hideLowResultsBanner();
+    }
+
     if (!allDone) {
       if (totalJobs > 0) {
         setStatus(`${totalJobs} jobs collected`, "blue");
@@ -1629,6 +1702,7 @@ function pollAllScrapes() {
       let msg = `Analysis complete — ${totalJobs} jobs found`;
       setStatus(msg, totalJobs ? "green" : "amber");
       document.title = `(${totalJobs}) Jobs - JobAwn`;
+      showLowResultsBanner(totalJobs);
     }
 
     if (consecutiveErrors >= 3) {
