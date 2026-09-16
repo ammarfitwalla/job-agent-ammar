@@ -443,9 +443,9 @@ async function resolveSessionResume(profile) {
 }
 
 function referralResumeNote(filename) {
-  return `<div class="text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1.5 inline-flex items-center gap-1.5">
+  return `<div class="text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 max-w-full w-full">
     <svg class="w-3.5 h-3.5 text-indigo-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-    <span class="min-w-0 truncate"><span class="font-medium text-slate-600">${htmlEscape(filename)}</span> will be sent to the referrer</span>
+    <span class="min-w-0 flex-1 truncate text-ellipsis overflow-hidden"><span class="font-medium text-slate-600">${htmlEscape(filename)}</span> will be sent to the referrer</span>
   </div>`;
 }
 
@@ -523,11 +523,22 @@ async function askReferral(btn, referrerId, toName) {
   const existing = card.parentElement.querySelector(".referral-msg-box");
   if (existing) { existing.remove(); return; }
 
+  const hasJobUrl = !!(btn.dataset && btn.dataset.jobUrl);
   _referralResumeFilename = "";
   _referralResumeReady = false;
   const msgBox = document.createElement("div");
   msgBox.className = "referral-msg-box w-full mt-2 pt-2 border-t border-slate-100";
   msgBox.innerHTML = `
+    ${hasJobUrl ? `
+    <div class="ref-job-row mb-2">
+      <label class="block text-[11px] font-semibold text-slate-500 mb-1">Job link (required)</label>
+      <input type="url" class="ref-job-input w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:bg-white focus:border-indigo-300 transition-colors" placeholder="https://linkedin.com/jobs/view/..." value="${htmlEscape(window._referralJobUrl || '')}" autocomplete="off">
+    </div>
+    <div class="ref-title-row mb-2">
+      <label class="block text-[11px] font-semibold text-slate-500 mb-1">Job title <span class="font-normal text-slate-400">(auto-detected, editable)</span></label>
+      <input type="text" class="ref-title-input w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:bg-white focus:border-indigo-300 transition-colors" placeholder="e.g. Senior Software Engineer" value="${htmlEscape(window._referralJobTitle || '')}" autocomplete="off">
+    </div>
+    ` : ""}
     <div class="ref-resume-row mb-2"></div>
     <textarea class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:bg-white focus:border-indigo-300 resize-none transition-colors" rows="2" placeholder="Add a message (optional)..." maxlength="500"></textarea>
     <div class="flex gap-2 mt-2">
@@ -535,7 +546,52 @@ async function askReferral(btn, referrerId, toName) {
       <button class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-medium transition-colors referral-cancel-btn">Cancel</button>
     </div>`;
   card.parentElement.appendChild(msgBox);
+  if (hasJobUrl) {
+    const jobInput = msgBox.querySelector(".ref-job-input");
+    const titleInput = msgBox.querySelector(".ref-title-input");
+    let titleEditable = true;
+    let titleGuessTimer = null;
+    const guessTitle = () => {
+      clearTimeout(titleGuessTimer);
+      const url = (jobInput ? jobInput.value.trim() : "");
+      if (!/^https?:\/\//i.test(url)) return;
+      titleGuessTimer = setTimeout(async () => {
+        try {
+          const r = await fetch("/api/referrals/resolve-url", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+          });
+          if (r.status === 429 || !r.ok) return;
+          const d = await r.json();
+          if (d && d.job_title && titleEditable) titleInput.value = d.job_title;
+        } catch (e) {}
+      }, 600);
+    };
+    jobInput.addEventListener("input", guessTitle);
+    jobInput.addEventListener("change", guessTitle);
+    titleInput.addEventListener("input", () => { titleEditable = false; });
+  }
   msgBox.querySelector(".referral-send-btn").onclick = function () {
+    if (hasJobUrl) {
+      const jobInput = msgBox.querySelector(".ref-job-input");
+      const titleInput = msgBox.querySelector(".ref-title-input");
+      const jobUrl = (jobInput ? jobInput.value.trim() : "").trim();
+      if (!jobUrl || !/^https?:\/\//i.test(jobUrl)) {
+        const lbl = msgBox.querySelector(".ref-job-row label");
+        if (lbl) { lbl.textContent = "Paste the job link first"; lbl.style.color = "#dc2626"; }
+        let err = msgBox.querySelector(".ref-job-error");
+        if (!err) {
+          err = document.createElement("p");
+          err.className = "ref-job-error text-[11px] text-red-500 font-medium mt-1.5 pl-0.5";
+          err.textContent = "Please paste the job link before sending your request.";
+          msgBox.querySelector(".ref-job-row").appendChild(err);
+        }
+        if (jobInput) jobInput.focus();
+        return;
+      }
+      window._referralJobUrl = jobUrl;
+      window._referralJobTitle = (titleInput ? titleInput.value.trim() : "") || "";
+    }
     if (!_referralResumeFilename) {
       flashResumeRequired(msgBox.querySelector(".ref-resume-row"));
       return;

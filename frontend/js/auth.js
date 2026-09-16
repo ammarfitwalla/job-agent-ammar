@@ -572,9 +572,27 @@ function authGoBack() {
   if (emailInput) emailInput.focus();
 }
 
+function wireEmailSendGate(inputId, btnId) {
+  const input = _el(inputId);
+  const btn = _el(btnId);
+  if (!input || !btn) return;
+  const emailValid = () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.value.trim());
+  const update = () => {
+    const valid = emailValid();
+    btn.disabled = !valid;
+    btn.classList.toggle("opacity-40", !valid);
+    btn.classList.toggle("cursor-not-allowed", !valid);
+  };
+  input.addEventListener("input", update);
+  input.addEventListener("blur", update);
+  update();
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   setupCodeInputs();
   loadAuthCompanyList();
+  wireEmailSendGate("authEmail", "authSendBtn");
+  wireEmailSendGate("promptEmail", "promptSendBtn");
 });
 
 // Expired/missing-session: any protected call that comes back 401 opens the login modal.

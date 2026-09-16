@@ -89,7 +89,7 @@ async def no_cache_frontend(request, call_next):
         path.startswith("/js/")
         or path.endswith(".css")
         or path.endswith(".html")
-        or path in ("/", "/app", "/admin", "/profile")
+        or path in ("/", "/app", "/admin", "/profile", "/referrals")
     ):
         response.headers["Cache-Control"] = "no-cache"
     return response
@@ -104,7 +104,7 @@ async def no_cache_frontend(request, call_next):
 # ==============
 _STATIC_EXT = (".html", ".css", ".js", ".png", ".svg", ".ico", ".webp", ".jpg",
                ".jpeg", ".gif", ".woff", ".woff2", ".txt", ".map")
-_PUBLIC_PATHS = {"/", "/app", "/profile", "/admin", "/health"}
+_PUBLIC_PATHS = {"/", "/app", "/profile", "/admin", "/health", "/referrals"}
 _PUBLIC_PREFIXES = ("/js/", "/css/", "/images/", "/fonts/")
 _PUBLIC_EXACT_API = {
     "/api/stats/public",
@@ -272,6 +272,7 @@ _admin_html = os.path.join(_frontend_dir, "admin.html")
 _landing_html = os.path.join(_frontend_dir, "landing.html")
 _app_html = os.path.join(_frontend_dir, "index.html")
 _profile_html = os.path.join(_frontend_dir, "profile.html")
+_referrals_html = os.path.join(_frontend_dir, "referrals.html")
 
 _NOT_FOUND_HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -328,6 +329,13 @@ async def profile_redirect():
     if os.path.isfile(_profile_html):
         return FileResponse(_profile_html)
     return PlainTextResponse("profile.html not found", status_code=404)
+
+
+@app.get("/referrals")
+async def referrals_redirect():
+    if os.path.isfile(_referrals_html):
+        return FileResponse(_referrals_html)
+    return PlainTextResponse("referrals.html not found", status_code=404)
 
 
 @app.get("/")

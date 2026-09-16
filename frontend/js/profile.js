@@ -126,12 +126,12 @@ function renderProfile(data) {
   }
 
   const locationSection = document.getElementById("profileLocationSection");
+  const locationMissing = document.getElementById("profileLocationMissing");
   const locationEl = document.getElementById("profileLocation");
   const locParts = [data.city, data.state, data.country].filter(Boolean);
-  if (locationSection && locationEl) {
-    locationEl.textContent = locParts.join(", ");
-    locationSection.classList.toggle("hidden", !locParts.length);
-  }
+  if (locationSection) locationSection.classList.toggle("hidden", !locParts.length);
+  if (locationMissing) locationMissing.classList.toggle("hidden", locParts.length > 0);
+  if (locationEl) locationEl.textContent = locParts.join(", ");
 
   window.renderStatusTabs(data.status_counts || {});
 }
@@ -278,6 +278,20 @@ async function saveProfile() {
       city = picked.city || "";
       state = picked.state || "";
       country = picked.country || "";
+    } else {
+      const raw = document.getElementById("editLocation").value.trim();
+      if (raw) {
+        const resolved = _locPicker.resolve(raw) || _locPicker.resolve(raw.split(",").pop().trim());
+        if (resolved) {
+          city = resolved.city || "";
+          state = resolved.state || "";
+          country = resolved.country || "";
+        } else {
+          city = "";
+          state = "";
+          country = raw;
+        }
+      }
     }
   }
   try {
@@ -318,6 +332,8 @@ async function saveProfile() {
       if (locSec && locEl) {
         locEl.textContent = locParts.join(", ");
         locSec.classList.toggle("hidden", !locParts.length);
+        const locMissing = document.getElementById("profileLocationMissing");
+        if (locMissing) locMissing.classList.toggle("hidden", locParts.length > 0);
       }
       const resumeFile = document.getElementById("editResumeFile")?.files?.[0];
       if (resumeFile) {

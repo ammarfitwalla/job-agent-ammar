@@ -1,6 +1,6 @@
 # Pending Tasks
 
-Task numbering follows the discussion on 2026-09-07. Items 3, 6, 8-11 pending; carry-over items at the end. Done and removed: #4 JWT auth, #5 API auth, #7 NVIDIA provider (all deployed 2026-09-11).
+Task numbering follows the discussion on 2026-09-07. Items 3, 6, 8-12 pending; carry-over items at the end. (Completed: #4 JWT auth, #5 API auth, #7 NVIDIA provider, verification-email hardening + spam-hint #12.)
 
 **Sections below are ordered by implementation complexity — simplest first. Deploy only when the user explicitly asks.**
 
@@ -21,6 +21,20 @@ Task numbering follows the discussion on 2026-09-07. Items 3, 6, 8-11 pending; c
 
 - `backend/config.py` intentionally uncommitted (secrets; server copy is source of truth).
 - `stop_on_old.md` + `tmp_usage.json` are untracked scratch — keep or delete.
+- Untracked working-tree files cluttering `git status`: `backend/_3x5.json`, `backend/_tenx.json`, `backend/scripts/check_sri_lanka.py` — gitignore, delete, or commit the check script.
+
+---
+
+## Carry-over — Sri Lanka diagnostics (decision needed)
+
+**Findings (2026-09-14, via `backend/scripts/check_sri_lanka.py`, temp-DB mode):** searching "Sri Lanka" returns **no real jobs**:
+
+- **Indeed:** `jobspy` rejects `country_indeed="sri lanka"` (not in its ~70-country allowlist) — deterministic failure, 0 jobs every time.
+- **LinkedIn:** guest scraper fetched 15 cards, 0 title-matched — `role_match_count` requires *all* role words ("software" AND "developer"); beats like "Software Engineer"/"Java Developer"/"Full Stack Developer" all drop. Sparse-market + over-strict filter → 0 usable jobs.
+- **Naukri:** returns 16 jobs, all Indian (Hyderabad/Bengaluru/Chennai/Pune/…) — location token ignored, serves India-wide results.
+- No cache entries / past sessions for Sri Lanka ever.
+
+**Options:** fix one/all sources (e.g. relax LinkedIn title filter to match ANY role word; map/translate LK for Indeed or add an LK-capable board; Naukri city-token handling), or accept Sri Lanka as unsupported.
 
 ---
 
@@ -107,6 +121,18 @@ Task numbering follows the discussion on 2026-09-07. Items 3, 6, 8-11 pending; c
 **Plan:** `docs/planning/careers_page_plan.md` (`career_sources`/`career_jobs` tables, `careers_scraper.py` monitor registry incl. Greenhouse/Lever/Ashby/SmartRecruiters/Workable, `careers.py` public+admin routes, `/careers` page + link, scheduler job, admin Careers tab, `TestCareers`).
 
 **Not started.** Deploy only when the user explicitly asks.
+
+---
+
+## 12. Stack-aware relevance (tech) — auto-detect, penalty-only
+
+**What/why:** A React developer was shown Angular roles. Auto-learn the user's stack (frameworks + languages) from resume text + profile position, and down-rank conflicting roles server-side so substitute stacks (React↔Angular↔Vue↔Svelte, Flutter↔React Native, Java↔C#) score lower instead of surfacing at the top of a generic search.
+
+**Decisions (2026-09-14, friend feedback):** auto-detect from resume + position (no manual stack input); **penalty only** — conflicting jobs rank lower + amber chip, never hard-excluded within tech; **hard-exclude = different profession** (deterministic profession-sign exclusion e.g. lawyer vs Software Engineer); **tech-only** substitute catalog this pass; server-side filter only — **no query tuning** (scraped queries unchanged).
+
+**Plan:** `docs/planning/stack_aware_relevance.md` — new `backend/match_engine/stack_matcher.py` (substitute groups + profession-signs catalog, `detect_stack`/`classify_job`/cross-domain hard-exclude), deterministic `-35` in-stack conflict penalty + `stack_conflict`/`conflicting_stack` on results, wire through `relevance_engine.filter_jobs` + `scrape.py` + `resume.py` (server-side, auto), frontend amber "Stack mismatch" chip + excluded-count notice, `TestStackMatcher` + `TestStackAwareRelevance`.
+
+**Not started.** Deploy only when the user explicitly asks (see file for full decisions incl. no false-positive guard "React or Angular", no query tuning).
 
 ---
 

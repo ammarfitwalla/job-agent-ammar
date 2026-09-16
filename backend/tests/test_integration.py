@@ -234,7 +234,6 @@ class TestIntegrationAuthFlow(unittest.TestCase):
         email = "llogin@example.com"
         r = self._verify_code(email)
         self.assertEqual(r.status_code, 200)
-
         r = self.client.get("/api/admin/registrations", headers=_auth("ammarfitwalla@gmail.com"))
         self.assertEqual(r.status_code, 200)
         user = [u for u in r.json()["registrations"] if u["email"] == email][0]
@@ -884,6 +883,123 @@ class TestIntegrationReferralNetworkFlow(unittest.TestCase):
         self.assertEqual(r.status_code, 400)
         r2 = self.client.post("/api/referrals/resolve-url", json={"url": ""})
         self.assertEqual(r2.status_code, 400)
+
+
+class TestReferralPage(unittest.TestCase):
+    """Public /referrals page: serves HTML, and skip_score requests bypass AI scoring."""
+
+    def setUp(self):
+        _init_test_db()
+        conn, cur = _fresh_conn()
+        cur.execute("DELETE FROM referral_requests")
+        cur.execute("DELETE FROM referral_notifies")
+        conn.commit()
+        conn.close()
+
+        self._conn_patcher = patch("db._get_conn", _make_conn_patch())
+        self._conn_patcher.start()
+
+        self._dev_mode_patcher = patch("api.routes.auth.DEV_MODE", True)
+        self._dev_mode_patcher.start()
+        self._db_dev_mode_patcher = patch("db.DEV_MODE", True)
+        self._db_dev_mode_patcher.start()
+
+        from utils.rate_limiter import _limits
+        _limits.clear()
+
+        from fastapi.testclient import TestClient
+        from api.main import app
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        self._conn_patcher.stop()
+        self._dev_mode_patcher.stop()
+        self._db_dev_mode_patcher.stop()
+
+    def _register(self, email, name, company="", refer_opt_in=0):
+        r = self.client.post("/api/auth/verify-code", json={"email": email, "code": "123456"})
+        self.assertEqual(r.status_code, 200)
+        return self.client.post("/api/auth/register", headers=_auth(email), json={
+            "email": email, "name": name, "company": company,
+            "refer_opt_in": refer_opt_in,
+        })
+
+    def _referrer_id(self, company):
+        r = self.client.get(f"/api/users/at-company?company={company}")
+        self.assertEqual(r.status_code, 200)
+        users = r.json()["users"]
+        self.assertTrue(users)
+        return users[0]["id"]
+
+    def test_01_referrals_page_serves_html(self):
+        r = self.client.get("/referrals")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Get Referred", r.text)
+        self.assertIn("text/html", r.headers.get("content-type", ""))
+        # Still public (no auth required)
+        r2 = self.client.get("/referrals")
+        self.assertEqual(r2.status_code, 200)
+
+    def test_02_referrer_directory_public(self):
+        self._register("dir1@example.com", "Dir One", "Netflix", 1)
+        self._register("dir2@example.com", "Dir Two", "Netflix")
+        r = self.client.get("/api/users/referrer-directory")
+        self.assertEqual(r.status_code, 200)
+        companies = [c["company"] for c in r.json()["companies"]]
+        self.assertIn("Netflix", companies)
+
+    def test_03_skip_score_does_not_call_llm_and_stores_zero(self):
+        self._register("seeker@example.com", "Seeker", "Google")
+        self._register("ref1@example.com", "Referrer One", "Google", 1)
+        referrer_id = self._referrer_id("Google")
+
+        with patch("api.routes.referrals._get_or_score_referral_job", return_value=77) as mock_score:
+            r = self.client.post("/api/referrals/request", headers=_auth("seeker@example.com"), json={
+                "referrer_id": referrer_id,
+                "job_url": "https://careers.google.com/jobs/123",
+                "job_title": "Software Engineer",
+                "company": "Google",
+                "match_score": 0,
+                "skip_score": True,
+            })
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["ok"])
+        mock_score.assert_not_called()
+
+        conn, cur = _fresh_conn()
+        cur.execute("SELECT match_score FROM referral_requests WHERE from_email = 'seeker@example.com'")
+        row = cur.fetchone()
+        conn.close()
+        self.assertEqual(row[0], 0)
+
+    def test_04_skip_score_still_respects_monthly_limit(self):
+        self._register("seeker2@example.com", "Seeker Two", "Google")
+        self._register("ref2@example.com", "Referrer Two", "Google", 1)
+        referrer_id = self._referrer_id("Google")
+        headers = _auth("seeker2@example.com")
+
+        for i in range(5):
+            r = self.client.post("/api/referrals/request", headers=headers, json={
+                "referrer_id": referrer_id,
+                "job_url": f"https://careers.google.com/jobs/{i}",
+                "job_title": "Software Engineer",
+                "company": "Google",
+                "match_score": 0,
+                "skip_score": True,
+            })
+            self.assertTrue(r.json()["ok"])
+
+        r = self.client.post("/api/referrals/request", headers=headers, json={
+            "referrer_id": referrer_id,
+            "job_url": "https://careers.google.com/jobs/limit-breaker",
+            "job_title": "Software Engineer",
+            "company": "Google",
+            "match_score": 0,
+            "skip_score": True,
+        })
+        data = r.json()
+        self.assertFalse(data["ok"])
+        self.assertIn("Monthly limit reached", data["error"])
 
 
 class TestIntegrationCompanyHarvest(unittest.TestCase):

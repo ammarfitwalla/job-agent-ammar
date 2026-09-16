@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth" style="overflow-x: clip">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Get Referred — JobAwn</title>
+  <meta name="description" content="Browse companies with insider referrers. Paste any job link and request a referral from verified employees.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    .premium-input-field {
+      width: 100%; padding: 10px 14px; border-radius: 12px; border: 1px solid #e2e8f0;
+      font-size: 14px; background: #f8fafc; color: #0f172a; outline: none; transition: all .2s;
+    }
+    .premium-input-field:focus { border-color: #a5b4fc; box-shadow: 0 0 0 3px #eef2ff; }
+    .premium-btn {
+      padding: 10px 18px; border-radius: 12px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all .2s; border: none; outline: none;
+    }
+    .premium-btn-primary {
+      background: #4f46e5; color: #fff; box-shadow: 0 4px 14px rgba(79,70,229,.25);
+    }
+    .premium-btn-primary:hover { background: #4338ca; box-shadow: 0 6px 20px rgba(79,70,229,.35); transform: translateY(-1px); }
+    .premium-btn-primary:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; transform: none; }
+    .employment-pill {
+      padding: 7px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+      border: 1px solid #e2e8f0; background: #fff; color: #64748b; cursor: pointer; transition: all .2s;
+    }
+    .employment-pill:hover { border-color: #c7d2fe; color: #4f46e5; }
+    .employment-pill.active-pill { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+    .employment-pill.active-pill:hover { background: #4338ca; }
+    .fade-in { animation: fadeIn .3s ease-out forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    @media (max-width: 767px) {
+      #referrerPanel.is-open {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+        max-height: 82vh; overflow-y: auto;
+        border-radius: 20px 20px 0 0;
+        box-shadow: 0 -12px 40px rgba(15, 23, 42, 0.22);
+        margin: 0;
+        animation: panelSheetUp .25s ease-out;
+      }
+      #panelBackdrop.show { display: block; animation: fadeIn .2s ease-out; }
+    }
+    @keyframes panelSheetUp { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+    .company-card:hover { border-color: #c7d2fe; box-shadow: 0 4px 12px rgba(79,70,229,.08); }
+    .btn-ask {
+      font-size: 12px; font-weight: 600; color: #4f46e5; background: #eef2ff;
+      padding: 6px 14px; border-radius: 8px; border: none; cursor: pointer; transition: all .15s;
+    }
+    .btn-ask:hover { background: #e0e7ff; }
+    .btn-withdraw {
+      font-size: 12px; font-weight: 600; color: #dc2626; background: #fef2f2;
+      padding: 6px 14px; border-radius: 8px; border: none; cursor: pointer; transition: all .15s;
+    }
+    .btn-withdraw:hover { background: #fee2e2; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900 antialiased">
+
+  <!-- Nav -->
+  <nav class="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-100">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
+      <a href="/" class="text-lg font-extrabold text-slate-900 tracking-tight">Job<span class="text-brand-600">Awn</span></a>
+      <div class="flex items-center gap-3">
+        <a href="/app" class="text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors">Search jobs</a>
+        <a id="profileLink" href="/profile" class="w-9 h-9 rounded-full bg-slate-100 border-2 border-slate-300 hover:border-brand-200 flex items-center justify-center transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-5xl mx-auto px-4 sm:px-6 py-10">
+
+    <!-- Hero -->
+    <section class="text-center mb-14">
+      <h1 class="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">Get referred at top companies.</h1>
+      <p class="text-base text-slate-500 mt-3 max-w-xl mx-auto leading-relaxed">Browse companies with insider referrers, paste any job link, and ask a verified employee to refer you.</p>
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8">
+        <a href="/app" class="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-bold bg-white text-slate-700 border border-slate-200 hover:border-brand-500 hover:text-brand-600 hover:shadow-lg transition-all">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+          Or search jobs
+        </a>
+      </div>
+    </section>
+
+    <!-- Paste Job Link -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-10" id="resolverSection">
+      <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+        <svg class="w-5 h-5 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/></svg>
+        Got a job link? Find an insider
+      </h2>
+      <p class="text-sm text-slate-500 mt-1 mb-4">Paste any job posting URL — we'll detect the company and find referrers for you.</p>
+
+      <!-- Step 1: URL input -->
+      <div id="resolveStep1">
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input id="urlInput" type="url" placeholder="https://linkedin.com/jobs/view/..." class="premium-input-field flex-1" autocomplete="off">
+          <button id="resolveBtn" class="premium-btn premium-btn-primary whitespace-nowrap sm:flex-shrink-0" onclick="window.RP.resolveUrl()">Find referrers</button>
+        </div>
+        <p id="resolveError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center font-medium mt-2"></p>
+      </div>
+
+      <!-- Step 2: resolved result -->
+      <div id="resolveStep2" class="hidden mt-4 pt-4 border-t border-slate-100">
+        <button class="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 underline underline-offset-4 mb-3 transition-colors" onclick="window.RP.resetResolve()">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>
+          Try a different link
+        </button>
+        <div id="resolveHint" class="text-sm mb-3"></div>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <div class="flex-1">
+            <label class="block text-xs font-semibold text-slate-500 mb-1">Company</label>
+            <input id="resolvedCompany" type="text" class="premium-input-field" placeholder="Company name">
+          </div>
+          <div class="flex-1">
+            <label class="block text-xs font-semibold text-slate-500 mb-1">Job title</label>
+            <input id="resolvedTitle" type="text" class="premium-input-field" placeholder="Job title">
+          </div>
+        </div>
+        <button class="premium-btn premium-btn-primary mt-3 w-full" onclick="window.RP.proceedFromResolved()">Show referrers</button>
+      </div>
+    </section>
+
+    <!-- Company Directory -->
+    <section id="directory" class="mb-10">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+        <h2 class="text-lg font-bold text-slate-900">Companies with referrers</h2>
+        <input id="directoryFilter" type="text" placeholder="Filter companies..." class="premium-input-field max-w-xs text-sm" oninput="window.RP.filterDirectory(this.value)">
+      </div>
+      <div id="directoryGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <!-- filled by JS -->
+      </div>
+      <div id="directoryEmpty" class="hidden text-center py-12 bg-white rounded-2xl border border-slate-200 border-dashed">
+        <p class="text-sm font-medium text-slate-600">No companies have referrers yet.</p>
+        <p class="text-xs text-slate-400 mt-1">Invite an insider to join and earn referral credits.</p>
+      </div>
+    </section>
+
+    <!-- Referrer Panel (hidden until company selected) -->
+    <div id="panelBackdrop" class="hidden fixed inset-0 z-30 bg-black/40" onclick="window.RP.closePanel()"></div>
+    <section id="referrerPanel" class="hidden mb-10">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div class="flex items-center justify-between gap-3 mb-5">
+          <div>
+            <button onclick="window.RP.closePanel()" class="text-xs font-semibold text-slate-400 hover:text-slate-700 flex items-center gap-1 mb-1 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+              All companies
+            </button>
+            <h3 id="panelCompanyTitle" class="text-xl font-extrabold text-slate-900"></h3>
+          </div>
+          <div id="panelCounter" class="text-sm font-semibold text-slate-500"></div>
+        </div>
+        <div id="referrerList" class="space-y-2"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Auth Modal -->
+  <div id="authModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div id="authCard" class="bg-white rounded-2xl p-6 shadow-xl w-full max-w-sm mx-4 space-y-4" onclick="event.stopPropagation()">
+      <div id="authStepEmail">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+              Sign in / Sign up
+            </div>
+            <p class="text-sm text-slate-500 mt-0.5">Save jobs, track applications, and request referrals.</p>
+          </div>
+          <button onclick="closeAuthModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+        <input id="authEmail" type="email" placeholder="Your email address" class="premium-input-field mt-4">
+        <button id="authSendBtn" onclick="authSendCode()" class="premium-btn premium-btn-primary w-full mt-2 font-bold">Send Code</button>
+        <p class="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 text-center font-medium mt-2 border border-amber-100">Code arrives from <span class="font-semibold text-amber-900">JobAwn</span> — if it's not in your inbox, check your <span class="font-bold text-amber-900">spam folder</span>.</p>
+        <p id="authSendError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center font-medium mt-2"></p>
+      </div>
+      <div id="authStepCode" class="hidden">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="text-sm font-semibold text-slate-800">Check your inbox</div>
+            <p class="text-sm text-slate-500 mt-0.5">We sent a code to <span id="authSentEmail" class="font-medium text-slate-700"></span></p>
+          </div>
+          <button onclick="closeAuthModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+        <div class="flex gap-2 justify-center mt-4" id="codeInputs">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold premium-input-field" maxlength="1" data-idx="0" autofocus inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold premium-input-field" maxlength="1" data-idx="1" inputmode="numeric" pattern="[0-9]*">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold premium-input-field" maxlength="1" data-idx="2" inputmode="numeric" pattern="[0-9]*">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold premium-input-field" maxlength="1" data-idx="3" inputmode="numeric" pattern="[0-9]*">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold premium-input-field" maxlength="1" data-idx="4" inputmode="numeric" pattern="[0-9]*">
+          <input class="code-digit w-10 h-12 text-center text-lg font-bold premium-input-field" maxlength="1" data-idx="5" inputmode="numeric" pattern="[0-9]*">
+        </div>
+        <button type="button" onclick="pasteOtpCode()" class="w-full text-sm text-brand-600 hover:text-brand-700 font-semibold py-1.5 transition-colors mt-1 flex items-center justify-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M8 5a2 2 0 002 2h4a2 2 0 002-2M8 5a2 2 0 012-2h4a2 2 0 012 2"/></svg>
+          Paste code
+        </button>
+        <p id="authCodeError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center font-medium mt-2"></p>
+        <p id="authFallbackCode" class="hidden text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 text-center font-medium mt-2"></p>
+        <button id="authVerifyBtn" onclick="authVerifyCode()" class="premium-btn premium-btn-primary w-full mt-2 font-bold">Verify</button>
+        <button onclick="authResendCode()" class="w-full text-sm text-slate-500 hover:text-slate-700 py-1.5 transition-colors mt-1">Resend code</button>
+        <button onclick="authGoBack()" class="w-full text-sm text-slate-400 hover:text-slate-600 py-1.5 transition-colors">Try another email</button>
+      </div>
+      <div id="authStep3" class="hidden text-center py-4">
+        <div class="w-12 h-12 bg-emerald-50 border border-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
+          <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <div class="text-sm font-semibold text-slate-800">Verified!</div>
+        <p class="text-sm text-slate-500 mt-1">You can now save jobs, track applications, and request referrals.</p>
+      </div>
+      <div id="authStep4" class="hidden">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+              Almost done — what's your current status?
+            </div>
+            <p class="text-sm text-slate-500 mt-0.5">Help others find you for referrals.</p>
+          </div>
+          <button onclick="closeAuthModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+        <div class="flex flex-wrap gap-1.5 mt-3">
+          <button type="button" onclick="selectEmploymentStatus('employed')" class="employment-pill active-pill" data-status="employed">Employed</button>
+          <button type="button" onclick="selectEmploymentStatus('student')" class="employment-pill" data-status="student">Student</button>
+          <button type="button" onclick="selectEmploymentStatus('graduate')" class="employment-pill" data-status="graduate">Graduate</button>
+          <button type="button" onclick="selectEmploymentStatus('laid_off')" class="employment-pill" data-status="laid_off">Laid Off</button>
+          <button type="button" onclick="selectEmploymentStatus('career_break')" class="employment-pill" data-status="career_break">Career Break</button>
+        </div>
+        <div class="space-y-3 mt-4">
+          <div id="authInviteBanner" class="hidden items-center gap-2.5 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2.5">
+            <svg class="w-5 h-5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>
+            <p class="text-xs text-emerald-700 font-medium">You were invited! Complete your profile and you'll be set up as a referrer (+5 credits for you and your friend).</p>
+          </div>
+          <input id="authName" type="text" placeholder="Your name" class="premium-input-field">
+          <div id="authCompanyGroup" class="relative">
+            <input id="authCompany" type="text" placeholder="Company (type to search)" autocomplete="off" class="premium-input-field" oninput="filterCompanyDropdown()" onfocus="filterCompanyDropdown()">
+            <div id="companyDropdown" class="hidden absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
+          </div>
+          <div id="authPositionGroup">
+            <input id="authPosition" type="text" placeholder="Your position (e.g. Senior Frontend Engineer)" class="premium-input-field">
+          </div>
+          <label for="authReferOptIn" class="flex items-start gap-2.5 p-3 rounded-xl bg-indigo-50/70 border border-indigo-100 cursor-pointer select-none group">
+            <input id="authReferOptIn" type="checkbox" class="w-4 h-4 mt-0.5 accent-indigo-600 rounded" checked>
+            <span class="text-xs text-slate-600 leading-relaxed">
+              <span class="font-semibold text-slate-800">Earn referral credits by referring others</span>
+              <span class="block text-slate-500">Show me as "available for referrals" at my company so seekers can request referrals from me.</span>
+            </span>
+          </label>
+          <div class="mt-1">
+            <label class="block text-xs text-slate-500 mb-1">Resume (optional — PDF, DOCX, TXT)</label>
+            <input id="authResume" type="file" accept=".pdf,.docx,.txt" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 file:cursor-pointer">
+          </div>
+        </div>
+        <p id="authRegisterError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center font-medium mt-2"></p>
+        <button id="authRegisterBtn" onclick="authRegister()" class="premium-btn premium-btn-primary w-full mt-3 font-bold">Complete Profile</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script type="module" src="/js/constants.js"></script>
+  <script type="module" src="/js/utils.js"></script>
+  <script type="module" src="/js/auth.js"></script>
+  <script src="/js/terms.js"></script>
+  <script type="module" src="/js/referrals-page.js"></script>
+</body>
+</html>

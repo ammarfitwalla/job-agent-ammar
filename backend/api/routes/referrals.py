@@ -102,6 +102,7 @@ class ReferralRequest(BaseModel):
     job_description: str = ""
     resume_text: str = ""
     resume_filename: str = ""
+    skip_score: bool = False
 
 
 class ReferralScoreRequest(BaseModel):
@@ -151,7 +152,7 @@ async def referral_create(req: ReferralRequest, user: dict = Depends(get_current
     if sent_count >= _MONTHLY_LIMIT:
         return {"ok": False, "error": f"Monthly limit reached ({_MONTHLY_LIMIT}/month). You have 0 remaining requests.", "remaining": 0}
     match_score = req.match_score
-    if match_score <= 0:
+    if not req.skip_score and match_score <= 0:
         match_score = _get_or_score_referral_job(from_email, req.job_url, req.job_title, req.company,
                                                  req.job_description, req.resume_text)
     rid = create_referral_request(

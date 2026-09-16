@@ -538,12 +538,11 @@ async function loadRegistrations() {
 
     function renderRow(u, i) {
       const status = deriveStatus(u.company, u.employment_status);
-      const jobsLabel = u.company ? "View" : "\u2014";
       const esc = _esc;
       return `
         <tr class="reg-row" data-idx="${i}" data-email="${esc(u.email)}">
           <td style="text-align:center;white-space:nowrap">
-            ${u.company ? `<button class="pill-btn jobs-toggle" data-email="${esc(u.email)}" data-idx="${i}">${jobsLabel}</button>` : ""}
+            <button class="pill-btn jobs-toggle" data-email="${esc(u.email)}" data-idx="${i}">Jobs</button>
             <button class="pill-btn edit-user-btn" data-email="${esc(u.email)}" style="margin-left:6px;color:#4f46e5;border-color:#c7d2fe">Edit</button>
           </td>
           <td style="white-space:nowrap">${u.created_at ? formatDate(u.created_at) : "\u2014"}</td>
@@ -570,7 +569,6 @@ async function loadRegistrations() {
 
     // Fetch saved jobs count per user
     regs.forEach(async (u) => {
-      if (!u.company) return;
       const jobs = await fetchSavedJobs(u.email);
       const cell = document.querySelector(`.jobs-count[data-email="${u.email}"]`);
       if (cell) cell.textContent = jobs.length || "0";
@@ -594,7 +592,7 @@ async function loadRegistrations() {
 
       if (detailRow.style.display === "table-row") {
         detailRow.style.display = "none";
-        btn.textContent = "View";
+        btn.textContent = "Jobs";
         return;
       }
 
