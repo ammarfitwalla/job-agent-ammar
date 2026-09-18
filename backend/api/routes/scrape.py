@@ -596,7 +596,7 @@ def _cache_lookup(req):
 
     Returns (combos_to_scrape, initial_jobs, served_cache)."""
     from config import CACHE_ENABLED, CACHE_TTL_HOURS, CACHE_MIN_VOLUME
-    from db import get_cache_entry, upsert_prewarm_combo, upsert_custom_prewarm, increment_combo_usage
+    from db import get_cache_entry, get_cached_jobs_aggregate, upsert_prewarm_combo, upsert_custom_prewarm, increment_combo_usage
 
     combos_to_scrape = []
     initial_jobs = []
@@ -668,7 +668,7 @@ def _cache_lookup(req):
                     continue
 
                 # No curated cities — fall back to state-level combo
-                status, entry = get_cache_entry(
+                status, entry = get_cached_jobs_aggregate(
                     role, site, "", req.state, req.country,
                     req.internship_mode, req.hours_old,
                     ttl_hours=CACHE_TTL_HOURS, min_volume=CACHE_MIN_VOLUME,
@@ -698,8 +698,8 @@ def _cache_lookup(req):
                     )
                 continue
 
-            # --- All other sites / city-level Naukri: exact lookup ---
-            status, entry = get_cache_entry(
+            # --- All other sites / city-level Naukri: exact + finer-grained aggregation ---
+            status, entry = get_cached_jobs_aggregate(
                 role, site, req.city or "", req.state or "", req.country or "",
                 req.internship_mode, req.hours_old,
                 ttl_hours=CACHE_TTL_HOURS, min_volume=CACHE_MIN_VOLUME,

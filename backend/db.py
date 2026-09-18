@@ -205,6 +205,7 @@ def init_db():
                 UNIQUE(role, site, city, state, country, internship_mode, hours_old, is_remote)
             );
             CREATE INDEX IF NOT EXISTS idx_job_cache_key ON job_cache(role, site, city, state, country, internship_mode, hours_old, is_remote);
+            CREATE INDEX IF NOT EXISTS idx_job_cache_country ON job_cache(role, site, country, state, internship_mode, hours_old, is_remote);
             CREATE INDEX IF NOT EXISTS idx_job_cache_age ON job_cache(scraped_at);
             CREATE TABLE IF NOT EXISTS prewarm_queue (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -389,6 +390,7 @@ def init_db():
                         )
                     """)
                     cur.execute("CREATE INDEX IF NOT EXISTS idx_job_cache_key ON job_cache(role, site, city, state, country, internship_mode, hours_old, is_remote)")
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_job_cache_country ON job_cache(role, site, country, state, internship_mode, hours_old, is_remote)")
                     cur.execute("CREATE INDEX IF NOT EXISTS idx_job_cache_age ON job_cache(scraped_at)")
                     cur.execute("INSERT OR IGNORE INTO job_cache SELECT * FROM job_cache_old")
                     cur.execute("DROP TABLE job_cache_old")
@@ -711,6 +713,14 @@ def save_cache_entry(role: str, site: str, city: str, state: str, country: str,
             conn.commit()
 
 
+def _cache_fresh(d: dict, ttl_hours: float, min_volume: int) -> bool:
+    try:
+        age_hours = (datetime.utcnow() - datetime.fromisoformat(d["scraped_at"])).total_seconds() / 3600
+    except Exception:
+        age_hours = ttl_hours + 1
+    return age_hours <= ttl_hours and d["job_count"] >= min_volume
+
+
 def get_cache_entry(role: str, site: str, city: str, state: str, country: str, internship_mode: int,
                     hours_old: int, ttl_hours: float = 12.0, min_volume: int = 5, is_remote: int = 0) -> tuple:
     """Returns (status, entry) where status is 'fresh', 'stale', or 'missing'.
@@ -731,11 +741,7 @@ def get_cache_entry(role: str, site: str, city: str, state: str, country: str, i
         d["jobs"] = json.loads(d["jobs_json"])
     except (json.JSONDecodeError, TypeError):
         d["jobs"] = []
-    try:
-        age_hours = (datetime.utcnow() - datetime.fromisoformat(d["scraped_at"])).total_seconds() / 3600
-    except Exception:
-        age_hours = ttl_hours + 1
-    if age_hours <= ttl_hours and d["job_count"] >= min_volume:
+    if _cache_fresh(d, ttl_hours, min_volume):
         return "fresh", d
     return "stale", d
 
@@ -764,6 +770,63 @@ def get_cached_jobs(role: str, site: str, city: str, state: str, country: str, i
         if best is None:
             best = (status, entry)
     return best if best else ("missing", None)
+
+
+def get_cached_jobs_aggregate(role: str, site: str, city: str, state: str, country: str,
+                              internship_mode: int, hours_old: int, ttl_hours: float = 12.0,
+                              min_volume: int = 5, max_jobs: int = 200, is_remote: int = 0) -> tuple:
+    """Best available cache entry with rolling aggregation. Scope follows search
+    granularity: a city search stays exact (leaf); a state search unions the
+    state row plus its city rows; a country-only search unions the national row
+    plus every state and city row for that country. Jobs are merged and deduped
+    by URL, capped at max_jobs. Status: 'fresh' when the searched-exact-key
+    entry is fresh; 'stale' when any qualifying entry exists; 'missing' when
+    none do. The exact row still drives the scrape/enqueue decision."""
+    where = "role=? AND site=? AND country=? AND internship_mode=? AND hours_old=? AND is_remote=?"
+    params = [role, site, country or "", 1 if internship_mode else 0, hours_old, 1 if is_remote else 0]
+    if (city or ""):
+        where = "role=? AND site=? AND city=? AND state=? AND country=? AND internship_mode=? AND hours_old=? AND is_remote=?"
+        params = [role, site, city or "", state or "", country or "",
+                  1 if internship_mode else 0, hours_old, 1 if is_remote else 0]
+    elif state:
+        where = "role=? AND site=? AND state=? AND country=? AND internship_mode=? AND hours_old=? AND is_remote=?"
+        params = [role, site, state or "", country or "",
+                  1 if internship_mode else 0, hours_old, 1 if is_remote else 0]
+    with _get_conn() as (conn, cur):
+        cur.execute(f"SELECT * FROM job_cache WHERE {where} ORDER BY scraped_at DESC", params)
+        rows = [dict(r) for r in cur.fetchall()]
+    if not rows:
+        return "missing", None
+
+    city_v, state_v = city or "", state or ""
+    exact = next((d for d in rows if d["city"] == city_v and d["state"] == state_v), None)
+    status = "stale" if exact is None or not _cache_fresh(exact, ttl_hours, min_volume) else "fresh"
+
+    merged = []
+    seen = set()
+    for d in rows:
+        try:
+            jobs = json.loads(d["jobs_json"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+        for j in jobs:
+            url = j.get("url") or f"{j.get('title','')}{j.get('company','')}"
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            merged.append(j)
+            if max_jobs and max_jobs > 0 and len(merged) >= max_jobs:
+                break
+        if max_jobs and max_jobs > 0 and len(merged) >= max_jobs:
+            merged = merged[:max_jobs]
+            break
+
+    entry = {
+        "role": role, "site": site, "city": city_v, "state": state_v, "country": country or "",
+        "internship_mode": 1 if internship_mode else 0, "hours_old": hours_old,
+        "is_remote": 1 if is_remote else 0, "job_count": len(merged), "jobs": merged,
+    }
+    return status, entry
 
 
 def gc_job_cache(max_age_hours: int = 336, max_entries: int = 50000) -> None:

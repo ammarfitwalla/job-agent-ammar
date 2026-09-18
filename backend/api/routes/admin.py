@@ -547,6 +547,32 @@ async def admin_db_info(user: dict = Depends(get_current_user)):
     return {"size_bytes": size_bytes, "size_mb": round(size_bytes / 1048576, 2), "sessions": sessions, "users": users}
 
 
+@router.get("/db/referrals")
+async def admin_db_referrals(user: dict = Depends(get_current_user)):
+    if not is_admin_user(user["email"]):
+        return JSONResponse(status_code=403, content={"error": "Unauthorized"})
+    from db import _get_conn
+
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            """
+            SELECT r.id, r.from_email, r.to_email, r.job_url, r.job_title,
+                   r.company, r.match_score, r.message, r.status, r.credit_awarded,
+                   r.accepted_at, r.receiver_confirmed, r.sender_confirmed,
+                   r.resume_filename, r.created_at, r.updated_at,
+                   u1.name AS from_name, u2.name AS to_name
+            FROM referral_requests r
+            LEFT JOIN users u1 ON u1.email = r.from_email
+            LEFT JOIN users u2 ON u2.email = r.to_email
+            ORDER BY r.id DESC
+            LIMIT 20
+            """
+        )
+        rows = [dict(row) for row in cur.fetchall()]
+
+    return {"referrals": rows}
+
+
 @router.get("/backup")
 async def admin_download_backup(user: dict = Depends(get_current_user)):
     if not is_admin_user(user["email"]):

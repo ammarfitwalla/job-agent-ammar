@@ -536,6 +536,7 @@ tr.clickable:hover td { background: #f8fafc; }
       <div class="tabs" data-group="db" style="margin-bottom: 24px;">
         <span class="tab active" data-tab="cache" onclick="switchTab('cache','db')">Cache</span>
         <span class="tab" data-tab="roles" onclick="switchTab('roles','db')">Roles</span>
+        <span class="tab" data-tab="referrals" onclick="switchTab('referrals','db')">Referrals</span>
         <span class="tab" data-tab="uploads" onclick="switchTab('uploads','db')">Uploads</span>
       </div>
 
@@ -564,6 +565,19 @@ tr.clickable:hover td { background: #f8fafc; }
         <th>Name</th><th>Created</th><th style="text-align:center">Actions</th>
       </tr></thead><tbody id="rolesBody"></tbody></table></div>
       <p style="margin:16px 0 0;font-size:13px;color:#94a3b8">Custom roles are user-added search roles persisted across refreshes.</p>
+    </div>
+
+    <div class="tab-content" data-group="db" data-tab="referrals">
+      <div class="chart-box db-card" style="max-width: 100%">
+        <h3>Referral Requests <span style="font-weight:500;font-size:13px;color:var(--text-muted)">(latest 20)</span></h3>
+        <div class="table-wrap"><table>
+          <thead><tr>
+            <th>ID</th><th>From</th><th>To</th><th>Job / Company</th><th style="text-align:center">Score</th><th>Status</th><th style="text-align:center">Credits</th><th>Created</th>
+          </tr></thead>
+          <tbody id="dbReferralBody"></tbody>
+        </table></div>
+        <div class="db-info" id="dbReferralInfo" style="margin-top:12px"></div>
+      </div>
     </div>
 
     <div class="tab-content" data-group="db" data-tab="uploads">

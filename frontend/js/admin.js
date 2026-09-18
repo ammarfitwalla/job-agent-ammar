@@ -89,7 +89,7 @@ function startRefresh() {
   stopRefresh();
   _refreshInterval = setInterval(() => {
     setRefreshing(true);
-    loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage(); loadCacheStats(); loadServerStats();
+    loadStats(); loadSessions(); loadRegistrations(); loadVisits(); loadComboUsage(); loadCacheStats(); loadServerStats(); loadDbReferrals();
   }, 300000);
 }
 
@@ -977,6 +977,7 @@ async function confirmRoleDelete() {
 function switchTab(name, group = "main") {
   document.querySelectorAll(`.tabs[data-group="${group}"] .tab`).forEach(t => t.classList.toggle("active", t.dataset.tab === name));
   document.querySelectorAll(`.tab-content[data-group="${group}"]`).forEach(c => c.classList.toggle("active", c.dataset.tab === name));
+  if (group === "db" || (group === "main" && name === "db")) loadDbReferrals();
 }
 
 // ── Database ──
@@ -989,6 +990,49 @@ async function loadDbInfo() {
     document.getElementById("dbInfo").innerHTML = `Size: <strong>${d.size_mb} MB</strong> \u00b7 Sessions: <strong>${d.sessions}</strong> \u00b7 Users: <strong>${d.users}</strong>`;
   } catch {
     document.getElementById("dbInfo").textContent = "Failed to load";
+  }
+}
+
+async function loadDbReferrals() {
+  const body = document.getElementById("dbReferralBody");
+  const info = document.getElementById("dbReferralInfo");
+  if (!body) return;
+  body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>`;
+  if (info) info.textContent = "";
+  try {
+    const r = await adminApi("/api/admin/db/referrals", { cache: "no-cache" });
+    if (!r) return;
+    const d = await r.json();
+    if (d.error) { body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#dc2626">Failed to load</td></tr>`; return; }
+    const rows = d.referrals || [];
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-muted)">No referral requests yet</td></tr>`;
+      return;
+    }
+    const statusBadge = s => {
+      const cls = s === "accepted" ? "badge" : s === "pending" ? "badge badge-blue" : s === "declined" || s === "rejected" ? "badge badge-red" : s === "withdrawn" ? "badge badge-gray" : "badge";
+      const label = s || "—";
+      return `<span class="${cls}">${_esc(label)}</span>`;
+    };
+    body.innerHTML = rows.map(x => {
+      const from = (x.from_name ? `<div>${_esc(x.from_name)}</div>` : "") + `<div style="font-size:11px;color:#64748b">${_esc(x.from_email)}</div>`;
+      const to = (x.to_name ? `<div>${_esc(x.to_name)}</div>` : "") + `<div style="font-size:11px;color:#64748b">${_esc(x.to_email)}</div>`;
+      const job = (x.job_title ? `<div class="truncate" title="${_esc(x.job_title)}">${_esc(x.job_title)}</div>` : `<div style="color:#94a3b8;font-size:12px">Untitled</div>`) +
+        (x.company ? `<div style="font-size:11px;color:#64748b">${_esc(x.company)}</div>` : "");
+      return `<tr>
+        <td style="font-family:monospace;font-size:12px;color:#64748b">${x.id}</td>
+        <td style="max-width:180px">${from}</td>
+        <td style="max-width:180px">${to}</td>
+        <td style="max-width:260px">${job}${x.job_url ? `<a href="${_esc(x.job_url)}" target="_blank" rel="noopener" style="font-size:11px;color:#6366f1">Open job &nearr;</a>` : ""}</td>
+        <td style="text-align:center">${x.match_score != null ? x.match_score : "—"}</td>
+        <td>${statusBadge(x.status)}</td>
+        <td style="text-align:center">${x.credit_awarded || "—"}</td>
+        <td style="white-space:nowrap">${formatDate(x.created_at)}</td>
+      </tr>`;
+    }).join("");
+    if (info) info.textContent = `Latest ${rows.length} referral request${rows.length === 1 ? "" : "s"} (newest first)`;
+  } catch {
+    body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#dc2626">Network error</td></tr>`;
   }
 }
 
@@ -1174,6 +1218,7 @@ window.toggleCacheUsed = toggleCacheUsed;
 window.loadServerStats = loadServerStats;
 window.switchTab = switchTab;
 window.loadDbInfo = loadDbInfo;
+window.loadDbReferrals = loadDbReferrals;
 window.restoreDB = restoreDB;
 window.mergeDB = mergeDB;
 window.downloadBackup = downloadBackup;
@@ -1199,4 +1244,5 @@ loadDbInfo();
 loadCacheStats();
 loadRoles();
 loadServerStats();
+loadDbReferrals();
 startRefresh();

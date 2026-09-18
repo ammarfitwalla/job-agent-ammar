@@ -132,6 +132,84 @@ class TestJobCache(CacheDBTestCase):
         self.assertEqual(count, 3)
 
 
+# ── rolling aggregation (country/state → include finer rows) ──
+
+class TestJobCacheAggregate(CacheDBTestCase):
+    def test_country_only_unions_states_and_cities(self):
+        db.save_cache_entry("Data Scientist", "indeed", "", "", "in", False, 168, _jobs(5))
+        db.save_cache_entry("Data Scientist", "indeed", "", "Maharashtra", "in", False, 168, _jobs(4, "mh"))
+        db.save_cache_entry("Data Scientist", "indeed", "Mumbai", "Maharashtra", "in", False, 168, _jobs(3, "mm"))
+        db.save_cache_entry("Data Scientist", "indeed", "Pune", "Maharashtra", "in", False, 168, _jobs(2, "pn"))
+        status, entry = db.get_cached_jobs_aggregate("Data Scientist", "indeed", "", "", "in", False, 168)
+        self.assertEqual(status, "fresh")
+        self.assertEqual(len(entry["jobs"]), 14)
+        self.assertEqual(entry["job_count"], 14)
+
+    def test_aggregate_dedupes_by_url(self):
+        dup = _jobs(2, "dup")
+        db.save_cache_entry("Data Scientist", "indeed", "", "", "in", False, 168, dup)
+        db.save_cache_entry("Data Scientist", "indeed", "", "Maharashtra", "in", False, 168, dup)
+        status, entry = db.get_cached_jobs_aggregate("Data Scientist", "indeed", "", "", "in", False, 168, min_volume=1)
+        self.assertEqual(status, "fresh")
+        self.assertEqual(len(entry["jobs"]), 2)
+
+    def test_aggregate_caps_at_max_jobs(self):
+        db.save_cache_entry("Data Scientist", "indeed", "", "", "in", False, 168, _jobs(150))
+        db.save_cache_entry("Data Scientist", "indeed", "", "Maharashtra", "in", False, 168, _jobs(150, "mh"))
+        status, entry = db.get_cached_jobs_aggregate("Data Scientist", "indeed", "", "", "in", False, 168, max_jobs=200)
+        self.assertEqual(status, "fresh")
+        self.assertEqual(len(entry["jobs"]), 200)
+
+    def test_aggregate_missing_national_returns_state_rows(self):
+        db.save_cache_entry("Data Scientist", "indeed", "", "Maharashtra", "in", False, 168, _jobs(4, "mh"))
+        db.save_cache_entry("Data Scientist", "indeed", "", "Karnataka", "in", False, 168, _jobs(3, "ka"))
+        status, entry = db.get_cached_jobs_aggregate("Data Scientist", "indeed", "", "", "in", False, 168)
+        self.assertEqual(status, "stale")
+        self.assertEqual(len(entry["jobs"]), 7)
+
+    def test_aggregate_state_scope_excludes_other_states(self):
+        db.save_cache_entry("Data Scientist", "indeed", "", "Maharashtra", "in", False, 168, _jobs(4))
+        db.save_cache_entry("Data Scientist", "indeed", "", "Karnataka", "in", False, 168, _jobs(3, "ka"))
+        status, entry = db.get_cached_jobs_aggregate("Data Scientist", "indeed", "", "Maharashtra", "in", False, 168, min_volume=1)
+        self.assertEqual(status, "fresh")
+        self.assertEqual(len(entry["jobs"]), 4)
+
+    def test_aggregate_other_country_excluded(self):
+        db.save_cache_entry("Data Scientist", "indeed", "", "", "in", False, 168, _jobs(4))
+        db.save_cache_entry("Data Scientist", "indeed", "", "Maharashtra", "us", False, 168, _jobs(3, "us"))
+        status, entry = db.get_cached_jobs_aggregate("Data Scientist", "indeed", "", "", "in", False, 168)
+        self.assertEqual(len(entry["jobs"]), 4)
+
+    def test_aggregate_city_search_stays_exact(self):
+        db.save_cache_entry("Data Scientist", "indeed", "", "", "in", False, 168, _jobs(4))
+        db.save_cache_entry("Data Scientist", "indeed", "", "Maharashtra", "in", False, 168, _jobs(3, "mh"))
+        db.save_cache_entry("Data Scientist", "indeed", "Mumbai", "Maharashtra", "in", False, 168, _jobs(2, "mm"))
+        status, entry = db.get_cached_jobs_aggregate("Data Scientist", "indeed", "Mumbai", "Maharashtra", "in", False, 168, min_volume=1)
+        self.assertEqual(status, "fresh")
+        self.assertEqual(len(entry["jobs"]), 2)
+
+    def test_aggregate_respects_key_dimensions(self):
+        db.save_cache_entry("Data Scientist", "indeed", "", "", "in", False, 168, _jobs(4))
+        db.save_cache_entry("Data Scientist", "indeed", "", "", "in", True, 168, _jobs(3, "it"))
+        db.save_cache_entry("Data Scientist", "indeed", "", "", "in", False, 48, _jobs(2, "h48"))
+        db.save_cache_entry("Data Scientist", "indeed", "", "", "in", False, 168, _jobs(1, "rem"), is_remote=1)
+        status, entry = db.get_cached_jobs_aggregate("Data Scientist", "indeed", "", "", "in", False, 168, min_volume=1)
+        self.assertEqual(status, "fresh")
+        self.assertEqual(len(entry["jobs"]), 4)
+
+    def test_aggregate_stale_below_min_volume(self):
+        db.save_cache_entry("Data Scientist", "indeed", "", "", "in", False, 168, _jobs(1))
+        db.save_cache_entry("Data Scientist", "indeed", "", "Maharashtra", "in", False, 168, _jobs(6, "mh"))
+        status, entry = db.get_cached_jobs_aggregate("Data Scientist", "indeed", "", "", "in", False, 168)
+        self.assertEqual(status, "stale")
+        self.assertEqual(len(entry["jobs"]), 7)
+
+    def test_aggregate_missing(self):
+        status, entry = db.get_cached_jobs_aggregate("DevOps Engineer", "indeed", "", "", "in", False, 168)
+        self.assertEqual(status, "missing")
+        self.assertIsNone(entry)
+
+
 # ── prewarm_queue ──
 
 class TestPrewarmQueue(CacheDBTestCase):
@@ -211,7 +289,7 @@ class TestScrapeCacheIntegration(CacheDBTestCase):
         from api.routes import scrape as scrape_routes
         from db import save_cache_entry
 
-        save_cache_entry("AI Engineer", "fake", "", "California", "us", False, 168, _jobs(8), keep_larger=True)
+        save_cache_entry("AI Engineer", "fake", "", "California", "us", False, 168, _jobs(12), keep_larger=True)
         req = self._req()
         with patch.object(scrape_routes, "SITE_MAP", {"fake": ("fake", "scrape_fake")}), \
              patch("db.upsert_prewarm_combo") as upsert:
@@ -232,6 +310,22 @@ class TestScrapeCacheIntegration(CacheDBTestCase):
             self.assertEqual(served, 0)
             self.assertEqual(initial_jobs, [])
             upsert.assert_called_once_with("AI Engineer", "fake", "", "California", "us", False, 168)
+
+    def test_country_only_serves_state_and_city_rows(self):
+        from api.routes import scrape as scrape_routes
+        from db import save_cache_entry
+
+        save_cache_entry("AI Engineer", "fake", "", "", "us", False, 168, _jobs(10))
+        save_cache_entry("AI Engineer", "fake", "", "California", "us", False, 168, _jobs(4, "ca"))
+        save_cache_entry("AI Engineer", "fake", "Palo Alto", "California", "us", False, 168, _jobs(2, "pa"))
+        req = self._req(country="us", state="", city="", location="United States")
+        with patch.object(scrape_routes, "SITE_MAP", {"fake": ("fake", "scrape_fake")}), \
+             patch("db.upsert_prewarm_combo") as upsert:
+            combos, initial_jobs, served = scrape_routes._cache_lookup(req)
+        self.assertEqual(combos, [])
+        self.assertEqual(served, 1)
+        self.assertEqual(len(initial_jobs), 16)
+        upsert.assert_not_called()
 
     def test_cache_disabled_scrapes_everything(self):
         from api.routes import scrape as scrape_routes
