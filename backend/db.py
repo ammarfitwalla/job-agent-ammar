@@ -311,7 +311,32 @@ def init_db():
                 created_at TEXT NOT NULL,
                 UNIQUE(role, site, city, state, country, internship_mode, hours_old)
             );
+            CREATE TABLE IF NOT EXISTS deleted_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL,
+                name TEXT NOT NULL,
+                company TEXT DEFAULT '',
+                position TEXT DEFAULT '',
+                employment_status TEXT DEFAULT '',
+                city TEXT DEFAULT '',
+                state TEXT DEFAULT '',
+                country TEXT DEFAULT '',
+                linkedin_url TEXT DEFAULT '',
+                resume_filename TEXT DEFAULT '',
+                referral_credits INTEGER DEFAULT 0,
+                refer_opt_in INTEGER DEFAULT 0,
+                invited_by TEXT DEFAULT '',
+                created_at TEXT DEFAULT '',
+                last_login TEXT DEFAULT '',
+                deleted_at TEXT NOT NULL,
+                deleted_by TEXT DEFAULT ''
+            );
         """)
+        # Create deleted_users index if missing
+        try:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_deleted_users_email ON deleted_users(email)")
+        except Exception:
+            pass
         # Migrate custom_prewarm — add usage columns if missing
         for col in ("usage_count INTEGER DEFAULT 0", "last_used_at TEXT DEFAULT ''"):
             try:
@@ -592,6 +617,35 @@ def delete_custom_role(name: str) -> bool:
     with _write_lock:
         with _get_conn() as (conn, cur):
             cur.execute("DELETE FROM custom_roles WHERE name = ? COLLATE NOCASE", (name,))
+            conn.commit()
+            return cur.rowcount > 0
+
+
+def get_custom_role_rows() -> list[dict]:
+    """Full custom_roles rows (id, name, created_at) newest-first for the admin panel."""
+    with _get_conn() as (conn, cur):
+        cur.execute("SELECT id, name, created_at FROM custom_roles ORDER BY created_at DESC, id DESC")
+        return [dict(r) for r in cur.fetchall()]
+
+
+def rename_custom_role(role_id: int, new_name: str) -> bool:
+    new_name = new_name.strip()
+    if not new_name:
+        return False
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            try:
+                cur.execute("UPDATE custom_roles SET name = ? WHERE id = ?", (new_name, role_id))
+                conn.commit()
+                return cur.rowcount > 0
+            except sqlite3.IntegrityError:
+                return False
+
+
+def delete_custom_role_by_id(role_id: int) -> bool:
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute("DELETE FROM custom_roles WHERE id = ?", (role_id,))
             conn.commit()
             return cur.rowcount > 0
 
@@ -1463,6 +1517,69 @@ def revoke_admin(email: str) -> bool:
             cur.execute("DELETE FROM admin_users WHERE LOWER(email) = ?", (email,))
             conn.commit()
             return cur.rowcount > 0
+
+
+def archive_and_delete_user(email: str, deleted_by: str = "") -> Optional[dict]:
+    """Archive a user into deleted_users, then hard-delete them and all their
+    related rows in a single transaction.
+
+    The archived row is a verbatim snapshot of the users row plus deleted_at /
+    deleted_by. deleted_users has no foreign keys, so it is independent of the
+    users table and never blocks the delete.
+
+    Returns the archived user dict on success, or None if the user did not exist.
+    Resume file removal is best-effort and handled by the caller.
+    """
+    email = (email or "").strip().lower()
+    if not email:
+        return None
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute("SELECT * FROM users WHERE LOWER(email) = ?", (email,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            u = dict(row)
+            now = _now()
+            try:
+                cur.execute(
+                    "INSERT INTO deleted_users "
+                    "(email, name, company, position, employment_status, city, state, country, "
+                    " linkedin_url, resume_filename, referral_credits, refer_opt_in, invited_by, "
+                    " created_at, last_login, deleted_at, deleted_by) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (u.get("email", ""), u.get("name", ""), u.get("company", ""),
+                     u.get("position", ""), u.get("employment_status", ""), u.get("city", ""),
+                     u.get("state", ""), u.get("country", ""), u.get("linkedin_url", ""),
+                     u.get("resume_filename", ""), u.get("referral_credits", 0),
+                     u.get("refer_opt_in", 0), u.get("invited_by", ""),
+                     u.get("created_at", ""), u.get("last_login", ""), now, deleted_by or ""),
+                )
+                # Removal order: dependents first, users row last.
+                cur.execute("DELETE FROM admin_users WHERE LOWER(email) = ?", (email,))
+                cur.execute("DELETE FROM saved_jobs WHERE LOWER(user_email) = ?", (email,))
+                cur.execute("DELETE FROM saved_searches WHERE LOWER(email) = ?", (email,))
+                cur.execute(
+                    "DELETE FROM referral_requests WHERE LOWER(from_email) = ? OR LOWER(to_email) = ?",
+                    (email, email))
+                cur.execute("DELETE FROM referral_scores WHERE LOWER(from_email) = ?", (email,))
+                cur.execute("DELETE FROM referral_notifies WHERE LOWER(email) = ?", (email,))
+                cur.execute("DELETE FROM verification_codes WHERE LOWER(email) = ?", (email,))
+                cur.execute("SELECT id FROM sessions WHERE LOWER(user_email) = ?", (email,))
+                sess_ids = [r["id"] for r in cur.fetchall()]
+                if sess_ids:
+                    ph = ",".join("?" * len(sess_ids))
+                    cur.execute(f"DELETE FROM jobs WHERE session_id IN ({ph})", sess_ids)
+                    cur.execute(f"DELETE FROM events WHERE session_id IN ({ph})", sess_ids)
+                    cur.execute(f"DELETE FROM sessions WHERE id IN ({ph})", sess_ids)
+                cur.execute("DELETE FROM leads WHERE LOWER(email) = ?", (email,))
+                cur.execute("DELETE FROM visits WHERE LOWER(user_email) = ?", (email,))
+                cur.execute("DELETE FROM users WHERE LOWER(email) = ?", (email,))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            return u
 
 
 def add_referral_notify(email: str, company: str) -> bool:

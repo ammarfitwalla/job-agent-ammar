@@ -650,6 +650,7 @@ function openUserModal(user) {
   document.getElementById("userOptInInput").checked = user ? !!user.refer_opt_in : false;
   document.getElementById("userAdminGroup").style.display = user ? "flex" : "none";
   document.getElementById("userAdminInput").checked = user ? !!user.is_admin : false;
+  document.getElementById("userDeleteBtn").style.display = user ? "block" : "none";
   _userModalError("");
   const modal = document.getElementById("userModal");
   modal.style.display = "flex";
@@ -752,6 +753,224 @@ async function saveUser() {
   }
   btn.disabled = false;
   btn.innerHTML = orig;
+}
+
+// ── User Delete ──
+let _deletingUserEmail = null;
+
+function openDeleteModalFromUser() {
+  if (_editingUser) openDeleteModal(_editingUser);
+}
+
+function openDeleteModal(user) {
+  _deletingUserEmail = user.email;
+  document.getElementById("deleteUserName").textContent = user.name || "\u2014";
+  document.getElementById("deleteUserEmailText").textContent = user.email;
+  const input = document.getElementById("deleteUserConfirmInput");
+  input.value = "";
+  input.disabled = false;
+  document.getElementById("deleteConfirmBtn").disabled = true;
+  document.getElementById("deleteModalError").style.display = "none";
+  document.getElementById("deleteModal").style.display = "flex";
+  input.focus();
+}
+
+function closeDeleteModal() {
+  _deletingUserEmail = null;
+  const modal = document.getElementById("deleteModal");
+  if (modal) modal.style.display = "none";
+}
+
+function onDeleteConfirmTyped() {
+  const input = document.getElementById("deleteUserConfirmInput");
+  const target = (_deletingUserEmail || "").trim().toLowerCase();
+  document.getElementById("deleteConfirmBtn").disabled = (input.value || "").trim().toLowerCase() !== target;
+}
+
+async function confirmDeleteUser() {
+  const email = _deletingUserEmail;
+  if (!email) return;
+  const btn = document.getElementById("deleteConfirmBtn");
+  const orig = btn.innerHTML;
+  const errEl = document.getElementById("deleteModalError");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-spinner"></span> Deleting...';
+  errEl.style.display = "none";
+  try {
+    const r = await adminApi(`/api/admin/users/${encodeURIComponent(email)}`, { method: "DELETE" });
+    if (!r) return;
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      errEl.textContent = d.detail || d.error || "Failed to delete user.";
+      errEl.style.display = "block";
+      btn.disabled = false;
+      btn.innerHTML = orig;
+      return;
+    }
+    const input = document.getElementById("deleteUserConfirmInput");
+    if (input) input.disabled = true;
+    closeDeleteModal();
+    const um = document.getElementById("userModal");
+    if (um) um.style.display = "none";
+    loadRegistrations();
+    loadStats();
+    loadDbInfo();
+  } catch {
+    errEl.textContent = "Network error.";
+    errEl.style.display = "block";
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+// ── Roles (custom_roles CRUD) ──
+let _roleRows = [];
+let _editingRoleId = null;
+let _deletingRoleId = null;
+
+function _roleError(msg, show = true) {
+  const el = document.getElementById("roleModalError");
+  if (!el) return;
+  el.textContent = msg || "";
+  el.style.display = show && msg ? "block" : "none";
+}
+
+async function loadRoles() {
+  const r = await adminApi("/api/admin/roles");
+  if (!r) return;
+  const d = await r.json().catch(() => ({ roles: [] }));
+  _roleRows = d.roles || [];
+  const input = document.getElementById("roleSearchInput");
+  if (input) input.value = "";
+  searchRoles();
+}
+
+function searchRoles() {
+  const input = document.getElementById("roleSearchInput");
+  const q = (input ? input.value : "").toLowerCase().trim();
+  const rows = _roleRows.filter(r => !q || r.name.toLowerCase().includes(q));
+  const countEl = document.getElementById("rolesCount");
+  if (countEl) countEl.textContent = q ? `${rows.length} / ${_roleRows.length}` : _roleRows.length;
+  _renderRoles(rows);
+}
+
+function _renderRoles(rows) {
+  const body = document.getElementById("rolesBody");
+  if (!body) return;
+  if (!rows.length) {
+    const searching = (document.getElementById("roleSearchInput") || {}).value;
+    body.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:28px;color:#94a3b8">' +
+      (searching ? "No roles match your search." : "No custom roles.") + '</td></tr>';
+    return;
+  }
+  const esc = _esc;
+  body.innerHTML = rows.map(r => `
+    <tr>
+      <td style="font-weight:700;color:#1e293b">${esc(r.name)}</td>
+      <td style="white-space:nowrap">${formatDate(r.created_at)}</td>
+      <td style="text-align:center;white-space:nowrap">
+        <button class="pill-btn" data-action="edit" data-id="${r.id}" data-name="${esc(r.name)}" style="color:#4f46e5;border-color:#c7d2fe">Edit</button>
+        <button class="pill-btn" data-action="delete" data-id="${r.id}" data-name="${esc(r.name)}" style="margin-left:6px;color:#dc2626;border-color:#fecaca">Delete</button>
+      </td>
+    </tr>`).join("");
+}
+
+function openRoleModal(role = null) {
+  _editingRoleId = role && role.id != null ? role.id : null;
+  document.getElementById("roleModalTitle").textContent = _editingRoleId ? "Edit Role" : "Add Role";
+  document.getElementById("roleNameInput").value = role ? role.name : "";
+  const btn = document.getElementById("roleSaveBtn");
+  btn.disabled = false;
+  btn.innerHTML = "Save";
+  _roleError("");
+  document.getElementById("roleModal").style.display = "flex";
+  document.getElementById("roleNameInput").focus();
+}
+
+function closeRoleModal() {
+  document.getElementById("roleModal").style.display = "none";
+}
+
+async function saveRole() {
+  const input = document.getElementById("roleNameInput");
+  const name = input.value.trim();
+  if (!name) {
+    _roleError("Role name is required.");
+    return;
+  }
+  const btn = document.getElementById("roleSaveBtn");
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-spinner"></span> Saving...';
+  _roleError("");
+  try {
+    const isEdit = _editingRoleId != null;
+    const opts = {
+      method: isEdit ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    };
+    const r = await adminApi(isEdit ? `/api/admin/roles/${_editingRoleId}` : "/api/admin/roles", opts);
+    if (!r) {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+      return;
+    }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      _roleError(d.detail || d.error || "Failed to save role.");
+      btn.disabled = false;
+      btn.innerHTML = orig;
+      return;
+    }
+    closeRoleModal();
+    loadRoles();
+  } catch {
+    _roleError("Network error.");
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+function openRoleDelete(id, name) {
+  _deletingRoleId = id;
+  const btn = document.getElementById("roleDeleteConfirmBtn");
+  btn.disabled = false;
+  btn.innerHTML = "Delete role";
+  document.getElementById("roleDeleteName").textContent = name;
+  document.getElementById("roleDeleteModal").style.display = "flex";
+}
+
+function closeRoleDelete() {
+  _deletingRoleId = null;
+  document.getElementById("roleDeleteModal").style.display = "none";
+}
+
+async function confirmRoleDelete() {
+  const id = _deletingRoleId;
+  if (id == null) return;
+  const btn = document.getElementById("roleDeleteConfirmBtn");
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-spinner"></span> Deleting...';
+  try {
+    const r = await adminApi(`/api/admin/roles/${id}`, { method: "DELETE" });
+    if (!r) {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+      return;
+    }
+    if (!r.ok) {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+      return;
+    }
+    closeRoleDelete();
+    loadRoles();
+  } catch {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
 }
 
 // ── Tabs ──
@@ -937,6 +1156,19 @@ window.openUserModal = openUserModal;
 window.closeUserModal = closeUserModal;
 window.saveUser = saveUser;
 window.selectUserStatus = selectUserStatus;
+window.openDeleteModal = openDeleteModal;
+window.openDeleteModalFromUser = openDeleteModalFromUser;
+window.closeDeleteModal = closeDeleteModal;
+window.onDeleteConfirmTyped = onDeleteConfirmTyped;
+window.confirmDeleteUser = confirmDeleteUser;
+window.loadRoles = loadRoles;
+window.searchRoles = searchRoles;
+window.openRoleModal = openRoleModal;
+window.closeRoleModal = closeRoleModal;
+window.saveRole = saveRole;
+window.openRoleDelete = openRoleDelete;
+window.closeRoleDelete = closeRoleDelete;
+window.confirmRoleDelete = confirmRoleDelete;
 window.loadCacheStats = loadCacheStats;
 window.toggleCacheUsed = toggleCacheUsed;
 window.loadServerStats = loadServerStats;
@@ -949,6 +1181,15 @@ window.downloadBackup = downloadBackup;
 // ── Init ──
 // The first admin API call decides the page: 200 = dashboard, 401/403 =
 // not-found (no admin hints). Admins sign in through the main app first.
+document.getElementById("rolesBody").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-action]");
+  if (!btn) return;
+  const id = Number(btn.dataset.id);
+  const name = btn.dataset.name || "";
+  const role = _roleRows.find(x => x.id === id);
+  if (btn.dataset.action === "edit") openRoleModal(role || null);
+  else if (btn.dataset.action === "delete") openRoleDelete(id, role ? role.name : name);
+});
 loadStats();
 loadSessions();
 loadRegistrations();
@@ -956,5 +1197,6 @@ loadVisits();
 loadComboUsage();
 loadDbInfo();
 loadCacheStats();
+loadRoles();
 loadServerStats();
 startRefresh();

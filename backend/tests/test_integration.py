@@ -143,6 +143,68 @@ def _init_test_db():
             name TEXT NOT NULL UNIQUE COLLATE NOCASE,
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            status TEXT DEFAULT 'idle',
+            user_email TEXT DEFAULT '',
+            resume_filename TEXT DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            company TEXT DEFAULT '',
+            location TEXT DEFAULT '',
+            url TEXT DEFAULT '',
+            ai_score INTEGER,
+            keyword_score INTEGER,
+            total_score INTEGER,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS saved_searches (
+            id TEXT PRIMARY KEY,
+            email TEXT NOT NULL,
+            name TEXT DEFAULT '',
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS referral_scores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_email TEXT NOT NULL,
+            job_url TEXT NOT NULL,
+            resume_hash TEXT NOT NULL,
+            score INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS visits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            visit_id TEXT DEFAULT '',
+            session_id TEXT DEFAULT '',
+            user_email TEXT DEFAULT '',
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS deleted_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            name TEXT NOT NULL,
+            company TEXT DEFAULT '',
+            position TEXT DEFAULT '',
+            employment_status TEXT DEFAULT '',
+            city TEXT DEFAULT '',
+            state TEXT DEFAULT '',
+            country TEXT DEFAULT '',
+            linkedin_url TEXT DEFAULT '',
+            resume_filename TEXT DEFAULT '',
+            referral_credits INTEGER DEFAULT 0,
+            refer_opt_in INTEGER DEFAULT 0,
+            invited_by TEXT DEFAULT '',
+            created_at TEXT DEFAULT '',
+            last_login TEXT DEFAULT '',
+            deleted_at TEXT NOT NULL,
+            deleted_by TEXT DEFAULT ''
+        );
     """)
     conn.executescript("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
     conn.close()
@@ -174,6 +236,18 @@ def _auth_token(email):
 
 def _auth(email):
     return {"Authorization": "Bearer " + _auth_token(email)}
+
+
+def _seed_user(email, name="Test User"):
+    conn, cur = _fresh_conn()
+    try:
+        cur.execute(
+            "INSERT OR IGNORE INTO users (email, name, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now'))",
+            (email, name),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 class TestIntegrationAuthFlow(unittest.TestCase):
@@ -287,6 +361,7 @@ class TestIntegrationAuthFlow(unittest.TestCase):
     def test_07_register_rejects_mismatched_email(self):
         email = "mismatch@example.com"
         self._verify_code(email)
+        self._verify_code("other@example.com")
         r = self.client.post("/api/auth/register", headers=_auth("other@example.com"), json={
             "email": email, "name": "Wrong",
         })
@@ -484,9 +559,7 @@ class TestIntegrationProfileFlow(unittest.TestCase):
 
     def test_02_get_profile_nonexistent(self):
         r = self._get_profile("nobody@example.com")
-        self.assertEqual(r.status_code, 200)
-        data = r.json()
-        self.assertIn("error", data)
+        self.assertEqual(r.status_code, 401)
 
     def test_03_profile_requires_token(self):
         r = self.client.get("/api/profile")
@@ -1063,6 +1136,9 @@ class TestAdminUserCRU(unittest.TestCase):
         self._conn_patcher = patch("db._get_conn", _make_conn_patch())
         self._conn_patcher.start()
 
+        _seed_user(self._ADMIN, "Admin")
+        _seed_user("hacker@evil.com", "Hacker")
+
         from fastapi.testclient import TestClient
         from api.main import app
         self.client = TestClient(app)
@@ -1194,6 +1270,351 @@ class TestAdminUserCRU(unittest.TestCase):
         self.assertEqual(r.status_code, 401)
 
 
+class TestAdminUserDelete(unittest.TestCase):
+    _ADMIN = "ammarfitwalla@gmail.com"
+
+    def setUp(self):
+        _init_test_db()
+
+        conn, cur = _fresh_conn()
+        try:
+            emails = [
+                "victim@example.com", "survivor@example.com", "hacker@evil.com",
+                "admin2@example.com", "doomed@example.com", "referrer@example.com",
+                "invitee@example.com", self._ADMIN,
+            ]
+            ph = ",".join("?" * len(emails))
+            for t, col in (
+                ("saved_jobs", "user_email"), ("saved_searches", "email"),
+                ("referral_scores", "from_email"), ("referral_notifies", "email"),
+                ("verification_codes", "email"), ("leads", "email"),
+                ("visits", "user_email"), ("admin_users", "email"),
+                ("deleted_users", "email"), ("users", "email"),
+            ):
+                cur.execute(f"DELETE FROM {t} WHERE {col} IN ({ph})", emails)
+            cur.execute(f"DELETE FROM referral_requests WHERE from_email IN ({ph}) OR to_email IN ({ph})", emails + emails)
+            cur.execute(f"DELETE FROM sessions WHERE user_email IN ({ph})", emails)
+            cur.execute("DELETE FROM jobs WHERE session_id IN ('sess-victim')")
+            cur.execute("DELETE FROM events WHERE session_id IN ('sess-victim')")
+            conn.commit()
+        finally:
+            conn.close()
+
+        self._conn_patcher = patch("db._get_conn", _make_conn_patch())
+        self._conn_patcher.start()
+
+        self._tmp_resumes = tempfile.TemporaryDirectory()
+        with open(os.path.join(self._tmp_resumes.name, "keep.pdf"), "wb") as f:
+            f.write(b"%PDF-1.4 fake resume")
+        self._resumes_patcher = patch("api.routes.admin._resumes_dir", lambda: self._tmp_resumes.name)
+        self._resumes_patcher.start()
+
+        _seed_user(self._ADMIN, "Admin")
+
+        from fastapi.testclient import TestClient
+        from api.main import app
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        self._conn_patcher.stop()
+        self._resumes_patcher.stop()
+        self._tmp_resumes.cleanup()
+
+    def _sql(self, stmt, params=()):
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute(stmt, params)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _mk_user(self, email, name="Victim", resume="keep.pdf"):
+        self._sql(
+            "INSERT OR IGNORE INTO users (email, name, resume_filename, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))",
+            (email, name, resume),
+        )
+
+    def _count(self, table, col, val):
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {col} = ?", (val,))
+            return cur.fetchone()[0]
+        finally:
+            conn.close()
+
+    def _seed_full_user(self, email="victim@example.com"):
+        self._mk_user(email, resume="keep.pdf")
+        survivor = "survivor@example.com"
+        self._mk_user(survivor, "Survivor")
+        now = "2026-01-01 00:00:00"
+        self._sql(
+            "INSERT INTO saved_jobs (user_email, title, url, saved_at, updated_at) VALUES (?, 'J', 'u1', ?, ?)",
+            (email, now, now))
+        self._sql(
+            "INSERT INTO saved_jobs (user_email, title, url, saved_at, updated_at) VALUES (?, 'J2', 'u2', ?, ?)",
+            (survivor, now, now))
+        self._sql("INSERT INTO saved_searches (id, email, created_at) VALUES ('ss1', ?, ?)", (email, now))
+        self._sql("INSERT INTO saved_searches (id, email, created_at) VALUES ('ss2', ?, ?)", (survivor, now))
+        self._sql("INSERT INTO sessions (id, created_at, updated_at, user_email, resume_filename) VALUES ('sess-victim', ?, ?, ?, 'keep.pdf')",
+                  (now, now, email))
+        self._sql("INSERT INTO jobs (session_id, title, created_at) VALUES ('sess-victim', 'Job', ?)", (now,))
+        self._sql("INSERT INTO events (session_id, event, created_at) VALUES ('sess-victim', 'x', ?)", (now,))
+        self._sql(
+            "INSERT INTO referral_requests (from_email, to_email, job_url, created_at, updated_at) VALUES (?, ?, 'ur1', ?, ?)",
+            (email, survivor, now, now))
+        self._sql(
+            "INSERT INTO referral_requests (from_email, to_email, job_url, created_at, updated_at) VALUES (?, ?, 'ur2', ?, ?)",
+            (survivor, email, now, now))
+        self._sql("INSERT INTO referral_scores (from_email, job_url, resume_hash, score, created_at, updated_at) VALUES (?, 'ur', 'h', 5, ?, ?)",
+                  (email, now, now))
+        self._sql("INSERT INTO referral_notifies (email, company, created_at) VALUES (?, 'Co', ?)", (email, now))
+        self._sql("INSERT INTO verification_codes (email, code, expires_at, created_at) VALUES (?, '123456', '2030-01-01', ?)",
+                  (email, now))
+        self._sql("INSERT INTO leads (email, session_id, created_at) VALUES (?, 'sess-victim', ?)", (email, now))
+        self._sql("INSERT INTO visits (user_email, session_id, created_at) VALUES (?, 'sess-victim', ?)", (email, now))
+        self._sql("INSERT INTO admin_users (email, created_at, updated_at) VALUES (?, ?, ?)", (email, now, now))
+        return email, survivor
+
+    def test_delete_user_happy_path(self):
+        victim, _ = self._seed_full_user()
+        r = self.client.delete(f"/api/admin/users/{victim}", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["ok"])
+
+        self.assertEqual(self._count("users", "email", victim), 0)
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute("SELECT email, name, resume_filename, deleted_by FROM deleted_users WHERE email = ?", (victim,))
+            row = cur.fetchone()
+        finally:
+            conn.close()
+        self.assertIsNotNone(row)
+        self.assertEqual(row["email"], victim)
+        self.assertEqual(row["name"], "Victim")
+        self.assertEqual(row["resume_filename"], "keep.pdf")
+        self.assertEqual(row["deleted_by"], self._ADMIN)
+
+    def test_delete_cascades_related_rows_keeps_others(self):
+        victim, survivor = self._seed_full_user()
+        r = self.client.delete(f"/api/admin/users/{victim}", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+
+        self.assertEqual(self._count("saved_jobs", "user_email", victim), 0)
+        self.assertEqual(self._count("saved_searches", "email", victim), 0)
+        self.assertEqual(self._count("jobs", "session_id", "sess-victim"), 0)
+        self.assertEqual(self._count("events", "session_id", "sess-victim"), 0)
+        self.assertEqual(self._count("sessions", "user_email", victim), 0)
+        self.assertEqual(self._count("sessions", "id", "sess-victim"), 0)
+        self.assertEqual(self._count("referral_requests", "from_email", victim), 0)
+        self.assertEqual(self._count("referral_requests", "to_email", victim), 0)
+        self.assertEqual(self._count("referral_scores", "from_email", victim), 0)
+        self.assertEqual(self._count("referral_notifies", "email", victim), 0)
+        self.assertEqual(self._count("verification_codes", "email", victim), 0)
+        self.assertEqual(self._count("leads", "email", victim), 0)
+        self.assertEqual(self._count("visits", "user_email", victim), 0)
+        self.assertEqual(self._count("admin_users", "email", victim), 0)
+
+        self.assertGreater(self._count("saved_jobs", "user_email", survivor), 0)
+        self.assertGreater(self._count("saved_searches", "email", survivor), 0)
+        self.assertGreater(self._count("users", "email", survivor), 0)
+
+    def test_delete_removes_resume_file(self):
+        victim, _ = self._seed_full_user()
+        resume_path = os.path.join(self._tmp_resumes.name, "keep.pdf")
+        self.assertTrue(os.path.isfile(resume_path))
+        r = self.client.delete(f"/api/admin/users/{victim}", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(os.path.exists(resume_path))
+
+    def test_delete_tolerates_missing_resume_file(self):
+        victim, _ = self._seed_full_user()
+        os.remove(os.path.join(self._tmp_resumes.name, "keep.pdf"))
+        r = self.client.delete(f"/api/admin/users/{victim}", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["ok"])
+
+    def test_delete_missing_user_404(self):
+        r = self.client.delete("/api/admin/users/ghost@example.com", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 404)
+
+    def test_delete_non_admin_forbidden(self):
+        self._seed_full_user()
+        _seed_user("hacker@evil.com", "Hacker")
+        r = self.client.delete("/api/admin/users/victim@example.com", headers=_auth("hacker@evil.com"))
+        self.assertEqual(r.status_code, 403)
+
+    def test_delete_requires_token(self):
+        r = self.client.delete("/api/admin/users/victim@example.com")
+        self.assertEqual(r.status_code, 401)
+
+    def test_owner_cannot_be_deleted(self):
+        self._mk_user(self._ADMIN, "Owner")
+        r = self.client.delete(f"/api/admin/users/{self._ADMIN}", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["detail"], "The owner account cannot be deleted")
+        self.assertGreater(self._count("users", "email", self._ADMIN), 0)
+
+    def test_self_delete_blocked(self):
+        admin2 = "admin2@example.com"
+        self._mk_user(admin2, "Admin Two")
+        self._sql("INSERT INTO admin_users (email, created_at, updated_at) VALUES (?, '2026-01-01', '2026-01-01')", (admin2,))
+        r = self.client.delete(f"/api/admin/users/{admin2}", headers=_auth(admin2))
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["detail"], "You cannot delete your own account")
+
+    def test_deleted_users_token_invalidated(self):
+        doomed = "doomed@example.com"
+        self._mk_user(doomed, "Doomed")
+        r = self.client.get("/api/profile", headers=_auth(doomed))
+        self.assertEqual(r.status_code, 200)
+        r = self.client.delete(f"/api/admin/users/{doomed}", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["ok"])
+        r = self.client.get("/api/profile", headers=_auth(doomed))
+        self.assertEqual(r.status_code, 401)
+
+    def test_invited_by_left_as_historical_record(self):
+        ref = "referrer@example.com"
+        invitee = "invitee@example.com"
+        self._mk_user(ref, "Referrer")
+        self._sql(
+            "INSERT OR IGNORE INTO users (email, name, invited_by, created_at, updated_at) VALUES (?, 'Invitee', ?, datetime('now'), datetime('now'))",
+            (invitee, ref))
+        r = self.client.delete(f"/api/admin/users/{ref}", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute("SELECT invited_by FROM users WHERE email = ?", (invitee,))
+            self.assertEqual(cur.fetchone()["invited_by"], ref)
+        finally:
+            conn.close()
+
+
+class TestAdminRoles(unittest.TestCase):
+    _ADMIN = "ammarfitwalla@gmail.com"
+
+    def setUp(self):
+        _init_test_db()
+
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute("DELETE FROM custom_roles")
+            cur.execute("DELETE FROM users")
+            cur.execute("DELETE FROM admin_users")
+            conn.commit()
+        finally:
+            conn.close()
+
+        self._conn_patcher = patch("db._get_conn", _make_conn_patch())
+        self._conn_patcher.start()
+
+        _seed_user(self._ADMIN, "Admin")
+
+        from fastapi.testclient import TestClient
+        from api.main import app
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        self._conn_patcher.stop()
+
+    def _sql(self, stmt, params=()):
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute(stmt, params)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _mk_role(self, name):
+        self._sql("INSERT INTO custom_roles (name, created_at) VALUES (?, datetime('now'))", (name,))
+
+    def _role_id(self, name):
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute("SELECT id FROM custom_roles WHERE name = ? COLLATE NOCASE", (name,))
+            row = cur.fetchone()
+            return row[0] if row else None
+        finally:
+            conn.close()
+
+    def _names(self):
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute("SELECT name FROM custom_roles ORDER BY name COLLATE NOCASE")
+            return [r[0] for r in cur.fetchall()]
+        finally:
+            conn.close()
+
+    def test_list_happy(self):
+        self._mk_role("Backend")
+        self._mk_role("Frontend")
+        r = self.client.get("/api/admin/roles", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+        roles = r.json()["roles"]
+        self.assertEqual(len(roles), 2)
+        self.assertIn("id", roles[0])
+        self.assertIn("created_at", roles[0])
+        self.assertEqual({x["name"] for x in roles}, {"Backend", "Frontend"})
+
+    def test_list_rejects_non_admin(self):
+        _seed_user("joe@example.com", "Joe")
+        r = self.client.get("/api/admin/roles", headers=_auth("joe@example.com"))
+        self.assertEqual(r.status_code, 403)
+
+    def test_list_rejects_anonymous(self):
+        r = self.client.get("/api/admin/roles")
+        self.assertIn(r.status_code, (401, 403))
+
+    def test_create_happy(self):
+        r = self.client.post("/api/admin/roles", json={"name": "DevOps"}, headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("DevOps", self._names())
+
+    def test_create_blank_name(self):
+        r = self.client.post("/api/admin/roles", json={"name": "   "}, headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(self._names(), [])
+
+    def test_create_duplicate_case_insensitive(self):
+        self._mk_role("MLOps")
+        r = self.client.post("/api/admin/roles", json={"name": "mlops"}, headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(self._names(), ["MLOps"])
+
+    def test_rename_happy(self):
+        self._mk_role("Old")
+        r = self.client.patch(f"/api/admin/roles/{self._role_id('Old')}", json={"name": "New"}, headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self._names(), ["New"])
+
+    def test_rename_duplicate_case_insensitive(self):
+        self._mk_role("A")
+        self._mk_role("B")
+        r = self.client.patch(f"/api/admin/roles/{self._role_id('B')}", json={"name": "a"}, headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(self._names(), ["A", "B"])
+
+    def test_rename_blank(self):
+        self._mk_role("A")
+        r = self.client.patch(f"/api/admin/roles/{self._role_id('A')}", json={"name": "  "}, headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(self._names(), ["A"])
+
+    def test_rename_missing(self):
+        r = self.client.patch("/api/admin/roles/999999", json={"name": "X"}, headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 404)
+
+    def test_delete_happy(self):
+        self._mk_role("Old")
+        r = self.client.delete(f"/api/admin/roles/{self._role_id('Old')}", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self._names(), [])
+
+    def test_delete_missing(self):
+        r = self.client.delete("/api/admin/roles/999999", headers=_auth(self._ADMIN))
+        self.assertEqual(r.status_code, 404)
+
+
 class TestAdminBackup(unittest.TestCase):
     _ADMIN = "ammarfitwalla@gmail.com"
 
@@ -1277,6 +1698,7 @@ class TestAdminBackup(unittest.TestCase):
         self.assertEqual(r.status_code, 401)
 
     def test_backup_non_admin_forbidden(self):
+        _seed_user("hacker@evil.com", "Hacker")
         r = self.client.get("/api/admin/backup", headers=_auth("hacker@evil.com"))
         self.assertEqual(r.status_code, 403)
 
@@ -1369,6 +1791,7 @@ class TestJWTGuard(unittest.TestCase):
         self.assertEqual(r.status_code, 401)
 
     def test_protected_endpoint_with_token(self):
+        _seed_user("guard@example.com", "Guard")
         r = self.client.get("/api/profile", headers=_auth("guard@example.com"))
         self.assertEqual(r.status_code, 200)
 
@@ -1387,6 +1810,7 @@ class TestJWTGuard(unittest.TestCase):
     def test_cross_user_saved_jobs_isolation(self):
         from db import add_saved_job
         add_saved_job("owner@example.com", {"title": "SWE", "company": "Apple", "url": "https://example.com/job/a", "total_score": 90})
+        _seed_user("other@example.com", "Other")
         r = self.client.get("/api/saved-jobs?email=owner@example.com", headers=_auth("other@example.com"))
         self.assertEqual(r.status_code, 403)
 

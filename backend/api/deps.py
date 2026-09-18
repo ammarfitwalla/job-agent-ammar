@@ -19,14 +19,28 @@ def _decode(authorization: str) -> dict:
     return {"email": email}
 
 
+def _user_exists(email: str) -> bool:
+    from db import get_user
+    try:
+        return get_user(email) is not None
+    except Exception:
+        return True
+
+
 def get_current_user(authorization: str | None = Header(None)) -> dict:
-    return _decode(authorization)
+    identity = _decode(authorization)
+    if not _user_exists(identity["email"]):
+        raise HTTPException(status_code=401, detail="Invalid or missing credentials")
+    return identity
 
 
 def get_optional_user(authorization: str | None = Header(None)) -> dict | None:
     if not authorization:
         return None
     try:
-        return _decode(authorization)
+        identity = _decode(authorization)
     except HTTPException:
         return None
+    if not _user_exists(identity["email"]):
+        return None
+    return identity

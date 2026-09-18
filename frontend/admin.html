@@ -512,9 +512,9 @@ tr.clickable:hover td { background: #f8fafc; }
 
     <div class="tabs" data-group="main">
       <span class="tab active" data-tab="charts" onclick="switchTab('charts','main')">Charts</span>
-      <span class="tab" data-tab="cache" onclick="switchTab('cache','main')">Cache</span>
-      <span class="tab" data-tab="uploads" onclick="switchTab('uploads','main')">Uploads</span>
+      <span class="tab" data-tab="db" onclick="switchTab('db','main')">DB</span>
       <span class="tab" data-tab="sessions" onclick="switchTab('sessions','main')">Sessions</span>
+      <span class="tab" data-tab="users" onclick="switchTab('users','main')">Users</span>
       <span class="tab" data-tab="server" onclick="switchTab('server','main')">Server</span>
     </div>
 
@@ -532,7 +532,14 @@ tr.clickable:hover td { background: #f8fafc; }
 
     </div>
 
-    <div class="tab-content" data-group="main" data-tab="cache">
+    <div class="tab-content" data-group="main" data-tab="db">
+      <div class="tabs" data-group="db" style="margin-bottom: 24px;">
+        <span class="tab active" data-tab="cache" onclick="switchTab('cache','db')">Cache</span>
+        <span class="tab" data-tab="roles" onclick="switchTab('roles','db')">Roles</span>
+        <span class="tab" data-tab="uploads" onclick="switchTab('uploads','db')">Uploads</span>
+      </div>
+
+      <div class="tab-content active" data-group="db" data-tab="cache">
       <div class="chart-box db-card" style="max-width: 100%">
         <h3>Cached Jobs by Site</h3>
         <div class="table-wrap"><table><thead><tr>
@@ -545,8 +552,22 @@ tr.clickable:hover td { background: #f8fafc; }
       <div id="cacheSiteRows"></div>
     </div>
 
-    <div class="tab-content" data-group="main" data-tab="uploads">
-      <div class="chart-box db-card">
+    <div class="tab-content" data-group="db" data-tab="roles">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;gap:16px;flex-wrap:wrap">
+        <h3 style="margin:0;font-size:16px;font-weight:800;color:#1e293b">Custom Roles <span id="rolesCount" style="color:#94a3b8;font-weight:700">0</span></h3>
+        <button class="btn btn-primary" onclick="openRoleModal()">+ Add Role</button>
+      </div>
+      <div style="margin-bottom:16px">
+        <input id="roleSearchInput" type="text" placeholder="Search roles..." autocomplete="off" oninput="searchRoles()" style="width:100%;max-width:360px;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;box-sizing:border-box">
+      </div>
+      <div class="table-wrap"><table><thead><tr>
+        <th>Name</th><th>Created</th><th style="text-align:center">Actions</th>
+      </tr></thead><tbody id="rolesBody"></tbody></table></div>
+      <p style="margin:16px 0 0;font-size:13px;color:#94a3b8">Custom roles are user-added search roles persisted across refreshes.</p>
+    </div>
+
+    <div class="tab-content" data-group="db" data-tab="uploads">
+        <div class="chart-box db-card">
         <h3>Database</h3>
         <div class="db-info" id="dbInfo">—</div>
         <div class="db-actions">
@@ -597,11 +618,11 @@ tr.clickable:hover td { background: #f8fafc; }
         <div id="resumeFileList" style="margin-top:16px;font-size:13px;font-family:'JetBrains Mono', monospace;color:var(--text-muted);max-height:120px;overflow-y:auto;background:var(--bg-body);border-radius:8px;padding:8px;"></div>
       </div>
     </div>
+  </div>
 
     <div class="tab-content" data-group="main" data-tab="sessions">
       <div class="tabs" data-group="inner" style="margin-bottom: 24px;">
         <span class="tab active" data-tab="sessions" onclick="switchTab('sessions','inner')">Sessions</span>
-        <span class="tab" data-tab="registrations" onclick="switchTab('registrations','inner')">Registrations</span>
         <span class="tab" data-tab="visits" onclick="switchTab('visits','inner')">Visits</span>
       </div>
 
@@ -610,18 +631,18 @@ tr.clickable:hover td { background: #f8fafc; }
         <div class="table-wrap"><table><thead id="sessionHead"></thead><tbody id="sessionBody"></tbody></table></div>
       </div>
 
-      <div class="tab-content" data-group="inner" data-tab="registrations">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;gap:16px;flex-wrap:wrap">
-          <h3 style="margin:0;font-size:16px;font-weight:800;color:#1e293b">User Registrations</h3>
-          <button class="btn btn-primary" onclick="openUserModal()">+ Add User</button>
-        </div>
-        <div class="table-wrap"><table><thead><tr><th></th><th>Date</th><th>Name</th><th>Email</th><th>Admin</th><th>Status</th><th>Company</th><th>Position</th><th>Location</th><th>Resume</th><th>Jobs</th><th>Credits</th><th>Last Updated</th><th>Last Login</th></tr></thead><tbody id="registrationBody"></tbody></table></div>
-      </div>
-
       <div class="tab-content" data-group="inner" data-tab="visits">
         <div class="cards" id="visitCards" style="margin:0 0 24px 0"></div>
         <div class="table-wrap"><table><thead><tr><th>Date</th><th>IP</th><th>Location</th><th>Device</th><th>Page</th><th>Duration</th></tr></thead><tbody id="visitBody"></tbody></table></div>
       </div>
+    </div>
+
+    <div class="tab-content" data-group="main" data-tab="users">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;gap:16px;flex-wrap:wrap">
+        <h3 style="margin:0;font-size:16px;font-weight:800;color:#1e293b">User Registrations</h3>
+        <button class="btn btn-primary" onclick="openUserModal()">+ Add User</button>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th></th><th>Date</th><th>Name</th><th>Email</th><th>Admin</th><th>Status</th><th>Company</th><th>Position</th><th>Location</th><th>Resume</th><th>Jobs</th><th>Credits</th><th>Last Updated</th><th>Last Login</th></tr></thead><tbody id="registrationBody"></tbody></table></div>
     </div>
 
     <div class="tab-content" data-group="main" data-tab="server">
@@ -679,6 +700,64 @@ tr.clickable:hover td { background: #f8fafc; }
     <div style="display:flex;gap:12px;margin-top:8px">
       <button class="btn btn-primary" style="flex:1" id="userSaveBtn" onclick="saveUser()">Save</button>
       <button class="btn btn-secondary" style="flex:1" onclick="closeUserModal()">Cancel</button>
+    </div>
+    <button class="btn" id="userDeleteBtn" style="display:none;width:100%;margin-top:12px;background:#dc2626;border:none;color:#fff" onclick="openDeleteModalFromUser()">Delete user</button>
+  </div>
+</div>
+
+<!-- User Delete Confirm Modal -->
+<div id="deleteModal" style="display:none;position:fixed;inset:0;z-index:2100;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px" onclick="if (event.target === this) closeDeleteModal()">
+  <div style="background:#fff;border-radius:16px;padding:24px;width:460px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.25)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h3 style="margin:0;font-size:16px;font-weight:800;color:#1e293b">Delete user permanently</h3>
+      <button onclick="closeDeleteModal()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer;line-height:1">&times;</button>
+    </div>
+    <p style="margin:8px 0 16px;font-size:14px;line-height:1.5;color:#475569">
+      You are about to delete <strong id="deleteUserName" style="color:#1e293b"></strong>
+      (<strong id="deleteUserEmailText" style="color:#1e293b"></strong>). This permanently removes their
+      saved jobs, saved searches, referrals, sessions, leads and visits. A read-only snapshot is kept
+      in <code style="background:#f1f5f9;padding:1px 5px;border-radius:4px">deleted_users</code>, and their
+      resume files are deleted.
+    </p>
+    <div style="font-size:13px;font-weight:700;color:#64748b;margin-bottom:6px">Type the email to confirm</div>
+    <input id="deleteUserConfirmInput" type="email" placeholder="user@example.com" autocomplete="off" oninput="onDeleteConfirmTyped()" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
+    <div id="deleteModalError" style="display:none;color:#dc2626;font-size:13px;font-weight:600;padding:8px 12px;background:#fef2f2;border-radius:8px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:12px;margin-top:8px">
+      <button class="btn" id="deleteConfirmBtn" style="flex:1;background:#dc2626;border:none;color:#fff" onclick="confirmDeleteUser()" disabled>Delete user</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="closeDeleteModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Role Add/Edit Modal -->
+<div id="roleModal" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px" onclick="if (event.target === this) closeRoleModal()">
+  <div style="background:#fff;border-radius:16px;padding:24px;width:440px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.25)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 id="roleModalTitle" style="margin:0;font-size:16px;font-weight:800;color:#1e293b">Add Role</h3>
+      <button onclick="closeRoleModal()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer;line-height:1">&times;</button>
+    </div>
+    <input id="roleNameInput" type="text" placeholder="Role name (required)" autocomplete="off" style="width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
+    <div id="roleModalError" style="display:none;color:#dc2626;font-size:13px;font-weight:600;padding:8px 12px;background:#fef2f2;border-radius:8px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:12px;margin-top:8px">
+      <button class="btn btn-primary" style="flex:1" id="roleSaveBtn" onclick="saveRole()">Save</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="closeRoleModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Role Delete Confirm Modal -->
+<div id="roleDeleteModal" style="display:none;position:fixed;inset:0;z-index:2100;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;padding:20px" onclick="if (event.target === this) closeRoleDelete()">
+  <div style="background:#fff;border-radius:16px;padding:24px;width:440px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.25)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h3 style="margin:0;font-size:16px;font-weight:800;color:#1e293b">Delete role</h3>
+      <button onclick="closeRoleDelete()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer;line-height:1">&times;</button>
+    </div>
+    <p style="margin:8px 0 16px;font-size:14px;line-height:1.5;color:#475569">
+      Delete <strong id="roleDeleteName" style="color:#1e293b"></strong>? It will stop appearing in search role suggestions.
+    </p>
+    <div style="display:flex;gap:12px;margin-top:8px">
+      <button class="btn" id="roleDeleteConfirmBtn" style="flex:1;background:#dc2626;border:none;color:#fff" onclick="confirmRoleDelete()">Delete role</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="closeRoleDelete()">Cancel</button>
     </div>
   </div>
 </div>

@@ -36,6 +36,14 @@ class UpdateUserRequest(BaseModel):
     is_admin: bool | None = None
 
 
+class CreateRoleRequest(BaseModel):
+    name: str = ""
+
+
+class RenameRoleRequest(BaseModel):
+    name: str = ""
+
+
 def _classify(s):
     if s["status"] == "error":
         return "Error"
@@ -428,6 +436,85 @@ async def admin_user_resume(user_email: str, user: dict = Depends(get_current_us
     if not os.path.isfile(filepath):
         raise HTTPException(404, "Resume file not found")
     return FileResponse(filepath, filename=u["resume_filename"])
+
+
+@router.delete("/users/{user_email}")
+async def admin_delete_user(user_email: str, user: dict = Depends(get_current_user)):
+    _check_admin(user["email"])
+    from db import archive_and_delete_user, get_user, _get_conn
+    from config import ADMIN_EMAIL
+
+    target = get_user(user_email)
+    if not target:
+        raise HTTPException(404, "User not found")
+    target_email = target["email"]
+    caller_email = user["email"]
+    if target_email.strip().lower() == (ADMIN_EMAIL or "").strip().lower():
+        raise HTTPException(400, "The owner account cannot be deleted")
+    if target_email.strip().lower() == caller_email.strip().lower():
+        raise HTTPException(400, "You cannot delete your own account")
+
+    filenames = {target.get("resume_filename") or ""}
+    with _get_conn() as (conn, cur):
+        cur.execute("SELECT resume_filename FROM sessions WHERE LOWER(user_email) = ?", (target_email,))
+        for r in cur.fetchall():
+            filenames.add(r["resume_filename"] or "")
+
+    archived = archive_and_delete_user(target_email, deleted_by=caller_email)
+    if archived is None:
+        raise HTTPException(404, "User not found")
+
+    for fname in filenames:
+        if not fname:
+            continue
+        try:
+            fpath = os.path.join(_resumes_dir(), fname)
+            if os.path.isfile(fpath):
+                os.remove(fpath)
+        except Exception:
+            pass
+    return {"ok": True}
+
+
+@router.get("/roles")
+async def admin_list_roles(user: dict = Depends(get_current_user)):
+    _check_admin(user["email"])
+    from db import get_custom_role_rows
+    return {"roles": get_custom_role_rows()}
+
+
+@router.post("/roles")
+async def admin_create_role(req: CreateRoleRequest, user: dict = Depends(get_current_user)):
+    _check_admin(user["email"])
+    from db import add_custom_role
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(400, "role name is required")
+    if not add_custom_role(name):
+        raise HTTPException(409, "Role already exists")
+    return {"ok": True}
+
+
+@router.patch("/roles/{role_id}")
+async def admin_rename_role(role_id: int, req: RenameRoleRequest, user: dict = Depends(get_current_user)):
+    _check_admin(user["email"])
+    from db import rename_custom_role, get_custom_role_rows
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(400, "role name is required")
+    if not rename_custom_role(role_id, name):
+        existing = any(r["id"] == role_id for r in get_custom_role_rows())
+        raise HTTPException(409 if existing else 404, "Role already exists" if existing else "Role not found")
+    return {"ok": True}
+
+
+@router.delete("/roles/{role_id}")
+async def admin_delete_role(role_id: int, user: dict = Depends(get_current_user)):
+    _check_admin(user["email"])
+    from db import delete_custom_role_by_id
+    if not delete_custom_role_by_id(role_id):
+        raise HTTPException(404, "Role not found")
+    return {"ok": True}
 
 
 @router.get("/visits")
