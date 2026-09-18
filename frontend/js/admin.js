@@ -477,20 +477,86 @@ async function loadVisits() {
     ).join("");
     if (ipHtml) {
       document.getElementById("visitCards").insertAdjacentHTML("afterend",
-        `<div class="table-wrap" style="margin:12px 0"><div style="padding:8px 0;font-weight:600;font-size:13px">Top IPs</div>${ipHtml}</div>`);
+        `<div class="table-wrap" style="margin:12px 0">
+          <div onclick="toggleTopIps()" style="padding:8px 0;font-weight:600;font-size:13px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px">
+            <span id="topIpsArrow" style="transition:transform 0.2s">&#9656;</span> Top IPs
+          </div>
+          <div id="topIpsBody" style="display:none">${ipHtml}</div>
+        </div>`);
     }
 
-    document.getElementById("visitBody").innerHTML = visits.length
-      ? visits.map(v => `<tr>
-        <td style="white-space:nowrap">${v.created_at ? formatDate(v.created_at) : "\u2014"}</td>
-        <td style="font-family:monospace;font-size:12px">${_esc(v.ip_address)}</td>
-        <td>${_esc([v.country, v.region, v.city].filter(Boolean).join(", ")) || "\u2014"}</td>
-        <td>${_esc(v.device_type) || "\u2014"}</td>
-        <td>${_esc(v.path) || "\u2014"}</td>
-        <td>${v.duration_seconds ? Math.round(v.duration_seconds) + "s" : "\u2014"}</td>
-      </tr>`).join("")
-      : '<tr><td colspan="6"><div class="empty">No visits yet</div></td></tr>';
+    renderVisits(visits);
   } catch {}
+}
+
+// ── Visits: grouped by session ──
+// One header row per session; clicking expands the navigation (per-page rows
+// with individual durations). Legacy rows without a session_id appear alone.
+
+function renderVisits(visits) {
+  const groups = new Map();
+  for (const v of visits) {
+    const k = v.session_id || "v:" + v.visit_id;
+    if (!groups.has(k)) groups.set(k, { session_id: v.session_id || "", visits: [] });
+    groups.get(k).visits.push(v);
+  }
+
+  const body = document.getElementById("visitBody");
+  const groupsArr = [...groups.values()];
+  if (!groupsArr.length) {
+    body.innerHTML = '<tr><td colspan="8"><div class="empty">No visits yet</div></td></tr>';
+    return;
+  }
+
+  body.innerHTML = groupsArr.map((g, i) => {
+    const gv = g.visits.slice().sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+    const first = gv[0];
+    const emails = [...new Set(gv.map(v => v.user_email || "").filter(Boolean))];
+    const locs = [...new Set(gv.map(v => [v.country, v.region, v.city].filter(Boolean).join(", ")).filter(Boolean))];
+    const devs = [...new Set(gv.map(v => v.device_type).filter(Boolean))];
+    const totalDur = gv.reduce((s, v) => s + (v.duration_seconds || 0), 0);
+    const pageLabel = gv.length === 1 ? (gv[0].path || "\u2014") : `${gv.length} pages`;
+    const detail = gv.map(p => `<tr>
+        <td style="white-space:nowrap;padding-left:32px">${p.created_at ? formatDate(p.created_at) : "\u2014"}</td>
+        <td style="font-family:monospace;font-size:12px">${_esc(p.ip_address)}</td>
+        <td>${_esc(p.user_email) || "\u2014"}</td>
+        <td>${_esc(p.path) || "\u2014"}</td>
+        <td>${_esc(p.device_type) || "\u2014"}</td>
+        <td>${p.duration_seconds != null ? Math.round(p.duration_seconds) + "s" : "\u2014"}</td>
+      </tr>`).join("");
+    return `<tr class="clickable" onclick="toggleVisitGroup(${i})">
+        <td style="white-space:nowrap">${first.created_at ? formatDate(first.created_at) : "\u2014"}</td>
+        <td style="font-family:monospace;font-size:12px">${_esc(first.ip_address)}</td>
+        <td>${_esc(emails.join(", ")) || "\u2014"}</td>
+        <td>${g.session_id ? `<span style="font-family:monospace;font-size:11px" title="${_esc(g.session_id)}">${_esc(g.session_id.slice(0, 8))}</span>` : "\u2014"}</td>
+        <td>${_esc(locs[0]) || "\u2014"}</td>
+        <td>${_esc(devs.join(", ")) || "\u2014"}</td>
+        <td title="${_esc(pageLabel)}">${_esc(pageLabel)}</td>
+        <td>${totalDur ? Math.round(totalDur) + "s" : "\u2014"}</td>
+      </tr><tr class="detail-row" id="vd-${i}"><td colspan="8">
+        <div class="detail-panel">
+          <div style="padding:8px 0;font-weight:600;font-size:13px">Navigation (${gv.length} page${gv.length === 1 ? "" : "s"})</div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Time</th><th>IP</th><th>User</th><th>Page</th><th>Device</th><th>Duration</th></tr></thead>
+            <tbody>${detail}</tbody>
+          </table></div>
+        </div>
+      </td></tr>`;
+  }).join("");
+}
+
+function toggleVisitGroup(i) {
+  const row = document.getElementById(`vd-${i}`);
+  if (row) row.classList.toggle("open");
+}
+
+function toggleTopIps() {
+  const body = document.getElementById("topIpsBody");
+  const arrow = document.getElementById("topIpsArrow");
+  if (!body) return;
+  const open = body.style.display !== "none";
+  body.style.display = open ? "none" : "block";
+  if (arrow) arrow.innerHTML = open ? "&#9656;" : "&#9662;";
 }
 
 const _STATUS_LABELS = { Student: "student", Graduate: "graduate", "Laid Off": "laid_off", "Career Break": "career_break" };
@@ -1195,6 +1261,8 @@ window.sortSessions = sortSessions;
 window.filterSessions = filterSessions;
 window.toggleDetail = toggleDetail;
 window.loadVisits = loadVisits;
+window.toggleVisitGroup = toggleVisitGroup;
+window.toggleTopIps = toggleTopIps;
 window.loadRegistrations = loadRegistrations;
 window.openUserModal = openUserModal;
 window.closeUserModal = closeUserModal;
