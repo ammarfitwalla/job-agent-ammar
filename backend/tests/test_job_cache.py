@@ -197,12 +197,21 @@ class TestJobCacheAggregate(CacheDBTestCase):
         self.assertEqual(status, "fresh")
         self.assertEqual(len(entry["jobs"]), 4)
 
-    def test_aggregate_stale_below_min_volume(self):
+    def test_aggregate_broad_fresh_from_child_row(self):
+        # No national row at all — a broad search is a cache hit because the
+        # Maharashtra child row is fresh and above min_volume (aggregate-based).
         db.save_cache_entry("Data Scientist", "indeed", "", "", "in", False, 168, _jobs(1))
         db.save_cache_entry("Data Scientist", "indeed", "", "Maharashtra", "in", False, 168, _jobs(6, "mh"))
         status, entry = db.get_cached_jobs_aggregate("Data Scientist", "indeed", "", "", "in", False, 168)
-        self.assertEqual(status, "stale")
+        self.assertEqual(status, "fresh")
         self.assertEqual(len(entry["jobs"]), 7)
+
+    def test_aggregate_stale_when_all_rows_below_min_volume(self):
+        db.save_cache_entry("Data Scientist", "indeed", "", "", "in", False, 168, _jobs(1))
+        db.save_cache_entry("Data Scientist", "indeed", "", "Maharashtra", "in", False, 168, _jobs(4, "mh"))
+        status, entry = db.get_cached_jobs_aggregate("Data Scientist", "indeed", "", "", "in", False, 168)
+        self.assertEqual(status, "stale")
+        self.assertEqual(len(entry["jobs"]), 5)
 
     def test_aggregate_missing(self):
         status, entry = db.get_cached_jobs_aggregate("DevOps Engineer", "indeed", "", "", "in", False, 168)
@@ -246,8 +255,14 @@ def _make_fake_scraper():
     def scrape_fake(roles=None, location=None, results_wanted=20, internship_mode=False,
                     hours_old=168, fetch_descriptions=None, country_indeed=None):
         role = (roles or ["AI Engineer"])[0]
+        locs = (["Mumbai, Maharashtra, India"] * 4
+                + ["Pune, Maharashtra, India"] * 3
+                + ["Thane, Maharashtra, India"]
+                + ["Remote"]
+                + ["India"])
         return [{"title": f"{role}", "company": "Acme", "url": f"https://acme.example/jobs/{i}",
-                 "description": "Building ML systems", "tags": []} for i in range(results_wanted)]
+                 "description": "Building ML systems", "tags": [],
+                 "location": locs[i % len(locs)]} for i in range(results_wanted)]
 
     fake.scrape_fake = scrape_fake
     sys.modules["scrapers.fake"] = fake
@@ -273,14 +288,28 @@ class TestScrapeCacheIntegration(CacheDBTestCase):
         with patch.object(scrape_routes, "SITE_MAP", {"fake": ("fake", "scrape_fake")}), \
              patch.object(scrape_routes, "_harvest_companies") as harvest:
             scrape_routes.run_scrape(
-                "sid-test", ["fake"], ["AI Engineer"], "California, United States", "USA",
+                "sid-test", ["fake"], ["AI Engineer"], "Maharashtra, India", "India",
                 keywords=["ai"], internship_mode=False, scrape_limit=10, hours_old=168,
-                city="", state="California", country="us",
+                city="", state="Maharashtra", country="in",
             )
             harvest.assert_called_once()
-        status, entry = db.get_cache_entry("AI Engineer", "fake", "", "California", "us", False, 168)
-        self.assertEqual(status, "fresh")
-        self.assertGreaterEqual(len(entry["jobs"]), 10)
+        # Jobs are keyed by their OWN location, not the searched combo.
+        for city, expected in (("Mumbai", 4), ("Pune", 3), ("Thane", 1)):
+            status, entry = db.get_cache_entry("AI Engineer", "fake", city, "Maharashtra", "in", False, 168,
+                                               min_volume=1)
+            self.assertEqual(status, "fresh", f"{city} row should be fresh")
+            self.assertEqual(entry["job_count"], expected, f"{city} row count")
+        # Remote jobs → is_remote=1 country row; unresolvable → country row.
+        status, entry = db.get_cache_entry("AI Engineer", "fake", "", "", "in", False, 168, is_remote=1,
+                                           min_volume=1)
+        self.assertEqual(entry["job_count"], 1)
+        status, entry = db.get_cache_entry("AI Engineer", "fake", "", "", "in", False, 168, is_remote=0,
+                                           min_volume=1)
+        self.assertEqual(entry["job_count"], 1)
+        # Remote and city jobs are aggregated into a country-only search
+        # (remote rows are keyed is_remote=1 and excluded from non-remote scopes).
+        status, entry = db.get_cached_jobs_aggregate("AI Engineer", "fake", "", "", "in", False, 168)
+        self.assertEqual(len(entry["jobs"]), 9)
         session = db.get_session("sid-test")
         self.assertEqual(session["status"], "done")
         self.assertGreater(session["scraped"], 0)
@@ -348,6 +377,66 @@ class TestScrapeCacheIntegration(CacheDBTestCase):
             self.assertEqual(len(combos), 1)
             self.assertEqual(served, 0)
             upsert.assert_not_called()
+
+
+# ── _tag_job_location unit tests ──
+
+class TestTagJobLocation(unittest.TestCase):
+    def setUp(self):
+        from api.routes import scrape as scrape_routes
+        self.S = scrape_routes
+        self.S._ensure_states()
+        self.city_map = {"mumbai": ("Mumbai", "Maharashtra"), "pune": ("Pune", "Maharashtra")}
+
+    def _tag(self, location, country="in"):
+        return self.S._tag_job_location({"location": location}, country, self.city_map)
+
+    def test_city_match(self):
+        self.assertEqual(self._tag("Mumbai, Maharashtra, India"), ("Mumbai", "Maharashtra", 0))
+
+    def test_city_match_variant_text(self):
+        self.assertEqual(self._tag("mumbai, IN"), ("Mumbai", "Maharashtra", 0))
+
+    def test_state_only_match(self):
+        self.assertEqual(self._tag("Maharashtra, India"), ("", "Maharashtra", 0))
+
+    def test_unmatched_city_still_matches_state(self):
+        self.assertEqual(self._tag("Thane, Maharashtra, India"), ("", "Maharashtra", 0))
+
+    def test_unresolvable_falls_back_to_country(self):
+        self.assertEqual(self._tag("India"), ("", "", 0))
+        self.assertEqual(self._tag("400001"), ("", "", 0))
+        self.assertEqual(self._tag(""), ("", "", 0))
+
+    def test_remote(self):
+        self.assertEqual(self._tag("Remote"), ("", "", 1))
+        self.assertEqual(self._tag("Anywhere — work from home"), ("", "", 1))
+        self.assertEqual(self._tag("Remote (Hybrid), Bengaluru, India"), ("", "", 1))
+
+    def test_state_other_country_not_matched(self):
+        self.assertEqual(self._tag("California, United States"), ("", "", 0))
+
+    def test_state_code_MH(self):
+        self.assertEqual(self._tag("MH, IN"), ("", "Maharashtra", 0))
+
+    def test_state_code_KA(self):
+        self.assertEqual(self._tag("KA, India"), ("", "Karnataka", 0))
+
+    def test_city_beats_state_code(self):
+        self.assertEqual(self._tag("Mumbai, MH, India"), ("Mumbai", "Maharashtra", 0))
+
+    def test_state_code_cross_country_rejected(self):
+        # 'CA' resolves only under a US search; under an India search it stays unmatched.
+        self.assertEqual(self._tag("CA, USA"), ("", "", 0))
+        self.assertEqual(self._tag("CA"), ("", "", 0))
+
+    def test_state_code_no_false_positive(self):
+        # 'up' must not match inside 'uppal'; no state code equals city-like tokens.
+        self.assertEqual(self._tag("Hyderabad, India"), ("", "", 0))
+        self.assertEqual(self._tag("Uppal, Telangana, India"), ("", "Telangana", 0))
+
+    def test_blank_job_dict(self):
+        self.assertEqual(self.S._tag_job_location({}, "in", self.city_map), ("", "", 0))
 
 
 if __name__ == "__main__":

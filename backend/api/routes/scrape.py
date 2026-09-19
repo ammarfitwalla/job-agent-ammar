@@ -292,79 +292,6 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
                 if not filtered:
                     continue
 
-                # For Naukri with state combos (no city), keep ALL jobs but tag
-                # each with its actual city/state. Nationwide results are
-                # distributed to per-city cache entries instead of discarded.
-                # Remote jobs get is_remote=1, unmatched non-remote jobs are skipped.
-                if site_key == "naukri" and combo.get("state") and not combo.get("city"):
-                    # Build a global city→(canonical, state) lookup for the country
-                    country_code = combo.get("country", "")
-                    global_city_map = _build_city_state_map(country_code)
-                    searched_state = combo.get("state", "")
-                    keep = []
-                    for j in filtered:
-                        jloc = (j.get("location") or "").lower()
-                        # Remote jobs → save under city="", state="", is_remote=1
-                        if "remote" in jloc:
-                            j["_naukri_city"] = ""
-                            j["_naukri_state"] = ""
-                            j["_is_remote"] = 1
-                            keep.append(j)
-                            continue
-                        matched_city = ""
-                        matched_state = searched_state
-                        for token, (canonical, state_name) in global_city_map.items():
-                            if token in jloc:
-                                matched_city = canonical
-                                matched_state = state_name
-                                break
-                        if matched_city:
-                            j["_naukri_city"] = matched_city
-                            j["_naukri_state"] = matched_state
-                            j["_is_remote"] = 0
-                            keep.append(j)
-                        # Else: no match, not remote → skip entirely
-                    filtered = keep
-
-                # For Naukri per-city combos, tag ALL jobs with their actual
-                # city/state and keep them. Nationwide results get distributed
-                # to per-city cache entries instead of being discarded.
-                # Jobs with mismatched locations (not remote, not the searched city)
-                # are skipped entirely.
-                if site_key == "naukri" and combo.get("city") and combo.get("state"):
-                    country_code = combo.get("country", "")
-                    global_city_map = _build_city_state_map(country_code)
-                    searched_city = combo["city"]
-                    searched_state = combo.get("state", "")
-                    keep = []
-                    for j in filtered:
-                        jloc = (j.get("location") or "").lower()
-                        # Remote jobs → save under city="", state="", is_remote=1
-                        if "remote" in jloc:
-                            j["_naukri_city"] = ""
-                            j["_naukri_state"] = ""
-                            j["_is_remote"] = 1
-                            keep.append(j)
-                            continue
-                        # Try to match against curated cities
-                        matched_city = ""
-                        matched_state = searched_state
-                        for token, (canonical, state_name) in global_city_map.items():
-                            if token in jloc:
-                                matched_city = canonical
-                                matched_state = state_name
-                                break
-                        # If a curated city matched, save under that city
-                        if matched_city:
-                            j["_naukri_city"] = matched_city
-                            j["_naukri_state"] = matched_state
-                            j["_is_remote"] = 0
-                            keep.append(j)
-                        # Else: no match, not remote → skip entirely
-                    filtered = keep
-                    log(f"[SCRAPE] {role} @ {site_key} — {combo['city']}: "
-                        f"{len(filtered)} jobs kept after location filter", sid)
-
                 combo_jobs.extend(filtered)
 
                 # Dedup against accumulated jobs
@@ -412,73 +339,55 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
                 log(f"[SCRAPE] {role} @ {site_key} — pausing before next city...", sid)
                 _delay(6, 10)
 
-        # Persist this combo's snapshot to the job cache.
-        # For ALL Naukri combos with a state, distribute jobs into per-city
-        # cache entries based on their actual location tag. For other sites,
-        # save under the combo's key as before.
+        # Persist this combo's snapshot to the job cache, keyed by each job's
+        # OWN location (as reported by the board) for all sites. A broad search
+        # stores its jobs at city level when that is where they actually are;
+        # nothing rolls up to a broader key. Remote / blank / unmatched jobs
+        # fall back to the country-level row (never dropped).
         if combo_jobs:
             from config import CACHE_MAX_JOBS_PER_ENTRY
             from db import save_cache_entry, touch_prewarm_combo
 
-            if site_key == "naukri" and combo.get("state"):
-                # Group by (_naukri_city, _naukri_state, _is_remote) — remote jobs
-                # go to city="", state="", is_remote=1; city jobs to their own entry.
-                city_state_groups: dict[tuple, list] = {}
-                for j in combo_jobs:
-                    ck = j.get("_naukri_city", "")
-                    sk = j.get("_naukri_state", combo.get("state", ""))
-                    ir = j.get("_is_remote", 0)
-                    city_state_groups.setdefault((ck, sk, ir), []).append(j)
+            country_code = combo.get("country", "") or ""
+            _ensure_states()
+            global_city_map = _build_city_state_map(country_code)
+            location_groups: dict[tuple, list] = {}
+            for j in combo_jobs:
+                ck, sk, ir = _tag_job_location(j, country_code, global_city_map)
+                j["_is_remote"] = ir
+                location_groups.setdefault((ck, sk, ir), []).append(j)
 
-                log(f"[SCRAPE] {role} @ {site_key}: distributing {len(combo_jobs)} "
-                    f"jobs across {len(city_state_groups)} city groups", sid)
+            log(f"[SCRAPE] {role} @ {site_key}: distributing {len(combo_jobs)} jobs "
+                f"across {len(location_groups)} location groups", sid)
 
-                for (city_tag, state_tag, is_remote_tag), jobs in city_state_groups.items():
-                    if not jobs:
-                        continue
-                    try:
-                        save_cache_entry(
-                            role, site_key,
-                            city_tag, state_tag, combo.get("country", ""),
-                            internship_mode, hours_old, jobs,
-                            max_jobs=CACHE_MAX_JOBS_PER_ENTRY, keep_larger=True,
-                            is_remote=is_remote_tag,
-                        )
-                        touch_prewarm_combo(
-                            role, site_key,
-                            city_tag, state_tag, combo.get("country", ""),
-                            internship_mode, hours_old,
-                        )
-                        remote_label = " [REMOTE]" if is_remote_tag else ""
-                        log(f"[CACHE-INSERT] {role}@{site_key} city={city_tag} "
-                            f"state={state_tag}{remote_label}: inserted {len(jobs)} jobs "
-                            f"(urls={[j.get('url','')[:60] for j in jobs[:3]]}...)", sid)
-                    except Exception as e:
-                        log(f"[CACHE-INSERT] {role}@{site_key} city={city_tag} "
-                            f"state={state_tag}: FAILED to insert: {e}", sid)
-                saved_cities = [(c, s) for (c, s, ir) in city_state_groups if c]
-                saved_remote = sum(1 for (c, s, ir) in city_state_groups if ir)
-                saved_unknown = any(not c and not ir for (c, s, ir) in city_state_groups)
-                log(f"[SCRAPE] {role} @ {site_key}: saved {len(city_state_groups)} cache entries "
-                    f"(cities={saved_cities}, remote={saved_unknown})", sid)
-            else:
+            for (city_tag, state_tag, is_remote_tag), jobs in location_groups.items():
+                if not jobs:
+                    continue
                 try:
                     save_cache_entry(
                         role, site_key,
-                        combo.get("city", ""), combo.get("state", ""), combo.get("country", ""),
-                        internship_mode, hours_old, combo_jobs,
+                        city_tag, state_tag, country_code,
+                        internship_mode, hours_old, jobs,
                         max_jobs=CACHE_MAX_JOBS_PER_ENTRY, keep_larger=True,
+                        is_remote=is_remote_tag,
                     )
                     touch_prewarm_combo(
                         role, site_key,
-                        combo.get("city", ""), combo.get("state", ""), combo.get("country", ""),
+                        city_tag, state_tag, country_code,
                         internship_mode, hours_old,
                     )
-                    log(f"[CACHE-INSERT] {role}@{site_key} "
-                        f"city={combo.get('city','')} state={combo.get('state','')}: "
-                        f"inserted {len(combo_jobs)} jobs", sid)
+                    remote_label = " [REMOTE]" if is_remote_tag else ""
+                    log(f"[CACHE-INSERT] {role}@{site_key} city={city_tag} "
+                        f"state={state_tag}{remote_label}: inserted {len(jobs)} jobs "
+                        f"(urls={[j.get('url','')[:60] for j in jobs[:3]]}...)", sid)
                 except Exception as e:
-                    log(f"[CACHE-INSERT] {role}@{site_key}: FAILED to insert: {e}", sid)
+                    log(f"[CACHE-INSERT] {role}@{site_key} city={city_tag} "
+                        f"state={state_tag}: FAILED to insert: {e}", sid)
+            saved_cities = [(c, s) for (c, s, ir) in location_groups if c]
+            saved_remote = sum(1 for (c, s, ir) in location_groups if ir)
+            saved_country = sum(1 for (c, s, ir) in location_groups if not c and not ir)
+            log(f"[SCRAPE] {role} @ {site_key}: saved {len(location_groups)} cache entries "
+                f"(cities={saved_cities}, remote={saved_remote}, country={saved_country})", sid)
 
         # Staggered delay before next site/role combo
         _delay(*stagger)
@@ -736,6 +645,7 @@ def _cache_lookup(req):
 
 
 _STATE_INDEX = None
+_STATE_CODE_INDEX = {}
 _CITY_INDEX = None
 _CITY_READY = False
 _CITY_LOCK = threading.Lock()
@@ -746,10 +656,11 @@ _city_state_map_cache = {}
 def _ensure_states():
     """Build (once) the country-name map and state index synchronously (fast).
     Calls from the request path must not block on the full city index."""
-    global _STATE_INDEX, _COUNTRY_CODE_TO_NAME
+    global _STATE_INDEX, _STATE_CODE_INDEX, _COUNTRY_CODE_TO_NAME
     if _STATE_INDEX is not None:
         return _STATE_INDEX
     _STATE_INDEX = {}
+    _STATE_CODE_INDEX = {}
     _COUNTRY_CODE_TO_NAME = {}
     try:
         from countrystatecity_countries import get_countries, get_states_of_country
@@ -760,11 +671,18 @@ def _ensure_states():
             country_name = _COUNTRY_CODE_TO_NAME.get(cc, cc.upper())
             try:
                 for s in get_states_of_country(cc):
-                    _STATE_INDEX[s.name.strip().lower()] = {
+                    info = {
                         "state": s.name,
                         "country": country_name,
                         "country_code": cc,
                     }
+                    _STATE_INDEX[s.name.strip().lower()] = info
+                    code = (getattr(s, "state_code", "") or "").strip().lower()
+                    if not code:
+                        iso = getattr(s, "iso3166_2", "") or ""
+                        code = (iso.split("-")[-1] if "-" in iso else "").lower()
+                    if code and len(code) >= 2:
+                        _STATE_CODE_INDEX.setdefault(code, info)
             except Exception:
                 pass
     except Exception:
@@ -932,6 +850,56 @@ def _state_cities(state: str, country: str = "") -> list:
         return list(config.CACHE_STATE_CITIES.get(state) or [])
     except Exception:
         return []
+
+
+_REMOTE_LOCATION_TOKENS = ("remote", "work from home", "work from anywhere")
+
+
+def _tag_job_location(j, country_code, global_city_map=None):
+    """Resolve the cache row location (city, state, is_remote) for a scraped
+    job from its OWN location text, as returned by the board.
+
+    Remote markers → city/state blank + is_remote=1. Otherwise the location is
+    matched against the searched country's curated city tokens (exact token
+    substring), then the full-name state index, then 2-letter state codes
+    (e.g. 'MH' → Maharashtra) as whole tokens — all same-country only.
+    Unmatched / blank locations fall back to the country-level row
+    (city/state blank, non-remote) — a job is never dropped here.
+    """
+    jloc = (j.get("location") or "").strip().lower()
+    if any(t in jloc for t in _REMOTE_LOCATION_TOKENS):
+        return "", "", 1
+    city = ""
+    state = ""
+    if jloc:
+        for token, (canonical, st) in (global_city_map or {}).items():
+            if token and token in jloc:
+                city = canonical
+                state = st
+                break
+        if not city and _STATE_INDEX:
+            ccl = (country_code or "").lower()
+            for name, info in _STATE_INDEX.items():
+                if name in jloc and (not ccl or info.get("country_code", "").lower() == ccl):
+                    state = info["state"]
+                    break
+        if not state and _STATE_CODE_INDEX:
+            ccl = (country_code or "").lower()
+            for tok in _tokenize_location(jloc):
+                if len(tok) < 2:
+                    continue
+                info = _STATE_CODE_INDEX.get(tok)
+                if info and (not ccl or info.get("country_code", "").lower() == ccl):
+                    state = info["state"]
+                    break
+    return city, state, 0
+
+
+def _tokenize_location(jloc):
+    """Word tokens of a lowercase location string, split on non-alphanumerics.
+    Used to match 2-letter state codes (e.g. 'mh') as whole tokens so short
+    codes never substring-match inside longer words."""
+    return "".join(ch if ch.isalnum() else " " for ch in jloc).split()
 
 
 def _resolve_request_location(req):

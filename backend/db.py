@@ -779,9 +779,11 @@ def get_cached_jobs_aggregate(role: str, site: str, city: str, state: str, count
     granularity: a city search stays exact (leaf); a state search unions the
     state row plus its city rows; a country-only search unions the national row
     plus every state and city row for that country. Jobs are merged and deduped
-    by URL, capped at max_jobs. Status: 'fresh' when the searched-exact-key
-    entry is fresh; 'stale' when any qualifying entry exists; 'missing' when
-    none do. The exact row still drives the scrape/enqueue decision."""
+    by URL, capped at max_jobs. Status is aggregate-based: a scope is 'fresh'
+    when ANY of its qualifying rows is fresh (recent + enough volume) — broad
+    searches become cache hits from their child (city/state) rows even when the
+    exact broad-key entry doesn't exist. 'stale' when rows exist but are all
+    old/low-volume (serve + top-up); 'missing' when none do (scrape)."""
     where = "role=? AND site=? AND country=? AND internship_mode=? AND hours_old=? AND is_remote=?"
     params = [role, site, country or "", 1 if internship_mode else 0, hours_old, 1 if is_remote else 0]
     if (city or ""):
@@ -799,8 +801,7 @@ def get_cached_jobs_aggregate(role: str, site: str, city: str, state: str, count
         return "missing", None
 
     city_v, state_v = city or "", state or ""
-    exact = next((d for d in rows if d["city"] == city_v and d["state"] == state_v), None)
-    status = "stale" if exact is None or not _cache_fresh(exact, ttl_hours, min_volume) else "fresh"
+    status = "stale" if not any(_cache_fresh(d, ttl_hours, min_volume) for d in rows) else "fresh"
 
     merged = []
     seen = set()
