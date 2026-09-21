@@ -1499,8 +1499,8 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
     _aiRoleList = userAISelected;
     rolesToScrape = [...new Set([...userCustomSelected, ...userAISelected])];
   } else {
-    _customRoleList = [...new Set([...allSelectedRoles, ...suggestedRoles])];
-    _aiRoleList = suggestedRoles;
+    _customRoleList = [...new Set(allSelectedRoles)];
+    _aiRoleList = [];
     rolesToScrape = _customRoleList;
   }
 
