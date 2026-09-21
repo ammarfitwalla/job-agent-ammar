@@ -83,7 +83,7 @@ function showLowResultsBanner(totalJobs) {
   const country = (loc.country || "").trim();
   const jobsWord = totalJobs === 1 ? "job" : "jobs";
   let msg, chips;
-if (city) {
+  if (city) {
     msg = `${totalJobs} ${jobsWord} found for ${_esc(city)} yet. Try another city or click to broaden the search to`;
     chips = [];
     if (state) chips.push(chipHtml(`${state}, ${country}`, { city: "", state, country, country_code: loc.country_code }));
@@ -141,6 +141,48 @@ let aiPollTimer = null;
 let customPollTimers = {};
 let aiLogs = [];
 let aiStatus = '';
+
+// ── Visit Tracking ──
+(function() {
+  const _visitId = crypto.randomUUID();
+  const _visitStart = Date.now();
+
+  function _detectDevice() {
+    const ua = navigator.userAgent;
+    if (/Mobi|Android|iPhone|iPad|iPod|BlackBerry|Windows Phone|IEMobile|Opera Mini/i.test(ua)) return "phone";
+    if (/Tablet|iPad|PlayBook|Silk/i.test(ua)) return "tablet";
+    return "desktop";
+  }
+
+  function _visitBeacon(endpoint, data) {
+    try {
+      const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+      navigator.sendBeacon(endpoint, blob);
+    } catch {}
+  }
+
+  _visitBeacon("/api/visit/start", {
+    visit_id: _visitId,
+    device_type: _detectDevice(),
+    path: window.location.pathname,
+    referer: document.referrer || "",
+    session_id: "",
+    user_email: "",
+  });
+
+  function _endVisit() {
+    _visitBeacon("/api/visit/end", {
+      visit_id: _visitId,
+      total_duration: (Date.now() - _visitStart) / 1000,
+    });
+  }
+
+  window.addEventListener("beforeunload", _endVisit);
+  window.addEventListener("pagehide", _endVisit);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") _endVisit();
+  });
+})();
 
 // ===== TOAST =====
 if (typeof window.showToast !== "function") {

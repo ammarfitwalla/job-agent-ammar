@@ -13,20 +13,46 @@ import os
 log = logging.getLogger(__name__)
 
 
+def _smtp_settings():
+    """Return SMTP (host, port, user, password) for the configured provider.
+
+    sendcorex_smtp uses the API key as BOTH the SMTP username and password.
+    Returns None when the provider's credentials are incomplete."""
+    from config import (EMAIL_PROVIDER, EMAIL_HOST, EMAIL_PORT, EMAIL_USER,
+                        EMAIL_PASSWORD, SENDCORE_API_KEY)
+    if EMAIL_PROVIDER == "sendcorex_smtp":
+        if not SENDCORE_API_KEY:
+            log.warning("SENDCORE_API_KEY not set, skipping")
+            return None
+        return EMAIL_HOST, EMAIL_PORT, SENDCORE_API_KEY, SENDCORE_API_KEY
+    if not all([EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD]):
+        log.warning("SMTP config incomplete, skipping")
+        return None
+    return EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD
+
+
+def _smtp_from():
+    """From/Reply-To addresses: branded domain for SendCoreX, Gmail user otherwise."""
+    from config import EMAIL_PROVIDER, EMAIL_USER, EMAIL_FROM, EMAIL_REPLY_TO
+    if EMAIL_PROVIDER == "sendcorex_smtp":
+        return EMAIL_FROM, EMAIL_REPLY_TO, "jobawn.com"
+    return f"JobAwn <{EMAIL_USER}>", EMAIL_USER, EMAIL_USER.split("@")[-1]
+
+
 def _send_msg_with_retry(msg, to, tries=3, timeout=120):
-    """Send via Gmail SMTP with a generous timeout and retries on drop.
+    """Send via SMTP with a generous timeout and retries on drop.
 
     Large attachments make Gmail occasionally kill the connection mid-upload
     (SMTPServerDisconnected); a fresh connection on retry resolves it."""
-    from config import EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD
-    if not all([EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD]):
-        log.warning("SMTP config incomplete, skipping")
+    settings = _smtp_settings()
+    if not settings:
         return False
+    host, port, user, password = settings
     for attempt in range(1, tries + 1):
         try:
-            with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=timeout) as s:
+            with smtplib.SMTP(host, port, timeout=timeout) as s:
                 s.starttls()
-                s.login(EMAIL_USER, EMAIL_PASSWORD)
+                s.login(user, password)
                 s.send_message(msg)
             log.info(f"SMTP email sent to {to}")
             return True
@@ -37,21 +63,27 @@ def _send_msg_with_retry(msg, to, tries=3, timeout=120):
 
 
 def send_email(to: str, subject: str, html_body: str, text_body: str | None = None) -> bool:
-    """Send email via Gmail SMTP. Returns True on success."""
+    """Send email via the configured provider. Returns True on success."""
     try:
-        from config import EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD
-        if not all([EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD]):
-            log.warning("SMTP config incomplete, skipping")
+        from config import EMAIL_PROVIDER
+        if EMAIL_PROVIDER == "sendcorex_api":
+            from utils.sendcorex_api import send as _scx_send
+            if _scx_send(to, subject, html_body, transactional=True):
+                return True
+            log.warning("SendCoreX API failed — falling back to SMTP")
+        settings = _smtp_settings()
+        if not settings:
             return False
         msg = MIMEMultipart("alternative") if text_body else MIMEText(html_body, "html")
         if text_body:
             msg.attach(MIMEText(text_body, "plain"))
             msg.attach(MIMEText(html_body, "html"))
+        from_addr, reply_to, from_domain = _smtp_from()
         msg["Subject"] = subject
-        msg["From"] = f"JobAwn <{EMAIL_USER}>"
+        msg["From"] = from_addr
         msg["To"] = to
-        msg["Reply-To"] = EMAIL_USER
-        msg["Message-ID"] = f"<{uuid.uuid4()}@{EMAIL_USER.split('@')[-1]}>"
+        msg["Reply-To"] = reply_to
+        msg["Message-ID"] = f"<{uuid.uuid4()}@{from_domain}>"
         msg["Date"] = formatdate(localtime=True)
         return _send_msg_with_retry(msg, to)
     except Exception as e:
@@ -107,16 +139,23 @@ def send_verification_email(to: str, code: str) -> bool:
 
 
 def send_email_with_attachment(to: str, subject: str, html_body: str, file_path: str, filename: str) -> bool:
-    """Send email with a file attachment via Gmail SMTP. Returns True on success."""
+    """Send email with a file attachment via the configured provider."""
     try:
-        from config import EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD
-        if not all([EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD]):
-            log.warning("SMTP config incomplete, skipping")
+        from config import EMAIL_PROVIDER
+        if EMAIL_PROVIDER == "sendcorex_api":
+            from utils.sendcorex_api import send as _scx_send
+            if _scx_send(to, subject, html_body, file_path=file_path, filename=filename, transactional=True):
+                return True
+            log.warning("SendCoreX API failed — falling back to SMTP")
+        settings = _smtp_settings()
+        if not settings:
             return False
+        from_addr, reply_to, _ = _smtp_from()
         msg = MIMEMultipart()
         msg["Subject"] = subject
-        msg["From"] = EMAIL_USER
+        msg["From"] = from_addr
         msg["To"] = to
+        msg["Reply-To"] = reply_to
         msg.attach(MIMEText(html_body, "html"))
         with open(file_path, "rb") as f:
             part = MIMEBase("application", "octet-stream")

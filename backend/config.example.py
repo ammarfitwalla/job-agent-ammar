@@ -386,7 +386,16 @@ RESUME_PATH = "resume.txt"
 AUTO_APPLY = False
 CHROME_PROFILE_PATH = ""
 
-EMAIL_HOST=os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+# Outbound mail provider: "gmail" (default) | "sendcorex_smtp" | "sendcorex_api".
+EMAIL_PROVIDER=os.environ.get("EMAIL_PROVIDER", "gmail")
+# SendCoreX API key — used as HTTP bearer auth (mail.sendcorex.com) and as
+# BOTH SMTP username and password (smtp.sendcorex.com).
+SENDCORE_API_KEY=os.environ.get("SENDCORE_API_KEY", "")
+# From/Reply-To used when sending as a branded domain (SendCoreX).
+EMAIL_FROM=os.environ.get("EMAIL_FROM", "JobAwn <no-reply@jobawn.com>")
+EMAIL_REPLY_TO=os.environ.get("EMAIL_REPLY_TO", "admin@jobawn.com")
+
+EMAIL_HOST=os.environ.get("EMAIL_HOST", "smtp.sendcorex.com" if EMAIL_PROVIDER == "sendcorex_smtp" else "smtp.gmail.com")
 EMAIL_PORT=int(os.environ.get("EMAIL_PORT", "587"))
 EMAIL_USER=os.environ.get("EMAIL_USER", "")
 EMAIL_PASSWORD=os.environ.get("EMAIL_PASSWORD", "")
