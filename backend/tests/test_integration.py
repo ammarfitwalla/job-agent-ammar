@@ -205,6 +205,21 @@ def _init_test_db():
             deleted_at TEXT NOT NULL,
             deleted_by TEXT DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS email_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recipient TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            html_body TEXT NOT NULL,
+            text_body TEXT NOT NULL DEFAULT '',
+            dedup_key TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'pending',
+            attempts INTEGER NOT NULL DEFAULT 0,
+            error TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            sent_at TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_email_queue_pending ON email_queue(status, id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_email_dedup ON email_queue(dedup_key) WHERE dedup_key != '';
     """)
     conn.executescript("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
     conn.close()
@@ -303,6 +318,37 @@ class TestIntegrationAuthFlow(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["user"]["name"], "Test User")
         self.assertEqual(data["user"]["company"], "Google")
+
+    def test_02_welcome_enqueued_on_verify_code_new_user(self):
+        email = "welcome@example.com"
+        r = self._verify_code(email)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["ok"])
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute(
+                "SELECT recipient, subject, dedup_key, status FROM email_queue "
+                "WHERE dedup_key = ?",
+                (f"welcome:{email}",),
+            )
+            row = cur.fetchone()
+        finally:
+            conn.close()
+        self.assertIsNotNone(row, "welcome email should be queued at account creation")
+        self.assertEqual(row["recipient"], email)
+        self.assertIn("Welcome to JobAwn", row["subject"])
+        self.assertEqual(row["status"], "pending")
+
+    def test_03_welcome_not_duplicated_on_second_verify(self):
+        email = "wedup@example.com"
+        self._verify_code(email)
+        self._verify_code(email)
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute("SELECT COUNT(*) n FROM email_queue WHERE dedup_key = ?", (f"welcome:{email}",))
+            self.assertEqual(cur.fetchone()["n"], 1)
+        finally:
+            conn.close()
 
     def test_last_login_stamped_on_verify(self):
         email = "llogin@example.com"
@@ -736,6 +782,89 @@ class TestIntegrationReferralFlow(unittest.TestCase):
         self.assertEqual(a_req["status"], "accepted")
         self.assertTrue(a_req.get("to_referrer_id"))
         self.assertTrue(a_req.get("to_name"))
+
+    def test_06b_accept_enqueues_referral_accepted_email(self):
+        self._create_referral()
+        outgoing = self.client.get("/api/referrals/outgoing", headers=_auth(self.from_email)).json()
+        rid = outgoing["requests"][0]["id"]
+        r = self.client.put(f"/api/referrals/{rid}/accept", headers=_auth(self.to_email))
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["ok"])
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute(
+                "SELECT recipient, subject, dedup_key, status FROM email_queue "
+                "WHERE dedup_key = ?",
+                (f"refaccept:{rid}",),
+            )
+            row = cur.fetchone()
+        finally:
+            conn.close()
+        self.assertIsNotNone(row, "accepted-referral email should be queued to the seeker")
+        self.assertEqual(row["recipient"], self.from_email)
+        self.assertIn("accepted your referral request", row["subject"])
+        self.assertEqual(row["status"], "pending")
+
+    def _backdate_accepted(self, rid):
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute("UPDATE referral_requests SET accepted_at = datetime('now', '-3 hours') WHERE id = ?", (rid,))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _confirmed_reminders(self, rid):
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute(
+                "SELECT recipient, dedup_key FROM email_queue WHERE dedup_key LIKE ?",
+                (f"confirm_reminder:{rid}:%",),
+            )
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+        return rows
+
+    def test_06c_cooldown_end_enqueues_reminder_to_both_parties(self):
+        self._create_referral()
+        outgoing = self.client.get("/api/referrals/outgoing", headers=_auth(self.from_email)).json()
+        rid = outgoing["requests"][0]["id"]
+        self.client.put(f"/api/referrals/{rid}/accept", headers=_auth(self.to_email))
+        self._backdate_accepted(rid)
+        from scheduler import enqueue_confirm_reminders
+        n = enqueue_confirm_reminders()
+        self.assertEqual(n, 2)
+        rows = self._confirmed_reminders(rid)
+        self.assertEqual(len(rows), 2)
+        keys = {r["recipient"]: r["dedup_key"] for r in rows}
+        self.assertEqual(keys.get(self.to_email), f"confirm_reminder:{rid}:receiver")
+        self.assertEqual(keys.get(self.from_email), f"confirm_reminder:{rid}:sender")
+
+    def test_06d_cooldown_end_reminder_is_single_run(self):
+        self._create_referral()
+        outgoing = self.client.get("/api/referrals/outgoing", headers=_auth(self.from_email)).json()
+        rid = outgoing["requests"][0]["id"]
+        self.client.put(f"/api/referrals/{rid}/accept", headers=_auth(self.to_email))
+        self._backdate_accepted(rid)
+        from scheduler import enqueue_confirm_reminders
+        self.assertEqual(enqueue_confirm_reminders(), 2)
+        self.assertEqual(enqueue_confirm_reminders(), 0)
+        self.assertEqual(len(self._confirmed_reminders(rid)), 2)
+
+    def test_06e_cooldown_end_reminder_skips_confirmed_party(self):
+        self._create_referral()
+        outgoing = self.client.get("/api/referrals/outgoing", headers=_auth(self.from_email)).json()
+        rid = outgoing["requests"][0]["id"]
+        self.client.put(f"/api/referrals/{rid}/accept", headers=_auth(self.to_email))
+        self._backdate_accepted(rid)
+        r = self.client.put(f"/api/referrals/{rid}/confirm", headers=_auth(self.from_email))
+        self.assertEqual(r.status_code, 200)
+        from scheduler import enqueue_confirm_reminders
+        self.assertEqual(enqueue_confirm_reminders(), 1)
+        rows = self._confirmed_reminders(rid)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["dedup_key"], f"confirm_reminder:{rid}:receiver")
+        self.assertEqual(rows[0]["recipient"], self.to_email)
 
     def test_07_complete_referral(self):
         self._create_referral()

@@ -348,6 +348,125 @@ def run_db_backup():
                 pass
 
 
+def enqueue_confirm_reminders():
+    """Scan for accepted referrals whose confirmation cooldown has elapsed and
+    enqueue a one-time reminder to each party that still hasn't confirmed.
+
+    Fired at the top of every mail-worker pass (incl. boot) so a reminder lands
+    within one interval of the 48h cooldown ending. Dedup keys
+    confirm_reminder:{req_id}:receiver|sender guarantee one email per party."""
+    import config
+    try:
+        if not config.MAIL_QUEUE_ENABLED:
+            return 0
+        from db import enqueue_email, get_pending_confirm_reminders
+        from emails import templates
+
+        count = 0
+        for row in get_pending_confirm_reminders():
+            req_id = row["id"]
+            company = row.get("company") or "their company"
+            if not row.get("receiver_confirmed"):
+                subj, html, text, _c = templates.build_confirm_reminder_receiver(
+                    row.get("to_name") or "", row.get("from_name") or "", company)
+                if enqueue_email(row["to_email"], subj, html, text,
+                                 dedup_key=f"confirm_reminder:{req_id}:receiver"):
+                    count += 1
+            if not row.get("sender_confirmed"):
+                subj, html, text, _c = templates.build_confirm_reminder_sender(
+                    row.get("from_name") or "", row.get("to_name") or "", company)
+                if enqueue_email(row["from_email"], subj, html, text,
+                                 dedup_key=f"confirm_reminder:{req_id}:sender"):
+                    count += 1
+        if count:
+            log(f"[MAIL] Queued {count} confirmation reminder(s)")
+        return count
+    except Exception as e:
+        log(f"[MAIL] Confirmation reminder scan error: {e}")
+        return 0
+
+
+def run_mail_queue():
+    """Drain the transactional email queue: send pending mails, mark sent/failed.
+
+    Controlled by the dedicated mail worker (start_mail_worker), which runs
+    every MAIL_QUEUE_INTERVAL_MINUTES — independent of SCHEDULER_ENABLED so the
+    queue still drains in environments where the prewarm scheduler is off.
+    Sends up to MAIL_QUEUE_MAX_PER_RUN per pass; each email gets up to 3
+    attempts before being marked failed."""
+    import config
+    try:
+        if not config.MAIL_QUEUE_ENABLED:
+            return 0
+        enqueue_confirm_reminders()
+        from db import get_pending_emails, mark_email_sent, mark_email_failed
+        from utils.smtp_sender import send_email
+
+        sent = 0
+        pending = get_pending_emails(config.MAIL_QUEUE_MAX_PER_RUN)
+        for row in pending:
+            try:
+                ok = send_email(row["recipient"], row["subject"],
+                                row["html_body"], row["text_body"] or None)
+            except Exception as e:
+                ok = False
+                log(f"[MAIL] Error sending #{row['id']} to {row['recipient']}: {e}")
+            if ok:
+                mark_email_sent(row["id"])
+                sent += 1
+            else:
+                mark_email_failed(row["id"], f"Sending failed for to={row['recipient']}")
+        if sent:
+            log(f"[MAIL] Queue drained — sent {sent} of {len(pending)}")
+        return sent
+    except Exception as e:
+        log(f"[MAIL] Queue drain error: {e}")
+        return 0
+
+
+_mail_thread = None
+_mail_stop = threading.Event()
+
+
+def _mail_loop():
+    import config
+    while not _mail_stop.wait(config.MAIL_QUEUE_INTERVAL_MINUTES * 60):
+        try:
+            run_mail_queue()
+        except Exception as e:
+            log(f"[MAIL] Worker pass error: {e}")
+
+
+def start_mail_worker():
+    """Start the transactional-mail drain loop (idempotent, daemon thread).
+
+    Not tied to SCHEDULER_ENABLED — mail delivery is time-sensitive (~5 min)
+    and must keep working even when the heavy prewarm scheduler is off."""
+    global _mail_thread
+    if _mail_thread is not None and _mail_thread.is_alive():
+        return
+    import config
+    if not config.MAIL_QUEUE_ENABLED:
+        log("[MAIL] Mail queue disabled via MAIL_QUEUE_ENABLED")
+        return
+    _mail_stop.clear()
+    try:
+        run_mail_queue()
+    except Exception:
+        pass
+    _mail_thread = threading.Thread(target=_mail_loop, daemon=True, name="mail-queue")
+    _mail_thread.start()
+    log(f"[MAIL] Worker started — draining every {config.MAIL_QUEUE_INTERVAL_MINUTES} min")
+
+
+def stop_mail_worker():
+    global _mail_thread
+    _mail_stop.set()
+    if _mail_thread is not None:
+        _mail_thread.join(timeout=5)
+        _mail_thread = None
+
+
 def start_scheduler():
     """Start the background prewarm scheduler (idempotent) + one boot warm-up."""
     global _scheduler

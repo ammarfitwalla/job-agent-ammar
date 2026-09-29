@@ -31,6 +31,12 @@ async def lifespan(app: FastAPI):
         ) from e
     init_db()
     try:
+        from scheduler import start_mail_worker
+        start_mail_worker()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+    try:
         from scheduler import start_scheduler
         start_scheduler()
     except Exception as e:
@@ -44,9 +50,10 @@ async def lifespan(app: FastAPI):
         traceback.print_exc()
     yield
     try:
-        from scheduler import shutdown_scheduler, stop_proxy_refresher
+        from scheduler import shutdown_scheduler, stop_proxy_refresher, stop_mail_worker
         shutdown_scheduler()
         stop_proxy_refresher()
+        stop_mail_worker()
     except Exception:
         pass
 

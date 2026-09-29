@@ -11,7 +11,15 @@ from typing import Optional
 _DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "job_agent.db")
 _write_lock = threading.Lock()
 _job_count_cache: dict[str, int] = {}
-DEV_MODE = False
+
+# DEV_MODE toggles dev-only shortcuts (currently: the 48h referral confirmation
+# cooldown becomes 10s). Read from the git-ignored config so production defaults
+# to False and dev mode can never ship by accident.
+try:
+    import config as _config
+    DEV_MODE = bool(getattr(_config, "DEV_MODE", False))
+except Exception:
+    DEV_MODE = False
 
 
 @contextlib.contextmanager
@@ -338,6 +346,21 @@ def init_db():
                 deleted_at TEXT NOT NULL,
                 deleted_by TEXT DEFAULT ''
             );
+            CREATE TABLE IF NOT EXISTS email_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                recipient TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                html_body TEXT NOT NULL,
+                text_body TEXT NOT NULL DEFAULT '',
+                dedup_key TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'pending',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                error TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                sent_at TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_email_queue_pending ON email_queue(status, id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_email_dedup ON email_queue(dedup_key) WHERE dedup_key != '';
         """)
         # Create deleted_users index if missing
         try:
@@ -1117,6 +1140,63 @@ def remove_custom_prewarm(role: str, site: str, city: str, state: str, country: 
 
 def _now():
     return datetime.utcnow().isoformat()
+
+
+# ── Mail Queue (transactional emails, drained by the dedicated mail worker) ──
+
+
+def enqueue_email(recipient: str, subject: str, html_body: str,
+                  text_body: str = "", dedup_key: str = "") -> bool:
+    """Queue a transactional email for the scheduled mailer.
+
+    The dedup_key (e.g. 'welcome:user@x.com', 'refreq:12') guarantees each event
+    enqueues at most once — duplicates are silently ignored.
+    Returns True when a new row was inserted, False if it was a duplicate."""
+    recipient = (recipient or "").strip()
+    if not recipient or not subject or not html_body:
+        return False
+    now = _now()
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute(
+                """INSERT OR IGNORE INTO email_queue
+                   (recipient, subject, html_body, text_body, dedup_key, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (recipient, subject, html_body, text_body, dedup_key, now),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+
+def get_pending_emails(limit: int = 20) -> list[dict]:
+    """Oldest pending emails, oldest first."""
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            "SELECT * FROM email_queue WHERE status = 'pending' ORDER BY id ASC LIMIT ?",
+            (int(limit),),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def mark_email_sent(email_id: int) -> None:
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute(
+                "UPDATE email_queue SET status = 'sent', sent_at = ?, attempts = attempts + 1 WHERE id = ? AND status = 'pending'",
+                (_now(), email_id),
+            )
+            conn.commit()
+
+
+def mark_email_failed(email_id: int, error: str = "") -> None:
+    """Bump attempts; give up after 3 failures."""
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute(
+                "UPDATE email_queue SET status = CASE WHEN attempts + 1 >= 3 THEN 'failed' ELSE 'pending' END, attempts = attempts + 1, error = ? WHERE id = ? AND status = 'pending'",
+                ((error or "")[:500], email_id),
+            )
+            conn.commit()
 
 
 # ── Sessions ──
@@ -2280,6 +2360,14 @@ def get_referral_request(req_id: int) -> Optional[dict]:
         return dict(row) if row else None
 
 
+# Cooldown between a referral being accepted and either party confirming it.
+# Single source of truth — shared by confirm_referral() and the cooldown-end
+# reminder enqueuer (scheduler.enqueue_confirm_reminders). A function so tests
+# can shorten it by patching DEV_MODE at runtime.
+def referral_confirm_cooldown_seconds() -> int:
+    return 10 if DEV_MODE else 48 * 3600
+
+
 def confirm_referral(req_id: int, email: str, role: str) -> dict:
     """
     role: 'receiver' or 'sender'
@@ -2306,7 +2394,7 @@ def confirm_referral(req_id: int, email: str, role: str) -> dict:
         except Exception:
             accepted_ts = 0
         elapsed = now_ts - accepted_ts
-        cooldown = 10 if DEV_MODE else 48 * 3600
+        cooldown = referral_confirm_cooldown_seconds()
         if elapsed < cooldown:
             remaining = int(cooldown - elapsed)
             if DEV_MODE:
@@ -2342,6 +2430,38 @@ def confirm_referral(req_id: int, email: str, role: str) -> dict:
         "receiver_confirmed": 1 if credits_awarded or role == "receiver" else updated.get("receiver_confirmed", 0),
         "sender_confirmed": 1 if credits_awarded or role == "sender" else updated.get("sender_confirmed", 0),
     }
+
+def get_pending_confirm_reminders(now_ts: float | None = None,
+                                  cooldown_seconds: int | None = None) -> list[dict]:
+    """Accepted referrals whose confirmation cooldown has elapsed and which have
+    NOT yet been fully confirmed (credit_awarded=0).
+
+    Used by the mail worker to send one reminder to each party that still has
+    to confirm. Returns full request rows plus the resolved seeker/referrer
+    names so templates can be built without extra round-trips."""
+    cooldown = referral_confirm_cooldown_seconds() if cooldown_seconds is None else cooldown_seconds
+    cutoff = (now_ts if now_ts is not None else datetime.utcnow().timestamp()) - cooldown
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            "SELECT r.*, u.name AS from_name, v.name AS to_name "
+            "FROM referral_requests r "
+            "LEFT JOIN users u ON u.email = r.from_email "
+            "LEFT JOIN users v ON v.email = r.to_email "
+            "WHERE r.status = 'accepted' AND r.credit_awarded = 0",
+        )
+        rows = []
+        for row in cur.fetchall():
+            d = dict(row)
+            if not d.get("accepted_at"):
+                continue
+            try:
+                accepted_ts = datetime.fromisoformat(d["accepted_at"]).timestamp()
+            except Exception:
+                continue
+            if accepted_ts <= cutoff:
+                rows.append(d)
+    return rows
+
 
 def complete_referral(req_id: int, referrer_email: str) -> bool:
     """Legacy wrapper — kept for backward compat. Delegates to confirm_referral."""

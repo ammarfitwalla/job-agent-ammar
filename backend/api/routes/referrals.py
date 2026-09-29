@@ -1,5 +1,6 @@
 import hashlib
 import os
+import traceback
 
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from pydantic import BaseModel
@@ -159,6 +160,17 @@ async def referral_create(req: ReferralRequest, user: dict = Depends(get_current
         from_email, to_email, req.job_url, req.job_title,
         req.company, match_score, req.message, req.resume_filename,
     )
+    # Queue the "you've been asked" email to the referrer.
+    try:
+        from db import enqueue_email
+        from emails.templates import build_referral_requested
+        subj, html, text, _c = build_referral_requested(
+            to_user.get("name", ""), req.job_title, req.company,
+            match_score or 0, req.message,
+        )
+        enqueue_email(to_email, subj, html, text, dedup_key=f"refreq:{rid}")
+    except Exception:
+        traceback.print_exc()
     return {"ok": True, "id": rid, "remaining": remaining - 1, "match_score": match_score}
 
 
@@ -206,6 +218,21 @@ async def referral_accept(req_id: int, user: dict = Depends(get_current_user)):
     ok = update_referral_status(req_id, "accepted")
     if ok:
         from_user = get_user(req["from_email"])
+        # The accepting user is the referrer; load their full row (the auth
+        # dependency only carries the email) for name/position/linkedin_url.
+        referrer = get_user(req["to_email"]) or {"email": req["to_email"]}
+        # Queue the "accepted — here's my contact" email to the seeker.
+        try:
+            from db import enqueue_email
+            from emails.templates import build_referral_accepted
+            subj, html, text, _c = build_referral_accepted(
+                from_user.get("name", "") if from_user else "",
+                referrer.get("name", ""), req.get("company", ""),
+                referrer.get("position", ""), referrer.get("linkedin_url", ""),
+            )
+            enqueue_email(req["from_email"], subj, html, text, dedup_key=f"refaccept:{req_id}")
+        except Exception:
+            traceback.print_exc()
         return {
             "ok": True,
             "contact": {

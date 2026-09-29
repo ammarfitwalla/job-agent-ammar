@@ -2,6 +2,7 @@ import random
 import string
 import os
 import shutil
+import traceback
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -19,6 +20,18 @@ from utils.jwt import create_token
 from config import JWT_ACCESS_TOKEN_MINUTES
 
 DEV_MODE = False  # Set to True for development mode, False for production
+
+
+def _enqueue_welcome(user) -> None:
+    """Best-effort welcome email for a newly-created account (dedup-safe)."""
+    try:
+        from db import enqueue_email
+        from emails.templates import build_welcome
+        subj, html, text, _c = build_welcome((user or {}).get("name", ""))
+        enqueue_email(user.get("email", ""), subj, html, text,
+                      dedup_key="welcome:" + (user.get("email", "") or "").lower())
+    except Exception:
+        traceback.print_exc()
 
 # Public company-list writes — cap per IP.
 _ADD_COMPANY_RATE = 5
@@ -136,6 +149,7 @@ async def auth_verify_code(request: Request, req: VerifyCodeRequest):
         if not user:
             name = req.email.split("@")[0]
             user = create_user(req.email, name)
+            _enqueue_welcome(user)
         return _token_response(request, user)
     if not verify_code(req.email, req.code):
         return {"ok": False, "error": "Invalid or expired code"}
@@ -143,6 +157,7 @@ async def auth_verify_code(request: Request, req: VerifyCodeRequest):
     if not user:
         name = req.email.split("@")[0]
         user = create_user(req.email, name)
+        _enqueue_welcome(user)
     return _token_response(request, user)
 
 
@@ -153,11 +168,13 @@ async def auth_register(req: RegisterRequest, user: dict = Depends(get_current_u
     email = user["email"]
     if req.invited_by:
         req.invited_by = req.invited_by.strip().lower()
+    was_new = False
     user = get_user(email)
     if user:
         from db import update_user_profile
         update_user_profile(email, name=req.name, company=req.company, position=req.position, employment_status=req.employment_status, linkedin_url=req.linkedin_url)
     else:
+        was_new = True
         user = create_user(email, req.name, req.company, req.position, req.linkedin_url, req.employment_status)
 
     if req.refer_opt_in:
@@ -176,6 +193,27 @@ async def auth_register(req: RegisterRequest, user: dict = Depends(get_current_u
 
     if req.search_id:
         _copy_search_resume(req.search_id, email)
+
+    # ── Transactional emails (queued for the scheduled mailer) ──
+    if was_new:
+        _enqueue_welcome(user)
+
+    try:
+        from db import enqueue_email as _enqueue, get_referral_notifies, get_user as _get_user
+        from emails.templates import build_company_joined
+        company = (user.get("company") or "").strip()
+        opted_in = bool(req.refer_opt_in or user.get("refer_opt_in"))
+        if opted_in and company:
+            for watcher in get_referral_notifies(company=company):
+                we = (watcher.get("email") or "").strip().lower()
+                if not we or we == email.lower():
+                    continue
+                watcher_user = _get_user(we)
+                subj, html, text, _c = build_company_joined(
+                    (watcher_user or {}).get("name") or "", company)
+                _enqueue(we, subj, html, text, dedup_key=f"company_joined:{company}:{email}")
+    except Exception:
+        traceback.print_exc()
 
     return {"ok": True, "user": user}
 

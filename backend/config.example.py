@@ -369,6 +369,13 @@ SCHEDULER_ENABLED = False
 SCHEDULER_INTERVAL_MINUTES = 180
 
 # ==============
+# MAIL QUEUE (transactional emails drained by the dedicated mail worker)
+# ==============
+MAIL_QUEUE_ENABLED = True
+MAIL_QUEUE_INTERVAL_MINUTES = 5
+MAIL_QUEUE_MAX_PER_RUN = 20
+
+# ==============
 # GOOGLE SHEETS 
 # ==============
 GOOGLE_SHEET_NAME = "Ammar Job Tracker"
@@ -385,6 +392,10 @@ DAILY_EMAIL_SUBJECT = "Daily Job Application Summary"
 RESUME_PATH = "resume.txt"
 AUTO_APPLY = False
 CHROME_PROFILE_PATH = ""
+
+# Dev shortcuts (referral confirmation cooldown 10s instead of 48h).
+# MUST stay False in production — db.py reads this from config.
+DEV_MODE = False
 
 # Outbound mail provider: "gmail" (default) | "sendcorex_smtp" | "sendcorex_api".
 EMAIL_PROVIDER=os.environ.get("EMAIL_PROVIDER", "gmail")
