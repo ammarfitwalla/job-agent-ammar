@@ -263,3 +263,22 @@ visits to the user, so the personalized branch can fire for the dormant cohort i
 **Idempotency confirmed:** the next 5-minute worker pass enqueued nothing; 16 dormant users
 remain but 0 are eligible for `2026-W39` because of the `engage:{week}:{email}` dedup key.
 Public `https://jobawn.com/health` 200 and bad-sig unsubscribe 400 verified from off-host.
+
+---
+
+## Deployment entry - 2026-09-30 (session lifetime 24h -> 48h)
+
+`JWT_ACCESS_TOKEN_MINUTES` `1440` -> `2880` in `backend/config.py` (git-ignored; the server
+copy is the source of truth) and `backend/config.example.py` (tracked). Commit `46277c0`.
+
+- **No frontend change needed:** `frontend/js/api.js` decodes the JWT `exp` claim rather than
+  hardcoding a 24h window, and the login cookie's `max_age` derives from the same setting
+  (`api/routes/auth.py`), so both follow the config automatically.
+- **Existing sessions are unaffected:** `exp` is fixed at issue time, so only newly issued
+  tokens carry the 48h window. `JWT_SECRET` was not rotated, so no one is logged out.
+- Verified: prod config reads `2880`; a freshly minted token's `exp - iat` is 48h; public
+  `/health` 200; 29 auth/token tests pass; full suite 322 passed (same 6 pre-existing
+  unrelated failures). No engagement re-send on restart (weekly dedup held).
+- **Backup:** `/app/backend/config.py.bak-1440`. Deploy-dir `config.py` re-synced so a
+  container rebuild keeps the new value.
+- Engagement dormancy is unaffected: it is driven by page-level `visits`, not token lifetime.
