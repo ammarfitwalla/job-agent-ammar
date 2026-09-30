@@ -44,7 +44,8 @@ def _init_test_db():
             resume_filename TEXT DEFAULT '',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
-            last_login TEXT DEFAULT ''
+            last_login TEXT DEFAULT '',
+            email_opt_out INTEGER DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS referral_notifies (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -412,6 +413,40 @@ class TestIntegrationAuthFlow(unittest.TestCase):
             "email": email, "name": "Wrong",
         })
         self.assertEqual(r.status_code, 403)
+
+    def test_email_unsubscribe_route_valid_sig(self):
+        email = "unsub@example.com"
+        self._verify_code(email)
+        from emails.unsubscribe import build_unsubscribe_url
+        import urllib.parse
+        url = build_unsubscribe_url(email)
+        self.assertTrue(url)
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+        r = self.client.get("/api/email/unsubscribe",
+                            params={"email": email, "s": params["s"][0]})
+        self.assertEqual(r.status_code, 200)
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute("SELECT email_opt_out FROM users WHERE email = ?", (email,))
+            row = cur.fetchone()
+        finally:
+            conn.close()
+        self.assertIsNotNone(row)
+        self.assertEqual(row["email_opt_out"], 1)
+
+    def test_email_unsubscribe_route_bad_sig(self):
+        email = "badunsub@example.com"
+        self._verify_code(email)
+        r = self.client.get("/api/email/unsubscribe",
+                            params={"email": email, "s": "not-a-signature"})
+        self.assertEqual(r.status_code, 400)
+        conn, cur = _fresh_conn()
+        try:
+            cur.execute("SELECT email_opt_out FROM users WHERE email = ?", (email,))
+            row = cur.fetchone()
+        finally:
+            conn.close()
+        self.assertEqual(row["email_opt_out"], 0)
 
     def test_08_verify_code_normalizes_email_case(self):
         email = "CaseTest@Example.COM"

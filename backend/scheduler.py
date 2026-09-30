@@ -386,6 +386,249 @@ def enqueue_confirm_reminders():
         return 0
 
 
+# A user's free-text `position` rarely equals a cache role verbatim
+# ("Software Enginner", "Ai Engineer", "Backend Developer Intern"), and
+# job_cache.role is BINARY-collated, so an exact lookup misses on case alone.
+# These steps resolve a profile role onto a role that actually has cached jobs.
+_ROLE_QUALIFIERS = {
+    "intern", "internship", "trainee", "fresher", "senior", "junior", "mid",
+    "entry", "level", "representative", "rep", "graduate", "associate",
+}
+_ROLE_FUZZY_CUTOFF = 0.82
+
+
+def _norm_role(value: str) -> str:
+    """Lowercase and drop qualifier tokens ("Intern", "Senior") so near-identical
+    role strings compare equal. Role-defining words are always kept."""
+    import re
+    text = re.sub(r"[^a-z0-9+#.]", " ", (value or "").lower()).strip()
+    tokens = [t for t in text.split() if t and t not in _ROLE_QUALIFIERS]
+    return " ".join(tokens) or text
+
+
+def _cached_role_vocab(hours_old: int) -> tuple:
+    """(lower -> canonical, [(normalized, canonical)]) for every role that has
+    cache rows. Read once per pass — the vocabulary is small, so this is cheaper
+    than adding an index or a schema change."""
+    try:
+        from db import get_cached_roles
+        roles = get_cached_roles(0, hours_old, 0)
+    except Exception:
+        return {}, []
+    exact = {r.lower(): r for r in roles}
+    return exact, [(_norm_role(r), r) for r in roles]
+
+
+def _resolve_role(raw: str, vocab: tuple) -> str:
+    """Canonical cached role for a free-text profile role, or "" when nothing
+    matches confidently. Exact -> case-insensitive -> qualifier-stripped ->
+    typo/punctuation. The result is only ever a lookup key: the caller confirms
+    it returns real jobs before anything is rendered, and the email always shows
+    the canonical role rather than the user's spelling."""
+    role = (raw or "").strip()
+    if not role:
+        return ""
+    exact, fuzzy = vocab or ({}, [])
+    hit = exact.get(role.lower())
+    if hit:
+        return hit
+    if not fuzzy:
+        return ""
+    norm = _norm_role(role)
+    for norm_role, canonical in fuzzy:
+        if norm and norm_role == norm:
+            return canonical
+    try:
+        import difflib
+        best = difflib.get_close_matches(norm, [n for n, _ in fuzzy], n=1,
+                                         cutoff=_ROLE_FUZZY_CUTOFF)
+    except Exception:
+        return ""
+    return next((c for n, c in fuzzy if n == best[0]), "") if best else ""
+
+
+def _engagement_country(user: dict) -> str:
+    """ISO-2 market for the user's engagement email.
+
+    The profile country first, then the country the app recorded on the user's
+    most recent geolocated visit — as an ISO-2 code when we captured one, else
+    normalized from the name ("India" -> "in"), since job_cache is keyed on the
+    code and most visit rows predate the column. "" when there's no signal at
+    all: we don't guess a market, so the caller has nothing to search and sends
+    the generic fallback."""
+    raw = (user.get("country") or "").strip()
+    if raw:
+        code = raw.lower()
+        if len(code) > 2:
+            try:
+                from db import country_code_for_name
+                code = country_code_for_name(raw) or code
+            except Exception:
+                pass
+        return code
+    code = (user.get("visit_country_code") or "").strip().lower()
+    if code:
+        return code
+    name = (user.get("visit_country") or "").strip()
+    if not name:
+        return ""
+    try:
+        from db import country_code_for_name
+        return country_code_for_name(name)
+    except Exception:
+        return ""
+
+
+def _engagement_anchor(user: dict, vocab: tuple) -> tuple:
+    """Anchor for a user's engagement email as (role, label, city, state, country).
+
+    Role and location come from the profile alone: `position` resolved onto a
+    cached role, plus city/state for the location label. The label is returned
+    even when the role is null — that is what lets the caller send the
+    location-only email to someone who told us where they are but not what they
+    want. A null role means we have no cached jobs to show, so the caller sends
+    the location email (no role on file) or the generic fallback."""
+    country = _engagement_country(user)
+    raw_role = (user.get("position") or "").strip()
+    lcity = (user.get("city") or "").strip()
+    lstate = (user.get("state") or "").strip()
+    label = ""
+    if lcity or lstate:
+        # Avoid "New Delhi, Delhi" — only append the state when the city
+        # doesn't already imply it.
+        if lcity and lstate and lstate.lower() not in lcity.lower():
+            label = f"{lcity}, {lstate}"
+        else:
+            label = lcity or lstate
+    role = _resolve_role(raw_role, vocab)
+    if not role or not country:
+        return None, label, lcity, lstate, country
+    return role, label, lcity, lstate, country
+
+
+def _cache_jobs_for(role: str, city: str, state: str, country: str,
+                    hours_old: int, max_jobs: int) -> list[dict]:
+    """Merge cached jobs for one anchor scope across the active boards. Pure
+    cache reads — never triggers a scrape. [] when the cache has nothing."""
+    try:
+        import config
+        from db import get_cached_jobs_aggregate
+    except Exception:
+        return []
+    try:
+        sites = config.CACHE_SITES_INDIA if country == "in" else config.CACHE_SITES_DEFAULT
+    except Exception:
+        sites = []
+    merged, seen = [], set()
+    for site in sites:
+        try:
+            _status, entry = get_cached_jobs_aggregate(
+                role, site, city, state, country, 0, int(hours_old),
+                ttl_hours=12.0, min_volume=1, max_jobs=int(max_jobs), is_remote=0,
+            )
+            for j in (entry or {}).get("jobs", []) or []:
+                url = j.get("url") or f"{j.get('title')}{j.get('company')}"
+                if not url or url in seen:
+                    continue
+                seen.add(url)
+                merged.append(j)
+                if len(merged) >= int(max_jobs):
+                    return merged
+        except Exception:
+            continue
+    return merged
+
+
+def _engagement_fresh_jobs(anchor: tuple, hours_old: int, max_jobs: int) -> tuple:
+    """(jobs, label) for an anchor.
+
+    Scopes are tried tightest-first — city leaf, then state (which unions the
+    state row with its city rows), then country — and the label names only the
+    scope the jobs actually came from. A location is therefore never claimed for
+    a scope that had no cache, and the country rung carries no location at all.
+    """
+    role, label, city, state, country = anchor
+    if not role:
+        return [], ""
+    scopes = []
+    if city:
+        scopes.append((city, state, label or city or state))
+    if state:
+        scopes.append(("", state, state))
+    scopes.append(("", "", ""))
+    for sc_city, sc_state, sc_label in scopes:
+        jobs = _cache_jobs_for(role, sc_city, sc_state, country, hours_old, max_jobs)
+        if jobs:
+            return jobs, sc_label
+    return [], ""
+
+
+def enqueue_engagement_emails():
+    """Weekly re-engagement producer: enqueue one 'come back to the app' email
+    per dormant user per week.
+
+    Fired at the top of every mail-worker pass (incl. boot), mirroring
+    enqueue_confirm_reminders. Each pass processes a bounded slice
+    (ENGAGEMENT_MAX_PER_RUN) of the most dormant users; the
+    engage:{YYYY-WW}:{email} dedup key guarantees exactly one email per user
+    within the week."""
+    import config
+    try:
+        enabled = bool(getattr(config, "ENGAGEMENT_ENABLED", False)) and config.MAIL_QUEUE_ENABLED
+        if not enabled:
+            return 0
+        from db import get_engagement_recipients, enqueue_email
+        from emails import templates
+        from emails.unsubscribe import build_unsubscribe_url
+        import datetime as dt
+
+        dormant_days = int(getattr(config, "ENGAGEMENT_DORMANT_DAYS", 7))
+        min_age_days = int(getattr(config, "ENGAGEMENT_MIN_AGE_DAYS", 3))
+        limit = int(getattr(config, "ENGAGEMENT_MAX_PER_RUN", 20))
+        hours_old = int(getattr(config, "ENGAGEMENT_CACHE_HOURS_OLD", 168))
+        max_jobs = int(getattr(config, "ENGAGEMENT_MAX_JOBS", 30))
+        cutoff = (dt.datetime.utcnow() - dt.timedelta(days=dormant_days)).isoformat()
+        week_key = dt.datetime.utcnow().strftime("%Y-W%W")
+        vocab = _cached_role_vocab(hours_old)
+
+        count = 0
+        for user in get_engagement_recipients(cutoff, min_age_days, limit, week_key):
+            email = (user.get("email") or "").strip()
+            if not email:
+                continue
+            dedup_key = f"engage:{week_key}:{email}"
+            anchor = _engagement_anchor(user, vocab)
+            role, label = anchor[0], anchor[1]
+            jobs, loc = ([], "") if role is None else _engagement_fresh_jobs(
+                anchor, hours_old, max_jobs)
+            unsub = build_unsubscribe_url(email)
+            has_resume = bool(user.get("resume_filename"))
+            # Which of the three emails: a role with cached jobs (labelled with
+            # the scope the jobs actually came from), else a user who told us a
+            # location but no role, else the strictly generic nudge. A role with
+            # nothing cached falls to the generic one on purpose — we would
+            # otherwise be inviting them to a search we have no data for.
+            has_role = bool((user.get("position") or "").strip())
+            if jobs:
+                subj, html, text, _c = templates.build_engagement(
+                    user.get("name") or "", jobs, role, loc, len(jobs),
+                    has_resume, unsub)
+            elif label and not has_role:
+                subj, html, text, _c = templates.build_engagement_location_prompt(
+                    user.get("name") or "", label, has_resume, unsub)
+            else:
+                subj, html, text, _c = templates.build_engagement_fallback(
+                    user.get("name") or "", has_resume, unsub)
+            if enqueue_email(email, subj, html, text, dedup_key=dedup_key):
+                count += 1
+        if count:
+            log(f"[MAIL] Queued {count} engagement email(s)")
+        return count
+    except Exception as e:
+        log(f"[MAIL] Engagement scan error: {e}")
+        return 0
+
+
 def run_mail_queue():
     """Drain the transactional email queue: send pending mails, mark sent/failed.
 
@@ -399,6 +642,7 @@ def run_mail_queue():
         if not config.MAIL_QUEUE_ENABLED:
             return 0
         enqueue_confirm_reminders()
+        enqueue_engagement_emails()
         from db import get_pending_emails, mark_email_sent, mark_email_failed
         from utils.smtp_sender import send_email
 

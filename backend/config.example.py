@@ -376,6 +376,16 @@ MAIL_QUEUE_INTERVAL_MINUTES = 5
 MAIL_QUEUE_MAX_PER_RUN = 20
 
 # ==============
+# WEEKLY ENGAGEMENT EMAIL (re-engagement nudge to dormant users)
+# ==============
+ENGAGEMENT_ENABLED = True
+ENGAGEMENT_DORMANT_DAYS = 7
+ENGAGEMENT_MIN_AGE_DAYS = 3
+ENGAGEMENT_MAX_PER_RUN = 20
+ENGAGEMENT_CACHE_HOURS_OLD = 168   # weekly cache window for job highlights
+ENGAGEMENT_MAX_JOBS = 30           # fetch cap (render top 3)
+
+# ==============
 # GOOGLE SHEETS 
 # ==============
 GOOGLE_SHEET_NAME = "Ammar Job Tracker"

@@ -124,7 +124,8 @@ def init_db():
                 invited_by TEXT DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                last_login TEXT DEFAULT ''
+                last_login TEXT DEFAULT '',
+                email_opt_out INTEGER DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS admin_users (
                 email TEXT PRIMARY KEY REFERENCES users(email),
@@ -162,6 +163,7 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_visits_ip ON visits(ip_address);
             CREATE INDEX IF NOT EXISTS idx_visits_country ON visits(country);
+            CREATE INDEX IF NOT EXISTS idx_visits_email ON visits(user_email, created_at);
             CREATE TABLE IF NOT EXISTS saved_jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_email TEXT NOT NULL,
@@ -394,6 +396,10 @@ def init_db():
             cur.execute("CREATE INDEX IF NOT EXISTS idx_visits_country ON visits(country)")
         except Exception:
             pass
+        try:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_visits_email ON visits(user_email, created_at)")
+        except Exception:
+            pass
         # Migrate job_cache — add usage columns if missing
         for col in ("usage_count INTEGER DEFAULT 0", "last_used_at TEXT DEFAULT ''"):
             try:
@@ -494,6 +500,11 @@ def init_db():
         # Migrate existing users table — add last_login column
         try:
             cur.execute("ALTER TABLE users ADD COLUMN last_login TEXT DEFAULT ''")
+        except Exception:
+            pass
+        # Migrate existing users table — add email opt-out flag (weekly engagement mails)
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN email_opt_out INTEGER DEFAULT 0")
         except Exception:
             pass
         try:
@@ -804,6 +815,20 @@ def get_cache_entry(role: str, site: str, city: str, state: str, country: str, i
     if _cache_fresh(d, ttl_hours, min_volume):
         return "fresh", d
     return "stale", d
+
+
+def get_cached_roles(internship_mode: int = 0, hours_old: int = 168,
+                     is_remote: int = 0) -> list:
+    """Distinct roles that currently have cache rows for a scope key. The
+    vocabulary is small (a couple of hundred), so callers can match a user's
+    free-text role against it in memory instead of adding an index."""
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            "SELECT DISTINCT role FROM job_cache WHERE internship_mode=? AND hours_old=? "
+            "AND is_remote=? ORDER BY role",
+            (1 if internship_mode else 0, hours_old, 1 if is_remote else 0),
+        )
+        return [r["role"] for r in cur.fetchall() if r["role"]]
 
 
 def get_cached_jobs(role: str, site: str, city: str, state: str, country: str, internship_mode: int,
@@ -1546,6 +1571,79 @@ def update_user_last_login(email: str):
             cur.execute("UPDATE users SET last_login = ? WHERE email = ?",
                          (_now(), email))
             conn.commit()
+
+
+def set_user_email_opt_out(email: str, opted_out: bool) -> None:
+    """Toggle the marketing-email opt-out flag for the weekly engagement email.
+    Transactional mail (OTP, welcome, referrals, reminders) is NOT affected."""
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute(
+                "UPDATE users SET email_opt_out = ?, updated_at = ? WHERE email = ?",
+                (1 if opted_out else 0, _now(), email),
+            )
+            conn.commit()
+
+
+def get_engagement_recipients(cutoff: str, min_age_days: int = 3,
+                              limit: int = 20, week_key: str = "") -> list[dict]:
+    """Dormant users eligible for the weekly re-engagement email.
+
+    Eligibility: not opted out (or already emailed this week), joined at least
+    min_age_days ago, and no app visit since `cutoff`. Last activity is the
+    latest visit for that user (via visits.user_email), falling back to
+    users.last_login then users.created_at. Rows are returned
+    most-dormant-first, capped at `limit` so each mail-worker pass enqueues a
+    bounded slice; pass `week_key` (e.g. '2026-W39') to skip users who already
+    have an engage:{week}: row — the per-pass cursor that advances through the
+    dormant list across passes (the dedup key keeps each user to one email/week).
+
+    Also returns `visit_country_code` / `visit_country` (the country the app
+    recorded on the user's most recent geolocated visit) for callers that need
+    a market when `users.country` is unset — engagement falls back to it rather
+    than guessing one."""
+    age_cutoff = (datetime.utcnow() - timedelta(days=int(min_age_days))).isoformat()
+    week_filter = ""
+    params = []
+    if week_key:
+        week_filter = ("AND u.email NOT IN ("
+                       "SELECT recipient FROM email_queue "
+                       "WHERE dedup_key LIKE ? AND dedup_key != '') ")
+        params.append(f"engage:{week_key}:%")
+    params.extend([age_cutoff, cutoff, int(limit)])
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            f"""SELECT u.*,
+                      COALESCE(last.seen,
+                               CASE WHEN u.last_login != '' THEN u.last_login
+                                    ELSE u.created_at END) AS last_activity,
+                      (SELECT v.country_code FROM visits v
+                        WHERE v.user_email = u.email
+                          AND COALESCE(v.country_code, '') != ''
+                        ORDER BY v.created_at DESC LIMIT 1) AS visit_country_code,
+                      (SELECT v.country FROM visits v
+                        WHERE v.user_email = u.email
+                          AND COALESCE(v.country_code, '') = ''
+                          AND COALESCE(v.country, '') != ''
+                        ORDER BY v.created_at DESC LIMIT 1) AS visit_country
+               FROM users u
+               LEFT JOIN (
+                   SELECT user_email AS email, MAX(created_at) AS seen
+                   FROM visits
+                   WHERE user_email != '' AND user_email IS NOT NULL
+                   GROUP BY user_email
+               ) last ON last.email = u.email
+               WHERE u.email_opt_out = 0
+                 {week_filter}
+                 AND u.created_at < ?
+                 AND COALESCE(last.seen,
+                              CASE WHEN u.last_login != '' THEN u.last_login
+                                   ELSE u.created_at END) < ?
+               ORDER BY last_activity ASC
+               LIMIT ?""",
+            params,
+        )
+        return [dict(r) for r in cur.fetchall()]
 
 def update_user_profile(email: str, name: str = None, company: str = None, position: str = None, employment_status: str = None, linkedin_url: str = None, resume_filename: str = None, city: str = None, state: str = None, country: str = None):
     fields = []

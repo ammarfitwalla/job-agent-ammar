@@ -210,3 +210,56 @@ Pushed via the `scp → docker cp → py_compile → docker restart` flow from l
 - **Backend:** rate limiting (`utils/rate_limiter.py` hardened — lock + TTL sweep, `utils/client_ip.py` new), split rate limits across routes (`api/routes/{auth,events,joblink,jobs,leads,referrals,resume,roles,scrape,users,visits}.py`), Brevo removal completed (`api/routes/email.py` + `utils/emailer.py` deleted from container).
 - **Frontend:** admin user-modal status/company fix (`admin.html`, `js/admin.js`), pagination overflow / windowing fix + page clamp (`js/search.js`), auth `search_id` carry-over fix (`js/auth.js`).
 - Verified post-restart: container `Up`, loopback `/health` 200, public `https://jobawn.com/health` 200, new pagination/auth/admin markers served, `/api/email/report` → 404.
+---
+
+## Deployment entry - 2026-09-30 (weekly engagement email)
+
+Deployed via the established `scp -> docker cp -> md5 verify -> docker restart` flow from the
+local working tree. **Uncommitted at the time of deploy** (local `git status` still shows the
+engagement files as modified/untracked; commit pending owner approval).
+
+**Files copied into the container** (all 6 md5sums matched local before restart):
+
+| File | Change |
+|---|---|
+| `db.py` | `users.email_opt_out` migration, `idx_visits_email`, `get_engagement_recipients()`, `get_cached_roles()`, `set_user_email_opt_out()` |
+| `scheduler.py` | engagement producer: profile-only anchor, country resolution, role matching, city/state/country cache ladder, 3-way email dispatch |
+| `emails/templates.py` | `build_engagement()` (honest counts), `build_engagement_location_prompt()` (new), `build_engagement_fallback()` (generic) |
+| `emails/unsubscribe.py` | **new** - HMAC-SHA256 signed opt-out links |
+| `api/routes/email_prefs.py` | **new** - `GET /api/email/unsubscribe` |
+| `api/main.py` | route registration + public-path allowlist |
+| `config.py` | **only** the `ENGAGEMENT_*` block appended (secrets untouched) |
+
+**Pre-deploy rollback:** `/home/ubuntu/job-agent-deploy/pre-engagement-backup.tar.gz`
+(previous `db.py`, `scheduler.py`, `emails/templates.py`, `api/main.py`, `config.py`) plus
+`/app/backend/config.py.bak-engagement`. The deploy dir is **not** a git repo, so these
+file copies are the only record - `backend/config.py` and the engagement sources are
+mirrored into `/home/ubuntu/job-agent-deploy/backend/` so a container rebuild keeps them.
+
+**Migration applied at boot:** `users.email_opt_out` column + `idx_visits_email` index. Clean
+startup, zero tracebacks.
+
+**Verified before enabling:** migration present, unsubscribe sign/validate against the real
+prod `JWT_SECRET` (valid link accepted, tampered signature rejected), public route through
+nginx returning HTTP 200 on a signed link and HTTP 400 on a bad one, `/health` 200, and
+`0` engagement rows in the queue while the flag was off.
+
+**Go-live:** `ENGAGEMENT_ENABLED = True` (dormant 7d, min age 3d, 20/pass, 168h cache,
+30-job cap). On restart the producer logged `Queued 16 engagement email(s)` and
+`Queue drained - sent 16 of 16` (all `attempts=1`, no retries).
+
+**Known first-run characteristic:** all 16 went out as the strictly generic
+*"Fresh roles are waiting for you"*. Not a matching failure - the dormant cohort has no market
+signal: only 338 of 1435 `visits` rows carry a `user_email`, and 1097 rows have a country with
+**no** `user_email` (captured while logged out, never attributed to a person), while only 2 of
+24 users have `users.country` set. 7 of the 16 do have roles that resolve cleanly to cached
+roles with 30 jobs each (`Software Enginner`->`Software Engineer`, `Backend Developer Intern`->`Backend Developer`,
+`Node js developer`->`Node.js Developer`) - blocked purely on the market. Owner accepted the
+generic send for week 2026-W39.
+
+**Follow-up (not engagement-code scope):** capture market at signup or attribute logged-out
+visits to the user, so the personalized branch can fire for the dormant cohort in a later week.
+
+**Idempotency confirmed:** the next 5-minute worker pass enqueued nothing; 16 dormant users
+remain but 0 are eligible for `2026-W39` because of the `engage:{week}:{email}` dedup key.
+Public `https://jobawn.com/health` 200 and bad-sig unsubscribe 400 verified from off-host.

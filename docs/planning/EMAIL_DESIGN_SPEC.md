@@ -118,6 +118,8 @@ Tone rules (all templates):
 | Company joined alert (→watcher) | `company_joined` | `JobAwn — Someone from <company> just joined` | watcher(s) | `Find a referrer at <company>` → /app |
 | Confirm reminder (→referrer) | `confirm_reminder` | `JobAwn — Did you refer <seek_first> at <company>?` | referrer (to_email) | `Confirm referral` → /app#referrals |
 | Confirm reminder (→seeker) | `confirm_reminder` | `JobAwn — Did <ref_first> refer you at <company>?` | seeker (from_email) | `Confirm referral` → /app#referrals |
+| Weekly re-engagement (fresh jobs) | `engage_weekly` | `JobAwn — <count> fresh <role> jobs near <location>` | dormant user | `See fresh jobs` → /app |
+| Weekly re-engagement (fallback) | `engage_weekly` | `JobAwn — Fresh roles are waiting for you` | dormant user | `See fresh roles` → /app |
 
 Per-type variable payloads:
 
@@ -141,6 +143,20 @@ Per-type variable payloads:
   neutral copy ("did they actually refer you?") — no credit promises to the
   seeker. Only un-confirmed parties are emailed (per-party dedup key
   `confirm_reminder:{req_id}:receiver|sender`, one reminder each).
+- **Weekly re-engagement**: weekly nudge to users with no app visit in
+  `ENGAGEMENT_DORMANT_DAYS` (7, prod) and joined ≥ `ENGAGEMENT_MIN_AGE_DAYS` (3)
+  days ago, excluding `users.email_opt_out = 1`. Content is real cache data: the
+  anchor role+location comes from the newest saved search, else profile
+  position + city/state, with the free-text role resolved onto a cached role
+  (exact → case → qualifier → typo). Job highlights come from `job_cache`
+  (no LLM, no scraping), read tightest-scope-first — city/state, then state,
+  then country — and the copy names **only** the scope that produced the jobs;
+  when that's country-wide the subject carries no location at all (no "your
+  area"). Dedup key `engage:{YYYY-WW}:{email}` → exactly one per user/week.
+  Footnote has a signed unsubscribe link (`/api/email/unsubscribe`). **Strictly
+  generic fallback** — if there is no anchor or no cached jobs, send
+  `build_engagement_fallback` ("Fresh roles are waiting for you"); never invent
+  counts or numbers in the subject/copy.
 
 ---
 

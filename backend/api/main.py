@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from api.routes import jobs, scrape, resume, roles, states, cities, events, leads, admin, auth, profile, saved_jobs, visits, users, referrals, stats, joblink, landing
+from api.routes import jobs, scrape, resume, roles, states, cities, events, leads, admin, auth, profile, saved_jobs, visits, users, referrals, stats, joblink, landing, email_prefs
 import json
 from db import init_db
 from config import JWT_ALLOW_DEV_SECRET
@@ -123,6 +123,7 @@ _PUBLIC_EXACT_API = {
     "/api/users/at-company",
     "/api/users/company-counts",
     "/api/users/referrer-directory",
+    "/api/email/unsubscribe",
 }
 _PUBLIC_GET_ONLY = {"/api/auth/companies", "/api/countries-used"}
 _PUBLIC_NON_API = {"/scrape", "/scrape/stop", "/scrape/status", "/states", "/cities", "/roles", "/jobs"}
@@ -236,6 +237,7 @@ app.include_router(referrals.router)
 app.include_router(joblink.router)
 app.include_router(stats.router)
 app.include_router(landing.router)
+app.include_router(email_prefs.router)
 
 
 @app.get("/votes")
