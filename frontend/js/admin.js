@@ -340,7 +340,8 @@ function renderSessions(sessions) {
   const cols = [
     { k: "date", l: "Date" }, { k: "id_label", l: "Session ID" },
     { k: "user_email", l: "User" }, { k: "mode_label", l: "Mode" }, { k: "classification", l: "Status" },
-    { k: "location", l: "Location" }, { k: "sites_label", l: "Sites" }, { k: "relevant_jobs", l: "Jobs" },
+    { k: "location", l: "Searched Location" }, { k: "user_location", l: "User Location" },
+    { k: "sites_label", l: "Sites" }, { k: "relevant_jobs", l: "Jobs" },
     { k: "resume", l: "Resume" }, { k: "duration_label", l: "Duration" },
   ];
   const sorted = _sortKey === "date" ? _sortDir : 0;
@@ -359,17 +360,18 @@ function renderSessions(sessions) {
       <td><span class="mode-badge ${mc}">${ml}</span></td>
       <td><span class="badge ${sc}">${_esc(s.classification)}</span></td>
       <td title="${_esc(s.location || "")}">${_esc(s.location) || "\u2014"}</td>
+      <td class="user-loc-cell" title="${_esc(s.user_location || "")}${s.user_location_source ? " (via " + _esc(s.user_location_source) + ")" : ""}">${_esc(s.user_location) || "\u2014"}</td>
       <td class="sites-cell" title="${_esc((s.sites || []).join(", "))}">${_esc((s.sites || []).join(", "))}</td>
       <td>${s.relevant_jobs || 0}</td>
       <td>${s.resume_available ? `<a class="job-link" href="/api/admin/sessions/${encodeURIComponent(s.id)}/resume" data-download="1">View &#8599;</a>` : "\u2014"}</td>
       <td>${formatDuration(s.elapsed_seconds)}</td>
-    </tr><tr class="detail-row" id="detail-${s.id}" data-session='${sj}'><td colspan="10"><div class="detail-panel" id="panel-${s.id}"><div class="empty">Loading session details...</div></div></td></tr>`;
-  }).join("") || `<tr><td colspan="10"><div class="empty">No sessions found</div></td></tr>`;
+    </tr><tr class="detail-row" id="detail-${s.id}" data-session='${sj}'><td colspan="11"><div class="detail-panel" id="panel-${s.id}"><div class="empty">Loading session details...</div></div></td></tr>`;
+  }).join("") || `<tr><td colspan="11"><div class="empty">No sessions found</div></td></tr>`;
 }
 
 function sortSessions(key) {
   if (_sortKey === key) _sortDir *= -1; else { _sortKey = key; _sortDir = -1; }
-  const map = { "date": "created_at", "id_label": "id", "user_email": "user_email", "mode_label": "internship_mode", "classification": "classification", "sites_label": "sites", "relevant_jobs": "relevant_jobs", "resume": "resume_available", "duration_label": "elapsed_seconds" };
+  const map = { "date": "created_at", "id_label": "id", "user_email": "user_email", "mode_label": "internship_mode", "classification": "classification", "sites_label": "sites", "relevant_jobs": "relevant_jobs", "resume": "resume_available", "duration_label": "elapsed_seconds", "user_location": "user_location" };
   const ak = map[key] || key;
   const sorted = [...allSessions].sort((a, b) => {
     let va = a[ak] ?? "", vb = b[ak] ?? "";
@@ -387,6 +389,8 @@ function filterSessions() {
     (s.roles || []).join(" ").toLowerCase().includes(q) ||
     (s.sites || []).join(" ").toLowerCase().includes(q) ||
     (s.user_email || "").toLowerCase().includes(q) ||
+    (s.user_location || "").toLowerCase().includes(q) ||
+    (s.location || "").toLowerCase().includes(q) ||
     s.classification.toLowerCase().includes(q) ||
     s.id?.toLowerCase().includes(q)
   ));

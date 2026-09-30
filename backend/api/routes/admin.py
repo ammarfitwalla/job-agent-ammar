@@ -210,6 +210,86 @@ async def admin_stats():
     }
 
 
+def _user_geo_maps() -> tuple[dict, dict]:
+    """Latest geolocated location keyed by user_email and by ip_address.
+
+    The scrape-time geo on the session row itself only fires when the request
+    carried a client IP (~10% of prod sessions), so most sessions have empty
+    user_country/city/region even though the app geolocated that same visitor
+    moments later via the visits tracker. These two maps let the sessions view
+    recover the user's real location instead of showing a dash.
+
+    Two grouped queries rather than a lookup per session. SQLite's bare-column
+    rule means country/city/region come from the MAX(created_at) row.
+    """
+    from db import _get_conn
+
+    by_email: dict = {}
+    by_ip: dict = {}
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            "SELECT user_email, MAX(created_at), country, city, region FROM visits "
+            "WHERE COALESCE(user_email, '') != '' AND COALESCE(country, '') != '' "
+            "GROUP BY user_email"
+        )
+        for r in cur.fetchall():
+            by_email[r["user_email"]] = {
+                "country": r["country"] or "", "city": r["city"] or "", "region": r["region"] or "",
+            }
+        cur.execute(
+            "SELECT ip_address, MAX(created_at), country, city, region FROM visits "
+            "WHERE COALESCE(ip_address, '') != '' AND COALESCE(country, '') != '' "
+            "GROUP BY ip_address"
+        )
+        for r in cur.fetchall():
+            by_ip[r["ip_address"]] = {
+                "country": r["country"] or "", "city": r["city"] or "", "region": r["region"] or "",
+            }
+    return by_email, by_ip
+
+
+def _format_user_geo(geo: dict | None) -> str:
+    """'City, Region, Country' with empty parts dropped and no repeated segment
+    (e.g. a city that already contains its region, or 'India, India')."""
+    if not geo:
+        return ""
+    parts, seen = [], set()
+    for key in ("city", "region", "country"):
+        v = (geo.get(key) or "").strip()
+        # Skip a part already contained in what we've built (case-insensitive),
+        # so "Berlin, Berlin, Germany" and "Jamshedpur, Jharkhand, India" read clean.
+        low = v.lower()
+        if not v or low in seen or any(low in p.lower() for p in parts):
+            continue
+        seen.add(low)
+        parts.append(v)
+    return ", ".join(parts)
+
+
+def _attach_user_geo(sessions: list[dict], by_email: dict, by_ip: dict) -> None:
+    """Fill user_location on each session, most authoritative source first:
+    the session's own scrape-time geo, then the user's latest geolocated visit,
+    then the visit recorded for that session's IP."""
+    for s in sessions:
+        own = {
+            "country": s.get("user_country") or "",
+            "city": s.get("user_city") or "",
+            "region": s.get("user_region") or "",
+        }
+        email = (s.get("user_email") or "").strip()
+        ip = (s.get("ip_address") or "").strip()
+        if own["country"]:
+            geo, source = own, "session"
+        elif email and by_email.get(email):
+            geo, source = by_email[email], "visit"
+        elif ip and by_ip.get(ip):
+            geo, source = by_ip[ip], "ip"
+        else:
+            geo, source = None, ""
+        s["user_location"] = _format_user_geo(geo)
+        s["user_location_source"] = source
+
+
 @router.get("/sessions")
 async def admin_sessions():
     from db import _get_conn
@@ -231,6 +311,7 @@ async def admin_sessions():
 
     sids = [s["id"] for s in sessions]
     events_map = _get_session_events(sids)
+    _attach_user_geo(sessions, *_user_geo_maps())
 
     with _get_conn() as (conn, cur):
         for s in sessions:
