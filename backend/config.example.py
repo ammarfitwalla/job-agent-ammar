@@ -428,5 +428,5 @@ EMAIL_TO=os.environ.get("EMAIL_TO", "")
 # JWT_SECRET = os.environ.get("JWT_SECRET", "")   # REQUIRED in production (fail-fast if empty)
 JWT_SECRET = os.environ.get("JWT_SECRET", "")
 JWT_ALLOW_DEV_SECRET = os.environ.get("JWT_ALLOW_DEV_SECRET", "") == "1"
-JWT_ACCESS_TOKEN_MINUTES = int(os.environ.get("JWT_ACCESS_TOKEN_MINUTES", "1440"))
+JWT_ACCESS_TOKEN_MINUTES = int(os.environ.get("JWT_ACCESS_TOKEN_MINUTES", "2880"))  # 48h session
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "ammarfitwalla@gmail.com")
