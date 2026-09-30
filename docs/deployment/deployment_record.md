@@ -282,3 +282,35 @@ copy is the source of truth) and `backend/config.example.py` (tracked). Commit `
 - **Backup:** `/app/backend/config.py.bak-1440`. Deploy-dir `config.py` re-synced so a
   container rebuild keeps the new value.
 - Engagement dormancy is unaffected: it is driven by page-level `visits`, not token lifetime.
+
+---
+
+## Deployment entry - 2026-09-30 (admin Sessions: user location column)
+
+Commit `8b253be`. Files: `backend/api/routes/admin.py`, `frontend/js/admin.js`,
+`frontend/admin.html`, `backend/tests/test_admin_sessions_geo.py` (all 3 runtime
+files md5-verified in-container before restart).
+
+**Why:** the Sessions table only showed `sessions.location` (what the user typed
+into the search box). The `user_country`/`user_city`/`user_region` columns already
+existed but were empty - the scrape-time geo only fires when the request carried a
+client IP (19/193 prod sessions). The app had already geolocated the same visitor
+via the visits tracker, so the data existed but was never joined in.
+
+**Change:** `GET /api/admin/sessions` now returns `user_location` plus
+`user_location_source`, resolved session-geo -> user's latest geolocated visit ->
+visit for that session's IP. Two grouped queries build the maps (no N+1).
+`admin.js` gained a "User Location" column beside the renamed "Searched Location",
+sortable and searchable; row/empty colspans 10 -> 11.
+
+**Verified:** 14 new tests pass; full suite 336 passed with the same 6 known
+pre-existing failures (4 `test_linkedin_scraper.py`, 2 `test_role_recommendation.py`).
+`tests/test_scrape_controls.py::test_slow_nonempty_batch_is_not_stalled` is
+**flaky, not a regression** - verified 5 failures in 8 runs on a clean tree with
+these changes stashed. Live endpoint returns HTTP 200 with 193 sessions, 70 with
+`user_location` (19 own geo, 51 via visit), field present on every row; served
+`/js/admin.js` contains the new column. Zero tracebacks after restart.
+
+**Known limit:** the other 123 sessions are legacy rows from 2026-09-25/26 with
+neither `user_email` nor `ip_address` recorded, so they render as a dash. 5 more
+have an email whose visits carry no geo. Not attributable without guessing.
