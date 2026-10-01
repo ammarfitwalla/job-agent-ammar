@@ -776,166 +776,219 @@ function setStatus(msg, type = "blue") {
   el.appendChild(span);
 }
 
-function renderTimeline(logs, status) {
-  const siteIcons = { linkedin: "in", indeed: "indeed", naukri: "nk" };
+const _TL_SITES = {
+  linkedin: ["in", "bg-sky-100 text-sky-700"],
+  indeed: ["indeed", "bg-indigo-100 text-indigo-700"],
+  naukri: ["nk", "bg-emerald-100 text-emerald-700"],
+};
+function _tlSite(site) {
+  return _TL_SITES[site] || [String(site || "?").slice(0, 3).toUpperCase(), "bg-slate-100 text-slate-600"];
+}
+function _tlRow(ts, icon, cls, body, active) {
+  return `<div class="flex items-center gap-3 py-1.5 ${active ? "timeline-active" : ""}">
+    <span class="w-10 text-xs text-slate-400 shrink-0 tabular-nums">${_esc(ts)}</span>
+    <span class="w-14 h-6 rounded-md text-[10px] font-bold flex items-center justify-center shrink-0 ${cls}">${_esc(icon)}</span>
+    <span class="text-sm min-w-0 flex-1">${body}</span>
+  </div>`;
+}
+const _TL_CC = { sa: "Saudi Arabia", in: "India", us: "United States", ae: "UAE", ie: "Ireland" };
 
-  let html = "";
-  const shown = new Set();
+// Live scrape progress. The backend log lines are the source of truth, e.g.
+//   [SCRAPE] Backend Developer @ indeed (1/6)...
+//   [SCRAPE] Backend Developer @ indeed - Riyadh (1/1)...
+//   [SCRAPE] BATCH Backend Developer @ indeed: 12 new after dedup
+//   [SCRAPE] Backend Developer @ indeed: 12 total jobs stored so far
+//   [CACHE] fan-out role@indeed/sa: fresh=[...], stale=[...], missing=[...]
+// A country fan-out repeats these per location, so each location gets its own
+// row instead of collapsing into a single row per job board.
+//
+// Counts come from the per-batch "N new after dedup" lines, which are scoped to
+// the location being searched. "N total jobs stored so far" is a running total
+// for the whole search, so it is NOT attributed to a location.
+function renderTimeline(logs, status) {
+  const running = status === "running";
+  const rows = [];
+  const once = new Set();
+
+  // "role@site|location" -> {icon, cls, n, done, ts, rendered}
+  const spots = new Map();
+  // "role@site" -> location currently being searched
+  const current = new Map();
+
+  const spotOf = (role, site, loc) => {
+    const k = `${role}@${site}|${loc || ""}`;
+    if (!spots.has(k)) {
+      const [icon, cls] = _tlSite(site);
+      spots.set(k, { icon, cls, n: 0, done: false, ts: "", rendered: false });
+    }
+    return spots.get(k);
+  };
+  const flushSpots = (upToTs, final) => {
+    for (const [k, sp] of spots) {
+      if (sp.rendered) continue;
+      const [roleSite, loc] = k.split("|");
+      const site = roleSite.slice(roleSite.lastIndexOf("@") + 1);
+      // A bare "role@site|" slot only exists because a combo started; it carries
+      // no counts of its own, so leave it out.
+      if (!loc && !sp.n) continue;
+      // The backend only logs "combo ended" when a combo stops early, so treat
+      // the start of the next run, or the end of the log, as the boundary.
+      if (final !== undefined) sp.done = final;
+      const where = loc ? `<span class="text-slate-500">${_esc(loc)}</span> ` : "";
+      let label;
+      if (sp.n) {
+        label = `${where}<span class="text-slate-700 font-medium">${sp.n}</span> jobs found`;
+      } else if (sp.done) {
+        label = `${where}<span class="text-slate-400">${loc ? "— " : ""}no jobs</span>`;
+      } else {
+        label = `${where}<span class="text-slate-400">${loc ? "— " : ""}searching…</span>`;
+      }
+      if (sp.done && sp.n) label += ` <span class="text-emerald-500">✓</span>`;
+      rows.push(_tlRow(sp.ts || upToTs || "", sp.icon, sp.cls, label, running && !sp.done));
+      sp.rendered = true;
+    }
+  };
 
   for (const log of logs || []) {
     const msg = log.event || log.message || "";
-    const elapsed = log.elapsed_seconds || 0;
-    const ts = elapsed ? `${elapsed}s` : "";
+    const ts = log.elapsed_seconds ? `${log.elapsed_seconds}s` : "";
+    let m;
 
-    let m = msg.match(/\[(?:SCRAPE|DIRECT)\] (Pass \d+\/\d+ -- )?(\w+)\.\.\.$/);
+    // Country fan-out: which locations are cached vs which need scraping.
+    m = msg.match(/^\[CACHE\] fan-out (.+)@([^/]+)\/([^:]+): fresh=\[(.*?)\], stale=\[(.*?)\], missing=\[(.*?)\]$/);
     if (m) {
-      const site = m[2];
-      const key = `site-start-${site}`;
-      if (!shown.has(key)) {
-        shown.add(key);
-        const icon = siteIcons[site] || site.slice(0, 3).toUpperCase();
-        html += `<div class="flex items-center gap-3 py-1.5 text-slate-600 timeline-active">
-          <span class="w-14 text-xs text-slate-400 shrink-0">${ts}</span>
-          <span class="w-10 h-6 rounded text-[10px] font-bold bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">${icon}</span>
-          <span class="text-sm text-slate-500">Fetching jobs...</span>
-        </div>`;
+      const cc = _TL_CC[m[3].trim().toLowerCase()] || m[3].trim().toUpperCase();
+      const key = `fanout-${m[1]}-${m[2]}-${m[3]}`;
+      if (!once.has(key)) {
+        once.add(key);
+        const n = s => (s && s.trim() ? s.split(",").length : 0);
+        const nf = n(m[4]), ns = n(m[5]), nm = n(m[6]);
+        const bits = [];
+        if (nf) bits.push(`<span class="text-emerald-600">${nf} cached</span>`);
+        if (ns) bits.push(`<span class="text-amber-600">${ns} refreshing</span>`);
+        if (nm) bits.push(`<span class="text-slate-500">${nm} to fetch</span>`);
+        rows.push(_tlRow(ts, "◈", "bg-violet-100 text-violet-700",
+          `<span class="text-slate-600">Checking ${nf + ns + nm} locations in ${_esc(cc)}</span>` +
+          ` <span class="text-slate-300">·</span> <span class="text-slate-500">${_esc(m[2])}</span>` +
+          (bits.length ? ` <span class="text-slate-300">·</span> ${bits.join(" ")}` : "")));
       }
       continue;
     }
 
-    m = msg.match(/\[(?:SCRAPE|DIRECT)\] (\w+) returned (\d+) jobs/);
+    // Combo start: "role @ site (3/6)..."
+    m = msg.match(/^\[SCRAPE\] (.+?) @ (\w+) \((\d+)\/(\d+)\)\.\.\.$/);
     if (m) {
-      const site = m[1];
-      const count = m[2];
-      const key = `site-done-${site}`;
-      if (!shown.has(key)) {
-        shown.add(key);
-        const icon = siteIcons[site] || site.slice(0, 3).toUpperCase();
-        html += `<div class="flex items-center gap-3 py-1.5 text-slate-700">
-          <span class="w-14 text-xs text-slate-400 shrink-0">${ts}</span>
-          <span class="w-10 h-6 rounded text-[10px] font-bold bg-green-100 text-green-700 flex items-center justify-center shrink-0">${icon}</span>
-          <span class="text-green-700 font-medium">${count} jobs</span>
-        </div>`;
+      flushSpots(ts, true);
+      current.set(`${m[1]}@${m[2]}`, "");
+      continue;
+    }
+
+    // Run start: "role @ site - Riyadh (1/1)..."
+    m = msg.match(/^\[SCRAPE\] (.+?) @ (\w+) [-—] (.+?) \((\d+)\/(\d+)\)\.\.\.$/);
+    if (m) {
+      flushSpots(ts, true);
+      current.set(`${m[1]}@${m[2]}`, m[3]);
+      // Create the slot now so a location that returns nothing still shows up.
+      const sp = spotOf(m[1], m[2], m[3]);
+      sp.ts = sp.ts || ts;
+      continue;
+    }
+
+    // New jobs in this batch. Attributed to the location being searched.
+    m = msg.match(/^\[SCRAPE\] BATCH (.+?) @ (\w+): (\d+) new after dedup$/);
+    if (m) {
+      const sp = spotOf(m[1], m[2], current.get(`${m[1]}@${m[2]}`) || "");
+      sp.ts = sp.ts || ts;
+      sp.n += parseInt(m[3], 10);
+      continue;
+    }
+
+    // Progress chatter that carries no count to display.
+    if (/^\[SCRAPE\] .+ @ \w+: \d+ total jobs stored so far$/.test(msg)) continue;
+    if (/^\[SCRAPE\] BATCH .+ @ \w+: \d+ fetched, \d+ title-matched$/.test(msg)) continue;
+    if (/^\[SCRAPE\] .+ @ \w+ [-—] pausing before next city/.test(msg)) continue;
+    if (/^\[SCRAPE\] Unknown site/.test(msg)) continue;
+
+    m = msg.match(/^\[SCRAPE\] Enough relevant \((\d+)/);
+    if (m) {
+      rows.push(_tlRow(ts, "✓", "bg-emerald-100 text-emerald-700",
+        `<span class="text-emerald-700">${m[1]} relevant enough — moving on</span>`));
+      continue;
+    }
+
+    m = msg.match(/^\[SCRAPE\] (.+?) @ (\w+): combo ended \((.+)\)$/);
+    if (m) {
+      spotOf(m[1], m[2], current.get(`${m[1]}@${m[2]}`) || "").done = true;
+      flushSpots(ts, true);
+      continue;
+    }
+
+    // Naukri pauses between city runs; not interesting on its own.
+    if (/^\[SCRAPE\] .+ @ \w+ [-—] pausing before next city/.test(msg)) continue;
+
+    // Per-location cache writes are a boundary marker only; not shown as rows.
+    if (/^\[CACHE-INSERT\] /.test(msg)) {
+      flushSpots(ts, true);
+      continue;
+    }
+
+    // Cache hit: nothing was scraped.
+    m = msg.match(/^\[SCRAPE\] (\d+) jobs served from cache instantly$/);
+    if (m) {
+      flushSpots(ts, true);
+      if (!once.has("cache-hit")) {
+        once.add("cache-hit");
+        rows.push(_tlRow(ts, "⚡", "bg-emerald-100 text-emerald-700",
+          `<span class="text-emerald-700 font-medium">${m[1]} jobs served instantly from cache</span>`));
       }
       continue;
     }
 
-    m = msg.match(/\[(?:SCRAPE|DIRECT)\] (\w+): (\d+) fetched, (\d+) new/);
+    m = msg.match(/^\[SCRAPE\] Cache-only session complete - (\d+) jobs$/);
     if (m) {
-      const site = m[1];
-      const count = m[2];
-      const newCount = m[3];
-      const key = `site-pass-${site}-${newCount}`;
-      if (!shown.has(key) && parseInt(newCount) > 0) {
-        shown.add(key);
-        const icon = siteIcons[site] || site.slice(0, 3).toUpperCase();
-        html += `<div class="flex items-center gap-3 py-1.5 text-slate-700">
-          <span class="w-14 text-xs text-slate-400 shrink-0">${ts}</span>
-          <span class="w-10 h-6 rounded text-[10px] font-bold bg-green-100 text-green-700 flex items-center justify-center shrink-0">${icon}</span>
-          <span class="text-green-700 font-medium">+${newCount} jobs</span>
-        </div>`;
-      }
+      flushSpots(ts, true);
+      rows.push(_tlRow(ts, "✓", "bg-emerald-100 text-emerald-700",
+        `<span class="text-emerald-700 font-medium">Done — ${m[1]} jobs (cache was current)</span>`));
       continue;
     }
 
-    m = msg.match(/\[(?:SCRAPE|DIRECT)\] Total raw jobs: (\d+)/);
-    if (m && !shown.has("total-raw")) {
-      shown.add("total-raw");
-      html += `<div class="flex items-center gap-3 py-1.5 text-slate-500 border-t border-slate-100 mt-1 pt-2">
-        <span class="w-14 text-xs text-slate-400 shrink-0">${ts}</span>
-        <span class="text-slate-600">${m[1]} jobs collected</span>
-      </div>`;
+    m = msg.match(/^\[SCRAPE\] Pipeline complete - (\d+) total jobs$/);
+    if (m) {
+      flushSpots(ts, true);
+      rows.push(_tlRow(ts, "✓", "bg-emerald-100 text-emerald-700",
+        `<span class="text-emerald-700 font-medium">Search complete — ${m[1]} jobs collected</span>`));
       continue;
     }
 
-    m = msg.match(/\[(?:DIRECT)\] Title filter: \d+ → (\d+)/);
-    if (m && !shown.has("title-filter")) {
-      shown.add("title-filter");
-      html += `<div class="flex items-center gap-3 py-1.5 text-slate-600">
-        <span class="w-14 text-xs text-slate-400 shrink-0">${ts}</span>
-        <span class="text-slate-600">${m[1]} jobs match role</span>
-      </div>`;
+    if (/^\[SCRAPE\] (Stalled|Cancelled)/.test(msg)) {
+      rows.push(_tlRow(ts, "!", "bg-amber-100 text-amber-700",
+        `<span class="text-amber-700">${_esc(msg.replace(/^\[SCRAPE\]\s*/, ""))}</span>`));
+      continue;
+    }
+    if (/^\[SCRAPE\] .* failed/.test(msg)) {
+      rows.push(_tlRow(ts, "✕", "bg-red-100 text-red-700",
+        `<span class="text-red-700">${_esc(msg.replace(/^\[SCRAPE\]\s*/, ""))}</span>`));
+      continue;
+    }
+    if (/^\[SCRAPE\] No jobs found/.test(msg)) {
+      rows.push(_tlRow(ts, "·", "bg-slate-100 text-slate-500",
+        `<span class="text-slate-500">No jobs found for this search</span>`));
       continue;
     }
 
-    m = msg.match(/\[(?:DIRECT)\] Internship filter: \d+ → (\d+)/);
-    if (m && !shown.has("exp-filter")) {
-      shown.add("exp-filter");
-      html += `<div class="flex items-center gap-3 py-1.5 text-slate-600">
-        <span class="w-14 text-xs text-slate-400 shrink-0">${ts}</span>
-        <span class="text-slate-600">${m[1]} internship/entry-level jobs</span>
-      </div>`;
-      continue;
-    }
-
-    m = msg.match(/\[SCORE\] Batch (\d+)\/(\d+) done/);
-    if (m && !shown.has("scoring")) {
-      shown.add("scoring");
-      html += `<div class="flex items-center gap-3 py-1.5 timeline-active">
-        <span class="w-14 text-xs text-slate-400 shrink-0">${ts}</span>
-        <span class="w-10 h-6 rounded text-[10px] font-bold bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">AI</span>
-        <span class="text-slate-600">Scoring batch ${m[1]}/${m[2]}...</span>
-      </div>`;
-      continue;
-    }
-
-    m = msg.match(/\[MATCH ENGINE\] (\d+) relevant jobs returned/);
-    if (m && !shown.has("matches")) {
-      shown.add("matches");
-      html += `<div class="flex items-center gap-3 py-1.5 text-slate-700">
-        <span class="w-14 text-xs text-slate-400 shrink-0">${ts}</span>
-        <span class="w-10 h-6 rounded text-[10px] font-bold bg-green-100 text-green-700 flex items-center justify-center shrink-0">✓</span>
-        <span class="text-green-700 font-medium">${m[1]} matches found</span>
-      </div>`;
-      continue;
-    }
-
-    m = msg.match(/\[(?:SCRAPE|DIRECT)\] Pipeline complete/);
-    if (m && !shown.has("complete")) {
-      shown.add("complete");
-      const matchCount = msg.match(/(\d+) relevant/);
-      const label = matchCount ? `${matchCount[1]} matches` : "Done";
-      html += `<div class="flex items-center gap-3 py-1.5 text-slate-700 border-t border-slate-100 mt-1 pt-2">
-        <span class="w-14 text-xs text-slate-400 shrink-0">${ts}</span>
-        <span class="w-10 h-6 rounded text-[10px] font-bold bg-green-100 text-green-700 flex items-center justify-center shrink-0">✓</span>
-        <span class="text-green-700 font-medium">Analysis complete — ${label}</span>
-      </div>`;
-      continue;
-    }
-
-    m = msg.match(/\[(?:SCRAPE|DIRECT)\] Enough relevant \((\d+).*\), stopping/);
-    if (m && !shown.has("enough")) {
-      shown.add("enough");
-      html += `<div class="flex items-center gap-3 py-1.5 text-slate-700">
-        <span class="w-14 text-xs text-slate-400 shrink-0">${ts}</span>
-        <span class="w-10 h-6 rounded text-[10px] font-bold bg-green-100 text-green-700 flex items-center justify-center shrink-0">✓</span>
-        <span class="text-green-700 font-medium">${m[1]} matches — target reached</span>
-      </div>`;
-      continue;
-    }
-
-    if ((msg.includes("Cancelled") || msg.includes("cancelled")) && !shown.has("cancelled")) {
-      shown.add("cancelled");
-      html += `<div class="flex items-center gap-3 py-1.5 text-red-600">
-        <span class="w-14 text-xs text-slate-400 shrink-0">${ts}</span>
-        <span class="w-10 h-6 rounded text-[10px] font-bold bg-red-100 text-red-700 flex items-center justify-center shrink-0">✕</span>
-        <span>Cancelled</span>
-      </div>`;
-    }
+    // Filter chatter is noise; the per-location job counts already reflect it.
+    if (/^\[SCRAPE\] BATCH .+ @ \w+: (?:internship filter|normal filter) dropped \d+/.test(msg)) continue;
   }
 
-  if (!html) {
-    if (status === "running") {
-      html = `<div class="flex items-center gap-3 py-1.5 text-slate-500 timeline-active">
-        <span class="w-14 text-xs text-slate-400 shrink-0"></span>
-        <span class="text-slate-500">Starting up...</span>
-      </div>`;
-    } else {
-      html = `<div class="text-base text-slate-400 py-2">No activity yet</div>`;
-    }
+  flushSpots("", !running);
+
+  if (!rows.length) {
+    rows.push(running
+      ? _tlRow("", "…", "bg-slate-100 text-slate-500", `<span class="text-slate-500">Starting search…</span>`, true)
+      : _tlRow("", "·", "bg-slate-100 text-slate-500", `<span class="text-slate-400">No activity yet</span>`));
   }
 
-  return `<div class="premium-card p-4 mb-4"><div class="flex flex-col gap-1.5 text-sm font-mono">${html}</div></div>`;
+  return `<div class="premium-card p-4 mb-4"><div class="flex flex-col gap-1.5">${rows.join("")}</div></div>`;
 }
 
 function resetSearchBtn() {
@@ -966,6 +1019,12 @@ function clearTargetRoles() {
 function clearSearchState() {
   cancelActiveSearch();
   hideElement("stopSearchBtn");
+  const trail = document.getElementById("progressTrail");
+  if (trail) {
+    trail.innerHTML = "";
+    trail.dataset.rendered = "";
+    hideElement("progressTrail");
+  }
   allJobs = [];
   customJobs = [];
   aiJobs = [];
@@ -1633,9 +1692,11 @@ function pollAllScrapes() {
     if (!sid) { clearInterval(pollTimer); pollTimer = null; return; }
 
     let allDone = true;
+    let snap = { status: "running", logs: [] };
     try {
       const r = await fetch(`/scrape/status?search_id=${sid}`);
       const d = await r.json();
+      snap = { status: d.status, logs: d.logs || [] };
       if (d.status === 'running' || d.status === 'idle') {
         allDone = false;
         if (d.status === 'running') sawNonIdle = true;
@@ -1721,10 +1782,26 @@ function pollAllScrapes() {
       resetSearchBtn();
       // Cache
       _cacheSearchState();
+      updateProgressTrail(snap.logs, snap.status);
+    } else {
+      updateProgressTrail(snap.logs, snap.status);
     }
   };
   tick();
   pollTimer = setInterval(tick, 3000);
+}
+
+// Live progress trail: renders under the status banner while a search runs and
+// stays visible (collapsed) once it finishes.
+function updateProgressTrail(logs, status) {
+  const el = document.getElementById("progressTrail");
+  if (!el) return;
+  showElement("results");
+  const rendered = renderTimeline(logs, status);
+  if (el.dataset.rendered === rendered) return; // avoid DOM churn every 3s
+  el.dataset.rendered = rendered;
+  el.innerHTML = rendered;
+  el.classList.remove("hidden");
 }
 // ===== RENDER JOBS =====
 // ===== RENDER ALL JOBS =====

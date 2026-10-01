@@ -322,7 +322,7 @@ class TestScrapeCacheIntegration(CacheDBTestCase):
         req = self._req()
         with patch.object(scrape_routes, "SITE_MAP", {"fake": ("fake", "scrape_fake")}), \
              patch("db.upsert_prewarm_combo") as upsert:
-            combos, initial_jobs, served = scrape_routes._cache_lookup(req)
+            combos, initial_jobs, served, _cov = scrape_routes._cache_lookup(req)
             self.assertEqual(combos, [])
             self.assertEqual(served, 1)
             self.assertGreaterEqual(len(initial_jobs), 8)
@@ -334,13 +334,16 @@ class TestScrapeCacheIntegration(CacheDBTestCase):
         req = self._req()
         with patch.object(scrape_routes, "SITE_MAP", {"fake": ("fake", "scrape_fake")}), \
              patch("db.upsert_prewarm_combo") as upsert:
-            combos, initial_jobs, served = scrape_routes._cache_lookup(req)
+            combos, initial_jobs, served, _cov = scrape_routes._cache_lookup(req)
             self.assertEqual(len(combos), 1)
             self.assertEqual(served, 0)
             self.assertEqual(initial_jobs, [])
             upsert.assert_called_once_with("AI Engineer", "fake", "", "California", "us", False, 168)
 
     def test_country_only_serves_state_and_city_rows(self):
+        """Country-only US now fans out over CACHE_TOP_STATES. The country-exact
+        row still serves its state+city children, and only the four top states
+        with no cache cell of their own are queued for scraping."""
         from api.routes import scrape as scrape_routes
         from db import save_cache_entry
 
@@ -350,11 +353,21 @@ class TestScrapeCacheIntegration(CacheDBTestCase):
         req = self._req(country="us", state="", city="", location="United States")
         with patch.object(scrape_routes, "SITE_MAP", {"fake": ("fake", "scrape_fake")}), \
              patch("db.upsert_prewarm_combo") as upsert:
-            combos, initial_jobs, served = scrape_routes._cache_lookup(req)
-        self.assertEqual(combos, [])
-        self.assertEqual(served, 1)
-        self.assertEqual(len(initial_jobs), 16)
-        upsert.assert_not_called()
+            combos, initial_jobs, served, coverage = scrape_routes._cache_lookup(req)
+        # California is cached (4 + 2 Palo Alto) so it is served and only topped
+        # up because its merged count is under CACHE_MIN_VOLUME.
+        self.assertEqual([c["state"] for c in combos],
+                         ["California", "Texas", "New York", "Florida", "Illinois"])
+        self.assertEqual(served, 2)  # California scope + country-exact scope
+        # California appears in both the state scope and the country scope, so
+        # raw len() double-counts it; run_scrape dedupes by URL, so the unique
+        # set must equal the original 16.
+        unique = {j["url"] for j in initial_jobs}
+        self.assertEqual(len(unique), 16)
+        self.assertGreater(len(initial_jobs), len(unique))
+        self.assertEqual(coverage["states_total"], 5)
+        self.assertFalse(coverage["complete"])
+        self.assertTrue(upsert.called)
 
     def test_cache_disabled_scrapes_everything(self):
         from api.routes import scrape as scrape_routes
@@ -363,7 +376,7 @@ class TestScrapeCacheIntegration(CacheDBTestCase):
         with patch.object(scrape_routes, "SITE_MAP", {"fake": ("fake", "scrape_fake")}), \
              patch("config.CACHE_ENABLED", False), \
              patch("db.upsert_prewarm_combo") as upsert:
-            combos, initial_jobs, served = scrape_routes._cache_lookup(req)
+            combos, initial_jobs, served, _cov = scrape_routes._cache_lookup(req)
             self.assertEqual(len(combos), 1)
             upsert.assert_not_called()
 
@@ -373,7 +386,7 @@ class TestScrapeCacheIntegration(CacheDBTestCase):
         req = self._req(country="", state="", city="")
         with patch.object(scrape_routes, "SITE_MAP", {"fake": ("fake", "scrape_fake")}), \
              patch("db.upsert_prewarm_combo") as upsert:
-            combos, _, served = scrape_routes._cache_lookup(req)
+            combos, _, served, _cov = scrape_routes._cache_lookup(req)
             self.assertEqual(len(combos), 1)
             self.assertEqual(served, 0)
             upsert.assert_not_called()

@@ -373,11 +373,31 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
             country_code = combo.get("country", "") or ""
             _ensure_states()
             global_city_map = _build_city_state_map(country_code)
+            dbg = _debug_on("CACHE_DEBUG_FANOUT", "CACHE_DEBUG")
+            if dbg:
+                _debug(True, f"filing {len(combo_jobs)} jobs from combo "
+                             f"role={role} site={site_key} country={country_code!r} "
+                             f"searched_state={combo.get('state') or '-'!r} "
+                             f"searched_city={combo.get('city') or '-'!r} "
+                             f"| city_map[{country_code or '-'}]={len(global_city_map)} entries",
+                      sid)
             location_groups: dict[tuple, list] = {}
+            unresolved = []
             for j in combo_jobs:
                 ck, sk, ir = _tag_job_location(j, country_code, global_city_map)
                 j["_is_remote"] = ir
                 location_groups.setdefault((ck, sk, ir), []).append(j)
+                if not sk and not ir:
+                    unresolved.append(j.get("location", ""))
+            if dbg and unresolved:
+                top = {}
+                for loc in unresolved:
+                    top[loc] = top.get(loc, 0) + 1
+                shown = sorted(top.items(), key=lambda kv: -kv[1])[:12]
+                _debug(True, f"  {len(unresolved)} job(s) had NO state in their "
+                             f"location text -> filed under the country row "
+                             f"(not under any state): {shown}",
+                      sid)
 
             log(f"[SCRAPE] {role} @ {site_key}: distributing {len(combo_jobs)} jobs "
                 f"across {len(location_groups)} location groups", sid)
@@ -385,6 +405,16 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
             for (city_tag, state_tag, is_remote_tag), jobs in location_groups.items():
                 if not jobs:
                     continue
+                if dbg:
+                    flag = " [REMOTE]" if is_remote_tag else ""
+                    ex = jobs[0].get("location", "")
+                    if state_tag:
+                        _debug(True, f"  -> city={city_tag or '-'!r} state={state_tag!r}"
+                                     f"{flag}: {len(jobs)} job(s) (e.g. {ex!r})", sid)
+                    else:
+                        _debug(True, f"  -> CITY ROW (state unknown) for country "
+                                     f"{country_code!r}: {len(jobs)} job(s) "
+                                     f"(e.g. {ex!r})", sid)
                 try:
                     save_cache_entry(
                         role, site_key,
@@ -410,6 +440,18 @@ def _scrape_combos(sid, combos, keywords=None, internship_mode=False, hours_old=
             saved_country = sum(1 for (c, s, ir) in location_groups if not c and not ir)
             log(f"[SCRAPE] {role} @ {site_key}: saved {len(location_groups)} cache entries "
                 f"(cities={saved_cities}, remote={saved_remote}, country={saved_country})", sid)
+            # A dominant country row means most postings named only a city, so
+            # state cells stay empty and those states keep re-scraping.
+            if dbg and combo_jobs and saved_country:
+                country_row_jobs = sum(
+                    len(g) for (c, s, ir), g in location_groups.items() if not c and not ir)
+                pct = int(100 * country_row_jobs / len(combo_jobs))
+                if pct >= 20:
+                    _debug(True, f"  NOTE {pct}% of jobs ({country_row_jobs}/"
+                                 f"{len(combo_jobs)}) landed on the country row for "
+                                 f"{country_code!r} -> its state cells may stay empty "
+                                 f"and re-scrape. Add curated city lists for this "
+                                 f"country to resolve them.", sid)
 
         # Staggered delay before next site/role combo
         _delay(*stagger)
@@ -520,6 +562,57 @@ def _is_config_combo(role, site, city, state, country, internship_mode, hours_ol
     return key in _CONFIG_COMBO_KEYS
 
 
+def _debug(on: bool, message: str, sid: str = None) -> None:
+    """Verbose tracing for the country fan-out.
+
+    Off unless CACHE_DEBUG_FANOUT is on in config (or CACHE_DEBUG is on, which
+    turns on every cache debug flag). Goes to the same stdout + session timeline
+    as log(), so it is visible while testing and switchable off in production.
+    """
+    if not on:
+        return
+    log(f"[CACHE-DEBUG] {message}", sid)
+
+
+def _debug_on(*names: str) -> bool:
+    """True when any of the given config debug flags is enabled."""
+    try:
+        import config
+        return any(bool(getattr(config, n, False)) for n in names)
+    except Exception:
+        return False
+
+
+def _top_states_for(country: str) -> list:
+    """Curated highest-volume states for a country (config.CACHE_TOP_STATES).
+
+    Only used for country-only searches. Returns [] for unknown countries, which
+    makes the caller fall back to plain country-scope behaviour."""
+    cc = (country or "").lower()
+    if not cc:
+        return []
+    try:
+        import config
+        return [s.strip() for s in (getattr(config, "CACHE_TOP_STATES", {}) or {}).get(cc, []) if s.strip()]
+    except Exception:
+        return []
+
+
+def _scope_fresh(status: str, entry: dict, min_volume: int) -> bool:
+    """Whether a per-state scope is genuinely covered.
+
+    `get_cached_jobs_aggregate` reports 'fresh' when ANY child row is fresh, and
+    merges each row's job_count. A state whose union clears min_volume purely by
+    adding several sub-threshold rows is not really covered, so require the
+    merged count to clear the bar as well."""
+    if status != "fresh":
+        return False
+    try:
+        return int((entry or {}).get("job_count") or 0) >= int(min_volume)
+    except Exception:
+        return True
+
+
 def _cache_lookup(req):
     """Split the requested grid into cache-served jobs + combos left to scrape.
 
@@ -527,13 +620,25 @@ def _cache_lookup(req):
     fresh city entries are served immediately and only stale/missing cities
     trigger live scraping.
 
-    Returns (combos_to_scrape, initial_jobs, served_cache)."""
+    For country-only searches (no state, no city) with a CACHE_TOP_STATES entry,
+    fans out across the country's five top states: each state's cache cell is
+    evaluated independently, so a country row that is 'fresh' only because of one
+    child still refreshes the states that were never populated. Coverage counts
+    are returned in the 4th element.
+
+    Returns (combos_to_scrape, initial_jobs, served_cache, coverage)."""
     from config import CACHE_ENABLED, CACHE_TTL_HOURS, CACHE_MIN_VOLUME
     from db import get_cache_entry, get_cached_jobs_aggregate, upsert_prewarm_combo, upsert_custom_prewarm, increment_combo_usage, increment_custom_prewarm_usage
 
     combos_to_scrape = []
     initial_jobs = []
     served_cache = 0
+    # Aggregate per-site/role fan-out coverage so a search with several roles or
+    # boards reports the weakest scope rather than summing them.
+    state_totals = set()
+    states_fresh = set()
+    states_stale = set()
+    states_missing = set()
 
     for site in req.sites:
         for role in req.roles:
@@ -547,6 +652,124 @@ def _cache_lookup(req):
                 continue
             if not CACHE_ENABLED or not (req.country or req.state or req.city):
                 combos_to_scrape.append(combo)
+                continue
+
+            # --- Country-only fan-out across curated top states ---
+            top_states = [] if (req.state or req.city) else _top_states_for(req.country)
+            dbg = _debug_on("CACHE_DEBUG_FANOUT", "CACHE_DEBUG")
+            if dbg:
+                _debug(True, f"request={req.sites} roles={req.roles} "
+                             f"location={req.location!r} city={req.city!r} "
+                             f"state={req.state!r} country={req.country!r} "
+                             f"-> top_states={top_states}",
+                      getattr(req, "_search_id", None))
+            if top_states:
+                # The country-exact scope is evaluated FIRST, before any
+                # increment_combo_usage call. Those calls upsert a placeholder
+                # job_cache row (job_count=0), which would make this scope look
+                # 'stale' and mask its genuinely missing state.
+                status, entry = get_cached_jobs_aggregate(
+                    role, site, "", "", req.country,
+                    req.internship_mode, req.hours_old,
+                    ttl_hours=CACHE_TTL_HOURS, min_volume=CACHE_MIN_VOLUME,
+                )
+                _debug(dbg, f"{role}@{site} COUNTRY-EXACT status={status} "
+                            f"jobs={len((entry or {}).get('jobs') or [])}",
+                      getattr(req, "_search_id", None))
+                increment_combo_usage(
+                    role, site, "", "", req.country,
+                    req.internship_mode, req.hours_old,
+                )
+                if not _is_config_combo(role, site, "", "", req.country,
+                                        req.internship_mode, req.hours_old):
+                    increment_custom_prewarm_usage(
+                        role, site, "", "", req.country,
+                        req.internship_mode, req.hours_old,
+                    )
+                # Serves jobs no state search attributes to a state, e.g. bare
+                # "Saudi Arabia" or "Riyadh Region".
+                if status in ("fresh", "stale"):
+                    for j in (entry.get("jobs") or []):
+                        initial_jobs.append(j)
+                    served_cache += 1
+                    if status == "stale":
+                        combos_to_scrape.append(dict(combo))
+                else:
+                    combos_to_scrape.append(dict(combo))
+                    upsert_prewarm_combo(
+                        role, site, "", "", req.country,
+                        req.internship_mode, req.hours_old,
+                    )
+                    if not _is_config_combo(role, site, "", "", req.country,
+                                            req.internship_mode, req.hours_old):
+                        upsert_custom_prewarm(
+                            role, site, "", "", req.country,
+                            req.internship_mode, req.hours_old,
+                        )
+
+                for state_name in top_states:
+                    state_combo = dict(combo)
+                    state_combo["state"] = state_name
+                    state_combo["location"] = state_name
+                    status, entry = get_cached_jobs_aggregate(
+                        role, site, "", state_name, req.country,
+                        req.internship_mode, req.hours_old,
+                        ttl_hours=CACHE_TTL_HOURS, min_volume=CACHE_MIN_VOLUME,
+                    )
+                    increment_combo_usage(
+                        role, site, "", state_name, req.country,
+                        req.internship_mode, req.hours_old,
+                    )
+                    if not _is_config_combo(role, site, "", state_name, req.country,
+                                            req.internship_mode, req.hours_old):
+                        increment_custom_prewarm_usage(
+                            role, site, "", state_name, req.country,
+                            req.internship_mode, req.hours_old,
+                        )
+                    if status in ("fresh", "stale"):
+                        for j in (entry.get("jobs") or []):
+                            initial_jobs.append(j)
+                        served_cache += 1
+                    scope_fresh = _scope_fresh(status, entry, CACHE_MIN_VOLUME)
+                    _debug(dbg, f"{role}@{site} state={state_name!r} "
+                                f"cache={status} jobs={len((entry or {}).get('jobs') or [])} "
+                                f"min_volume={CACHE_MIN_VOLUME} "
+                                f"-> {'FRESH (served, no scrape)' if scope_fresh else (status.upper() + ' (served + top-up)' if status == 'stale' else 'MISSING (will scrape)')}",
+                          getattr(req, "_search_id", None))
+                    if scope_fresh:
+                        states_fresh.add(state_name)
+                        continue
+                    # stale serves now and tops up; missing is scraped anyway
+                    if status == "stale":
+                        states_stale.add(state_name)
+                    else:
+                        states_missing.add(state_name)
+                    combos_to_scrape.append(dict(state_combo))
+                    upsert_prewarm_combo(
+                        role, site, "", state_name, req.country,
+                        req.internship_mode, req.hours_old,
+                    )
+                    if not _is_config_combo(role, site, "", state_name, req.country,
+                                            req.internship_mode, req.hours_old):
+                        upsert_custom_prewarm(
+                            role, site, "", state_name, req.country,
+                            req.internship_mode, req.hours_old,
+                        )
+                state_totals.update(top_states)
+
+                log(f"[CACHE] fan-out {role}@{site}/{req.country}: "
+                    f"fresh={sorted(states_fresh & set(top_states))}, "
+                    f"stale={sorted(states_stale & set(top_states))}, "
+                    f"missing={sorted(states_missing & set(top_states))}",
+                    req._search_id if hasattr(req, '_search_id') else None)
+                _debug(dbg, f"{role}@{site}/{req.country} SUMMARY "
+                            f"fresh={sorted(states_fresh & set(top_states))} "
+                            f"stale={sorted(states_stale & set(top_states))} "
+                            f"missing={sorted(states_missing & set(top_states))} "
+                            f"| combos_to_scrape={len(combos_to_scrape)} "
+                            f"cached_jobs_so_far={len(initial_jobs)} "
+                            f"unique_urls={len({j.get('url') for j in initial_jobs})}",
+                      getattr(req, "_search_id", None))
                 continue
 
             # --- Naukri state-level: decompose into per-city lookups ---
@@ -677,7 +900,19 @@ def _cache_lookup(req):
                     req.internship_mode, req.hours_old,
                 )
 
-    return combos_to_scrape, initial_jobs, served_cache
+    coverage = {
+        "states_total": len(state_totals),
+        "states_fresh": len(state_totals & states_fresh),
+        "states_stale": len(state_totals & states_stale),
+        "states_missing": len(state_totals & states_missing),
+        "complete": bool(state_totals) and not (state_totals - states_fresh),
+    }
+    _debug(_debug_on("CACHE_DEBUG_FANOUT", "CACHE_DEBUG"),
+           f"TOTAL combos_to_scrape={len(combos_to_scrape)} "
+           f"cached_jobs={len(initial_jobs)} "
+           f"unique_urls={len({j.get('url') for j in initial_jobs})} "
+           f"served={served_cache} coverage={coverage}")
+    return combos_to_scrape, initial_jobs, served_cache, coverage
 
 
 _STATE_INDEX = None
@@ -855,15 +1090,32 @@ def _board_location(site_key, combo):
 
 
 def _build_city_state_map(country_code: str = "") -> dict:
-    """Build a {lowercase_city: (canonical_city, state_name)} map for the
-    given country from CACHE_STATE_CITIES. Cached per country code."""
+    """Build a {lowercase_city: (canonical_city, state_name)} map from
+    CACHE_STATE_CITIES, limited to the requested country. Cached per country code.
+
+    Scoped deliberately: _tag_job_location matches this map by bare substring
+    BEFORE the country-filtered _STATE_INDEX, so a merged map files foreign jobs
+    under the wrong state (a US job in "Salem, Oregon" tagged Salem/Tamil Nadu,
+    and saved against country_code="us" with state="Tamil Nadu"). The country
+    itself never comes from the job text, so restricting the map by country is
+    enough to keep the pairing honest.
+
+    Falls back to the unfiltered map when the state index is unavailable, and
+    skips states it cannot attribute to the requested country.
+    """
     cc = (country_code or "").lower()
     if cc in _city_state_map_cache:
         return _city_state_map_cache[cc]
     try:
         import config
+        _ensure_states()
+        index = _STATE_INDEX or {}
         m = {}
         for state, cities in config.CACHE_STATE_CITIES.items():
+            if cc and index:
+                info = index.get((state or "").strip().lower())
+                if not info or (info.get("country_code") or "").lower() != cc:
+                    continue
             for city in cities:
                 m[city.lower()] = (city, state)
         _city_state_map_cache[cc] = m
@@ -1033,9 +1285,11 @@ async def trigger_scrape(req: ScrapeRequest, request: Request = None):
     log(f"[SCRAPE] Search triggered — sites={req.sites}, "
           f"mode={'internship' if req.internship_mode else 'normal'}", sid)
 
-    combos_to_scrape, initial_jobs, served_cache = _cache_lookup(req)
+    combos_to_scrape, initial_jobs, served_cache, coverage = _cache_lookup(req)
     if served_cache:
         log(f"[SCRAPE] {served_cache} combo(s) served from cache, {len(combos_to_scrape)} to scrape live", sid)
+    if coverage.get("states_total"):
+        log(f"[SCRAPE] top-state coverage {coverage}", sid)
 
     if not combos_to_scrape:
         # 100% cache hit — complete synchronously so the first poll is instant.
@@ -1047,7 +1301,8 @@ async def trigger_scrape(req: ScrapeRequest, request: Request = None):
             hours_old=req.hours_old, city=req.city, state=req.state, country=req.country,
             combos=[], initial_jobs=initial_jobs, client_ip=client_ip,
         )
-        return {"message": "Served from cache", "status": "done"}
+        return {"message": "Served from cache", "status": "done",
+                "top_states_coverage": coverage}
 
     t = threading.Thread(target=_run_scrape_guarded, args=(
         sid, req.sites, req.roles, req.location, req.indeed_country,
@@ -1065,7 +1320,8 @@ async def trigger_scrape(req: ScrapeRequest, request: Request = None):
         "client_ip": client_ip,
     }, daemon=True)
     t.start()
-    return {"message": "Scrape started", "status": "running"}
+    return {"message": "Scrape started", "status": "running",
+            "top_states_coverage": coverage}
 
 
 @router.post("/stop")

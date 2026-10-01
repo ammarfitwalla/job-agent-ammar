@@ -17,7 +17,37 @@ import tempfile
 
 from utils.logger import log
 
-_INDEED_COUNTRY = {"in": "India", "us": "USA", "ie": "Ireland", "ae": "united arab emirates"}
+# Seeds only: the live map is resolved lazily from countrystatecity so that every
+# CACHE_COUNTRIES / CACHE_TOP_STATES code gets a real country name instead of
+# silently falling back to the US site.
+_INDEED_COUNTRY_SEED = {"in": "India", "us": "USA", "ie": "Ireland",
+                        "ae": "united arab emirates"}
+_INDEED_COUNTRY = dict(_INDEED_COUNTRY_SEED)
+_indeed_country_lock = threading.Lock()
+
+
+def _indeed_country_name(country_code: str) -> str:
+    """Indeed's country name for an ISO2 code.
+
+    Resolves from countrystatecity on first use and caches the whole map, so a
+    country missing from CACHE_COUNTRIES still reaches the right Indeed site
+    rather than defaulting to the US."""
+    cc = (country_code or "").lower()
+    with _indeed_country_lock:
+        if len(_INDEED_COUNTRY) <= len(_INDEED_COUNTRY_SEED):
+            try:
+                from countrystatecity_countries import get_countries
+                for c in get_countries():
+                    name = (getattr(c, "name", "") or "").strip()
+                    # Seeds are board-tested values ("USA", lowercase "united
+                    # arab emirates"); never let a country list overwrite them.
+                    if name and c.iso2.lower() not in _INDEED_COUNTRY:
+                        _INDEED_COUNTRY[c.iso2.lower()] = name
+            except Exception:
+                pass
+        return _INDEED_COUNTRY.get(cc, _INDEED_COUNTRY.get("us", "USA"))
+
+
 _OWNER = f"{socket.gethostname()}:{os.getpid()}"
 _scheduler = None
 
@@ -75,7 +105,7 @@ def _grid_combos():
                                         "hours_old": config.CACHE_HOURS_OLD,
                                         "source": "config",
                                         "location": city,
-                                        "indeed_country": _INDEED_COUNTRY.get(country, "USA"),
+                                        "indeed_country": _indeed_country_name(country),
                                     })
                             continue
                     for mode in (False, True):
@@ -86,7 +116,7 @@ def _grid_combos():
                             "hours_old": config.CACHE_HOURS_OLD,
                             "source": "config",
                             "location": state,
-                            "indeed_country": _INDEED_COUNTRY.get(country, "USA"),
+                            "indeed_country": _indeed_country_name(country),
                         })
 
     # Build dedup set from config combos
@@ -111,7 +141,7 @@ def _grid_combos():
             "hours_old": row["hours_old"],
             "source": "custom",
             "location": row["city"] or row["state"] or row["country"],
-            "indeed_country": _INDEED_COUNTRY.get(country_code, "USA"),
+            "indeed_country": _indeed_country_name(country_code),
         })
 
     return combos
@@ -300,7 +330,7 @@ def run_prewarm() -> int:
             continue
         combo = dict(combo)
         combo["location"] = combo.get("city") or combo.get("state") or combo.get("country") or ""
-        combo["indeed_country"] = _INDEED_COUNTRY.get((combo.get("country") or "").lower(), "USA")
+        combo["indeed_country"] = _indeed_country_name(combo.get("country") or "")
         todo.append(combo)
 
     if not todo:

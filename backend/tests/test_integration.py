@@ -578,7 +578,7 @@ class TestIntegrationRateLimits(unittest.TestCase):
 
     def test_scrape_rate_limited_per_ip(self):
         with patch("api.routes.scrape.log", return_value=None), \
-             patch("api.routes.scrape._cache_lookup", return_value=([], [], False)), \
+             patch("api.routes.scrape._cache_lookup", return_value=([], [], False, {})), \
              patch("api.routes.scrape.run_scrape", return_value=None):
             for i in range(6):
                 r = self.client.post("/scrape", json={"search_id": f"rl{i}"})

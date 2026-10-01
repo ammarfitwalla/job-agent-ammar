@@ -260,6 +260,7 @@ CACHE_PREWARM_LIMIT = 30                                  # prewarm fetch/store 
 CACHE_MAX_JOBS_PER_ENTRY = 500                            # live-search cache write cap
 CACHE_MAX_AGE_HOURS = 4320                                # delete cache rows older than 180 days
 CACHE_MAX_ENTRIES = 50000                                 # row-count safety cap
+CACHE_DEBUG_FANOUT = False                                # verbose country fan-out tracing (stdout + session timeline)
 
 CACHE_ROLES = ["Full Stack Developer", "Backend Developer", "Frontend Developer",
     "Data Scientist", "Data Analyst", "AI Engineer", "Machine Learning Engineer",
@@ -303,6 +304,52 @@ CACHE_STATES_EXCLUDE = [
     "Uttarakhand",
 ]
 
+# Top job-market states per country (countrystatecity ISO2 -> canonical state names).
+# Used by the country-search fan-out: a country-only search evaluates the country
+# row plus these five states, serving fresh scopes and refreshing stale/missing ones.
+# Must be canonical names from countrystatecity (NOT board display names) and
+# without trailing whitespace. One country may repeat a name only across different
+# countries, never within one list. Order is roughly by job volume.
+CACHE_TOP_STATES = {
+    "us":     ["California", "Texas", "New York", "Florida", "Illinois"],
+    "gb":     ["London", "Manchester", "Birmingham", "Leeds", "Wales"],
+    "ca":     ["Ontario", "Quebec", "British Columbia", "Alberta", "Manitoba"],
+    "au":     ["New South Wales", "Victoria", "Queensland", "Western Australia", "South Australia"],
+    "in":     ["Maharashtra", "Karnataka", "Telangana", "Tamil Nadu", "Uttar Pradesh"],
+    "ae":     ["Dubai", "Abu Dhabi", "Sharjah", "Ras Al Khaimah", "Ajman"],
+    "de":     ["Bavaria", "North Rhine-Westphalia", "Berlin", "Baden-Württemberg", "Hessen"],
+    "fr":     ["Île-de-France", "Auvergne-Rhône-Alpes", "Occitanie", "Provence-Alpes-Côte-d’Azur", "Grand-Est"],
+    "sg":     ["Central Singapore", "North East", "North West", "South East", "South West"],
+    "nl":     ["North Holland", "South Holland", "Utrecht", "North Brabant", "Gelderland"],
+    "se":     ["Stockholm", "Västra Götaland", "Skåne", "Östergötland", "Uppsala"],
+    "no":     ["Oslo", "Vestland", "Rogaland", "Trøndelag", "Akershus"],
+    "ch":     ["Zürich", "Geneva", "Basel-Stadt", "Vaud", "Bern"],
+    "it":     ["Lombardy", "Lazio", "Campania", "Tuscany", "Piedmont"],
+    "es":     ["Madrid", "Catalonia", "Andalusia", "Valencia", "Basque Country"],
+    "nz":     ["Auckland", "Canterbury", "Wellington", "Waikato", "Bay of Plenty"],
+    "jp":     ["Tokyo", "Ōsaka", "Aichi", "Kanagawa", "Fukuoka"],
+    "cn":     ["Guangdong", "Shanghai", "Beijing", "Jiangsu", "Zhejiang"],
+    "br":     ["São Paulo", "Rio de Janeiro", "Minas Gerais", "Rio Grande do Sul", "Bahia"],
+    "mx":     ["Ciudad de México", "Jalisco", "Estado de México", "Nuevo León", "Puebla"],
+    "za":     ["Gauteng", "Western Cape", "KwaZulu-Natal", "Eastern Cape", "Mpumalanga"],
+    "sa":     ["Riyadh", "Makkah", "Eastern Province", "Al Madinah", "Asir"],
+    "my":     ["Selangor", "Johor", "Kuala Lumpur", "Penang", "Perak"],
+    "hk":     ["Central and Western", "Kwun Tong", "Kowloon City", "Sha Tin", "Southern"],
+    "kr":     ["Seoul", "Gyeonggi", "Busan", "Incheon", "Daegu"],
+    "dk":     ["Zealand", "Central Denmark", "North Denmark", "Southern Denmark", "Denmark"],
+    "fi":     ["Uusimaa", "Pirkanmaa", "Finland Proper", "Central Ostrobothnia", "Lapland"],
+    "be":     ["Flanders", "Brussels-Capital", "Antwerp", "Wallonia", "Limburg"],
+    "at":     ["Vienna", "Lower Austria", "Upper Austria", "Salzburg", "Tyrol"],
+    "pl":     ["Mazovia", "Lesser Poland", "Silesia", "Greater Poland", "Lower Silesia"],
+    "pt":     ["Lisbon", "Porto", "Braga", "Aveiro", "Faro"],
+    "lu":     ["Luxembourg", "Esch-sur-Alzette", "Diekirch", "Grevenmacher", "Capellen"],
+    "il":     ["Tel Aviv", "Central", "Jerusalem", "Haifa", "Northern"],
+    "tr":     ["İstanbul", "Ankara", "Antalya", "İzmir", "Bursa"],
+    "th":     ["Bangkok", "Chiang Mai", "Nonthaburi", "Samut Prakan", "Chon Buri"],
+    "vn":     ["Hà Nội", "Hồ Chí Minh", "Đà Nẵng", "Hải Phòng", "Đồng Nai"],
+    "ph":     ["National Capital Region (Metro Manila)", "Laguna", "Cebu", "Cavite", "Rizal"],
+    "id":     ["DKI Jakarta", "Jawa Barat", "Jawa Timur", "Jawa Tengah", "Banten"],
+}
 # Naukri matches location tokens by city, not state, so each state combo loops
 # the state's major cities and merges results under the state cache key.
 CACHE_CITIES_PER_STATE = 5
