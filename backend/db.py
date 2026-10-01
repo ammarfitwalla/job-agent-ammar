@@ -1135,15 +1135,16 @@ def get_custom_prewarm() -> list:
     return result
 
 
-def gc_custom_prewarm(max_age_days: int = 30) -> None:
+def gc_custom_prewarm(max_age_days: int = 30, min_uses: int = 2) -> None:
     """Delete custom prewarm combos older than max_age_days unless they've been
-    searched often enough (usage_count >= 5) to be considered proven demand."""
+    searched often enough (usage_count >= min_uses, default 2) to be considered
+    proven demand."""
     with _write_lock:
         with _get_conn() as (conn, cur):
             cutoff = (datetime.utcnow() - timedelta(days=max_age_days)).isoformat()
             cur.execute(
-                "DELETE FROM custom_prewarm WHERE created_at < ? AND usage_count < 5",
-                (cutoff,),
+                "DELETE FROM custom_prewarm WHERE created_at < ? AND usage_count < ?",
+                (cutoff, min_uses),
             )
             conn.commit()
 

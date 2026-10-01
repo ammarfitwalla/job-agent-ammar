@@ -113,21 +113,41 @@ class TestPrewarmQueueCrud(PrewarmCrudTestCase):
                     conn.commit()
 
         db.upsert_custom_prewarm("singleton", "naukri", "", "Karnataka", "India", 0, 168)
+        db.upsert_custom_prewarm("borderline", "naukri", "", "Karnataka", "India", 0, 168)
         db.upsert_custom_prewarm("proven", "naukri", "", "Karnataka", "India", 0, 168)
         db.upsert_custom_prewarm("recent", "naukri", "", "Karnataka", "India", 0, 168)
-        for _ in range(5):
+        db.increment_custom_prewarm_usage("borderline", "naukri", "", "Karnataka", "India", 0, 168)
+        for _ in range(2):
             db.increment_custom_prewarm_usage("proven", "naukri", "", "Karnataka", "India", 0, 168)
 
         _pread_days_old("singleton", 40)
+        _pread_days_old("borderline", 40)
         _pread_days_old("proven", 40)
         _pread_days_old("recent", 5)
 
         db.gc_custom_prewarm(max_age_days=30)
 
         rows = {r["role"] for r in db.get_custom_prewarm()}
-        self.assertNotIn("singleton", rows)   # old + usage < 5  -> deleted
-        self.assertIn("proven", rows)         # old + usage == 5 -> kept forever
-        self.assertIn("recent", rows)         # new + usage < 5  -> grace window
+        self.assertNotIn("singleton", rows)   # old + usage 0 (< 2) -> deleted
+        self.assertNotIn("borderline", rows)  # old + usage 1 (< 2) -> deleted
+        self.assertIn("proven", rows)         # old + usage 2 (>= 2) -> kept
+        self.assertIn("recent", rows)         # new regardless of usage -> grace window
+
+    def test_gc_custom_prewarm_min_uses_override(self):
+        key = ("abandoned", "naukri", "", "Karnataka", "India", 0, 168)
+        db.upsert_custom_prewarm(*key)
+        for _ in range(2):
+            db.increment_custom_prewarm_usage(*key)
+        cutoff = (datetime.utcnow() - timedelta(days=40)).isoformat()
+        with db._write_lock:
+            with db._get_conn() as (conn, cur):
+                cur.execute("UPDATE custom_prewarm SET created_at = ? WHERE role = 'abandoned'", (cutoff,))
+                conn.commit()
+
+        db.gc_custom_prewarm(max_age_days=30, min_uses=3)
+
+        rows = {r["role"] for r in db.get_custom_prewarm()}
+        self.assertNotIn("abandoned", rows)   # old + usage 2 < min_uses 3 -> deleted
 
     def test_gc_custom_prewarm_upsert_refreshes_created_at(self):
         db.upsert_custom_prewarm("backend engineer", "naukri", "", "Karnataka", "India", 0, 168)
