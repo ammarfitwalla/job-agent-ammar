@@ -2648,24 +2648,30 @@ def claim_proxies(board: str, n: int, exclude: tuple = (),
     now = _now()
     leasetime = _now_plus_lease(lease_minutes)
     exclude = tuple(set(exclude or ()))
+    # Draw the healthiest proxies first: never-failed rows, then recently
+    # succeeded, then most recently probed. This stops the pool from repeatedly
+    # handing out the same dead low-id proxies (which would otherwise sort first
+    # by id) and makes a mostly-stale pool actually cycle through to live ones.
+    order = ("ORDER BY consecutive_fails ASC, "
+             "(last_success_at IS NULL) ASC, last_success_at DESC, "
+             "(tested_at IS NULL) ASC, tested_at DESC, id ASC LIMIT ?")
     with _write_lock:
         with _get_conn() as (conn, cur):
             if exclude:
                 ph = ",".join("?" * len(exclude))
                 q_free = (f"SELECT proxy_url FROM proxies WHERE board=? AND status='free' "
-                          f"AND proxy_url NOT IN ({ph}) ORDER BY id LIMIT ?")
+                          f"AND proxy_url NOT IN ({ph}) {order}")
                 args_free = [board, *exclude, n]
                 q_stale = (f"SELECT proxy_url FROM proxies WHERE board=? AND status='in_use' "
                            f"AND claimed_until IS NOT NULL AND claimed_until < ? "
-                           f"AND proxy_url NOT IN ({ph}) ORDER BY id LIMIT ?")
+                           f"AND proxy_url NOT IN ({ph}) {order}")
                 args_stale = [board, now, *exclude, n]
             else:
-                q_free = ("SELECT proxy_url FROM proxies WHERE board=? AND status='free' "
-                          "ORDER BY id LIMIT ?")
+                q_free = (f"SELECT proxy_url FROM proxies WHERE board=? AND status='free' "
+                          f"{order}")
                 args_free = [board, n]
                 q_stale = (f"SELECT proxy_url FROM proxies WHERE board=? AND status='in_use' "
-                           f"AND claimed_until IS NOT NULL AND claimed_until < ? "
-                           f"ORDER BY id LIMIT ?")
+                           f"AND claimed_until IS NOT NULL AND claimed_until < ? {order}")
                 args_stale = [board, now, n]
 
             picked = [r["proxy_url"] for r in cur.execute(q_free, args_free).fetchall()]
@@ -2749,3 +2755,12 @@ def proxy_pool_stats(board: str) -> dict:
         counts = {r["status"]: r["c"] for r in cur.fetchall()}
     return {"board": board, "free": counts.get("free", 0),
             "in_use": counts.get("in_use", 0), "dead": counts.get("dead", 0)}
+
+
+def proxy_pool_last_tested(board: str) -> str | None:
+    """Newest `tested_at` timestamp in the pool (ISO string), or None if empty."""
+    with _get_conn() as (conn, cur):
+        row = cur.execute(
+            "SELECT MAX(tested_at) AS last FROM proxies WHERE board = ?", (board,)
+        ).fetchone()
+    return row["last"] if row and row["last"] else None

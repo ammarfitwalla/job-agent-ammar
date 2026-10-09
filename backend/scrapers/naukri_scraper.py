@@ -16,7 +16,7 @@ from utils.delay import delay
 JOB_SEARCH_URL = "https://www.naukri.com/jobapi/v3/search"
 MAX_PAGES = 5
 PAGE_SIZE = 20
-NAUKRI_MAX_406_RETRIES = 2
+NAUKRI_MAX_PROXY_ATTEMPTS = 8   # overridden by config.NAUKRI_MAX_PROXY_ATTEMPTS
 _BOARD = "naukri"
 
 PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
@@ -288,6 +288,8 @@ def _search_term(pqueue, term, location, job_age, term_wanted, seen):
     jobs = []
     got = 0
     consecutive_406 = 0
+    import config
+    max_attempts = getattr(config, "NAUKRI_MAX_PROXY_ATTEMPTS", NAUKRI_MAX_PROXY_ATTEMPTS)
     for page in range(1, MAX_PAGES + 1):
         if consecutive_406 >= 2:
             print(f"[NAUKRI] '{term}' — {consecutive_406} consecutive 406s, stopping early")
@@ -315,7 +317,7 @@ def _search_term(pqueue, term, location, job_age, term_wanted, seen):
         proxy_url = None
         page_406 = False
         try:
-            for attempt in range(NAUKRI_MAX_406_RETRIES + 1):
+            for attempt in range(max_attempts):
                 try:
                     proxy_url = pqueue.next() if pqueue is not None else ""
                 except _ProxyExhausted:
@@ -375,6 +377,39 @@ def _search_term(pqueue, term, location, job_age, term_wanted, seen):
     return jobs
 
 
+def _ensure_fresh_pool(board=_BOARD):
+    """Re-probe the proxy pool before a scrape when it is empty or stale.
+
+    Guarantees the scraper never draws from a pool that has not been validated
+    within `NAUKRI_PROXY_REFRESH_MINUTES`, so dead rows get pruned instead of
+    being retried forever. Cheap when a refresh already ran recently."""
+    import config
+    if not getattr(config, "NAUKRI_REFRESH_POOL_BEFORE_SCRAPE", True):
+        return
+    try:
+        from db import proxy_pool_stats, proxy_pool_last_tested
+        max_age = getattr(config, "NAUKRI_PROXY_REFRESH_MINUTES", 10) * 60
+        stale = proxy_pool_stats(board).get("free", 0) <= 0
+        if not stale:
+            last = proxy_pool_last_tested(board)
+            if not last:
+                stale = True
+            else:
+                from datetime import datetime
+                try:
+                    age = (datetime.utcnow() - datetime.fromisoformat(last)).total_seconds()
+                except ValueError:
+                    age = max_age + 1
+                stale = age > max_age
+        if not stale:
+            return
+        from scheduler import refresh_proxy_pool
+        found = refresh_proxy_pool(board)
+        print(f"[NAUKRI] pre-scrape proxy refresh -> {found} working")
+    except Exception as e:
+        print(f"[NAUKRI] pre-scrape proxy refresh failed: {e}")
+
+
 def scrape_naukri(roles=None, location="", internship_mode=False, results_wanted=20, hours_old=72):
     """Scrape Naukri jobs via its internal search API."""
     if not roles:
@@ -382,6 +417,8 @@ def scrape_naukri(roles=None, location="", internship_mode=False, results_wanted
 
     import config
     use_proxy = bool(getattr(config, "NAUKRI_USE_PROXY", True))
+    if use_proxy:
+        _ensure_fresh_pool()
     pqueue = _ProxyQueue() if use_proxy else None
     try:
         loc = _naukri_location(location)

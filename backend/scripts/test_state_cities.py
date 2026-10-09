@@ -20,8 +20,8 @@ import config
 from scrapers import naukri_scraper as ns
 
 # Our cooldown handles blocked periods; don't double up on the scraper's
-# 8-12s 406 retries per token (this script re-tests blocked tokens anyway).
-ns.NAUKRI_MAX_406_RETRIES = 0
+# proxy retries per token (this script re-tests blocked tokens anyway).
+config.NAUKRI_MAX_PROXY_ATTEMPTS = 1
 
 RESULTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "city_map_results.json")
 STATE_FILTER = sys.argv[1] if len(sys.argv) > 1 else None

@@ -411,6 +411,8 @@ NAUKRI_PROXY_TEST_MIN_TARGET = 10        # stop refresh pass once this many work
 NAUKRI_PROXIES_PER_SCRAPE = 8            # proxy batch drawn per scrape
 NAUKRI_PROXY_CLAIM_MINUTES = 10          # in_use lease before takeover eligible
 NAUKRI_PROXY_POOL_MAX = 100               # max rows kept per board
+NAUKRI_MAX_PROXY_ATTEMPTS = 8            # proxy attempts per term/page before giving up
+NAUKRI_REFRESH_POOL_BEFORE_SCRAPE = True # re-probe pool when stale before scraping
 
 SCHEDULER_ENABLED = False
 SCHEDULER_INTERVAL_MINUTES = 180

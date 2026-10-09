@@ -127,7 +127,7 @@ Helpers (all take `board`, all writes under existing `db._write_lock`, `db.py:12
    `refresh_proxy_pool("naukri")` populates rows on first pass (~30s worst case).
 2. `/scrape` for `naukri` @ Mumbai → first rows within ~30s; log shows proxy
    draw/skip/refill; no 28/56s backoff lines; state transitions visible.
-3. Re-run `scripts/test_state_cities.py` (sets `NAUKRI_MAX_406_RETRIES=0`) — no
+3. Re-run `scripts/test_state_cities.py` (sets `NAUKRI_MAX_PROXY_ATTEMPTS=1`) — no
    regression; no direct-connection fallback introduced.
 4. Re-run `tests/test_integration.py` + `node --check frontend/js/search.js` if
    frontend touched.
