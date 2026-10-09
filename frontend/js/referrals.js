@@ -799,25 +799,25 @@ async function loadReferrals() {
       let actions = "";
       if (_referralTab === "incoming" && r.status === "pending") {
         actions = `
-          <div class="flex items-center gap-2">
-            <button class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 rounded-lg transition-colors shadow-sm accept-referral-btn" data-id="${r.id}">
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <button class="inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 rounded-lg transition-colors shadow-sm accept-referral-btn flex-1 sm:flex-none" data-id="${r.id}">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
               Accept
             </button>
-            <button class="inline-flex items-center gap-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors decline-referral-btn" data-id="${r.id}">
+            <button class="inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors decline-referral-btn flex-1 sm:flex-none" data-id="${r.id}">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               Decline
             </button>
           </div>`;
       }
       if (_referralTab === "outgoing" && r.status === "pending") {
-        actions = `<button class="inline-flex items-center gap-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors withdraw-referral-btn" data-id="${r.id}">
+        actions = `<button class="inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors withdraw-referral-btn w-full sm:w-auto" data-id="${r.id}">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
           Withdraw request
         </button>`;
 } else if (_referralTab === "outgoing" && r.status === "cancelled") {
         _referralCompany = r.company || "";
-        actions = `<button class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors referral-ask-btn" data-to-referrer-id="${htmlEscape(r.to_referrer_id || '')}" data-to-name="${htmlEscape((r.to_position ? `Insider at ${r.company} — ${r.to_position}` : `Insider at ${r.company}`) || '')}" data-job-url="${htmlEscape(r.job_url || '')}" data-job-title="${htmlEscape(r.job_title || '')}" data-company="${htmlEscape(r.company || '')}">
+        actions = `<button class="inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors referral-ask-btn w-full sm:w-auto" data-to-referrer-id="${htmlEscape(r.to_referrer_id || '')}" data-to-name="${htmlEscape((r.to_position ? `Insider at ${r.company} — ${r.to_position}` : `Insider at ${r.company}`) || '')}" data-job-url="${htmlEscape(r.job_url || '')}" data-job-title="${htmlEscape(r.job_title || '')}" data-company="${htmlEscape(r.company || '')}">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
           Ask again
         </button>`;
@@ -828,7 +828,7 @@ async function loadReferrals() {
         } else if (r.receiver_confirmed) {
           actions = `<p class="text-xs text-slate-500 font-medium inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>You've confirmed. Waiting for the sender to confirm...</p>`;
         } else {
-          actions = cooldownNote(r) || `<button class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3.5 py-2 rounded-lg transition-colors shadow-sm complete-referral-btn" data-id="${r.id}">
+          actions = cooldownNote(r) || `<button class="inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3.5 py-2 rounded-lg transition-colors shadow-sm complete-referral-btn w-full sm:w-auto" data-id="${r.id}">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
             Mark as Referred (+10 credits)
           </button>`;
@@ -840,7 +840,7 @@ async function loadReferrals() {
         } else if (r.sender_confirmed) {
           actions = `<p class="text-xs text-slate-500 font-medium inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>You've confirmed. Waiting for the receiver to confirm...</p>`;
         } else {
-          actions = cooldownNote(r) || `<button class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3.5 py-2 rounded-lg transition-colors shadow-sm sender-confirm-referral-btn" data-id="${r.id}">
+          actions = cooldownNote(r) || `<button class="inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3.5 py-2 rounded-lg transition-colors shadow-sm sender-confirm-referral-btn w-full sm:w-auto" data-id="${r.id}">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
             Confirm Referred
           </button>`;
@@ -861,7 +861,7 @@ async function loadReferrals() {
           </div>
           ${isIncoming ? `
             <div class="flex flex-wrap items-center gap-2">
-              <span class="text-sm font-medium text-slate-700">${htmlEscape(r.from_email)}</span>
+              <span class="text-sm font-medium text-slate-700 break-all">${htmlEscape(r.from_email)}</span>
               <button class="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 bg-white border border-indigo-200 hover:bg-indigo-50 px-2 py-1 rounded-md transition-colors copy-ref-email-btn" data-email="${htmlEscape(r.from_email)}">Copy</button>
             </div>
             ${r.from_company || r.from_position ? `<p class="text-xs text-slate-500">${[r.from_position, r.from_company].filter(Boolean).join(" at ")}</p>` : ""}
@@ -870,7 +870,7 @@ async function loadReferrals() {
               ${r.resume_filename ? `<a href="/api/referrals/resume?request_id=${r.id}" data-download="1" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Resume</a>` : ""}
             </div>` : `
             <div class="flex flex-wrap items-center gap-2">
-              <span class="text-sm font-medium text-slate-700">${htmlEscape(r.to_email)}</span>
+              <span class="text-sm font-medium text-slate-700 break-all">${htmlEscape(r.to_email)}</span>
               <button class="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 bg-white border border-indigo-200 hover:bg-indigo-50 px-2 py-1 rounded-md transition-colors copy-ref-email-btn" data-email="${htmlEscape(r.to_email)}">Copy</button>
             </div>
             ${r.to_linkedin_url ? `<div class="flex flex-wrap gap-3 pt-1"><a href="${htmlEscape(r.to_linkedin_url)}" target="_blank" class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>LinkedIn</a></div>` : ""}` }
@@ -881,7 +881,7 @@ async function loadReferrals() {
         <div class="flex items-start justify-between gap-3">
           <div class="flex items-center gap-3 min-w-0 flex-1">
             <div class="w-10 h-10 rounded-xl ${nc} flex items-center justify-center font-bold text-lg shrink-0">${htmlEscape(name.charAt(0).toUpperCase())}</div>
-            <div class="min-w-0">
+            <div class="min-w-0 break-words">
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="font-semibold text-slate-900 text-sm">${htmlEscape(name)}</span>
                 <span class="text-[11px] font-semibold px-2 py-0.5 rounded-lg ${sm.cls}">${sm.label}</span>
@@ -897,7 +897,7 @@ async function loadReferrals() {
                   ${r.job_url ? `<a href="${htmlEscape(r.job_url)}" target="_blank" class="text-indigo-600 hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>View Job Posting</a>` : ""}
                 </div>
               </div>
-              ${r.message ? `<p class="mt-2 rounded-lg bg-indigo-50/70 border border-indigo-100 px-3 py-2 text-xs text-slate-600">${htmlEscape(r.message)}</p>` : ""}
+              ${r.message ? `<p class="mt-2 rounded-lg bg-indigo-50/70 border border-indigo-100 px-3 py-2 text-xs text-slate-600 break-words">${htmlEscape(r.message)}</p>` : ""}
               ${contactBox}
             </div>
           </div>
