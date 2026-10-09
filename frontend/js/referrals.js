@@ -879,14 +879,15 @@ async function loadReferrals() {
       return `
       <div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 hover:border-indigo-300 hover:shadow-md transition-all">
         <div class="flex items-start justify-between gap-3">
-          <div class="flex items-center gap-3 min-w-0 flex-1">
+          <div class="flex items-start gap-3 min-w-0 flex-1">
             <div class="w-10 h-10 rounded-xl ${nc} flex items-center justify-center font-bold text-lg shrink-0">${htmlEscape(name.charAt(0).toUpperCase())}</div>
-            <div class="min-w-0 break-words">
+            <div class="min-w-0 break-words flex-1">
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="font-semibold text-slate-900 text-sm">${htmlEscape(name)}</span>
                 <span class="text-[11px] font-semibold px-2 py-0.5 rounded-lg ${sm.cls}">${sm.label}</span>
                 <span class="text-[11px] font-semibold px-2 py-0.5 rounded-lg ${dirCls}">${dirLabel}</span>
               </div>
+              <div class="mt-1 text-[11px] text-slate-400 sm:hidden">${dateLabel} ${dateStr ? formatDate(dateStr) : ""}</div>
               <div class="mt-2 space-y-1.5">
                 <div class="flex items-center gap-2 flex-wrap">
                   <p class="text-sm font-semibold text-slate-900">${htmlEscape(r.job_title || "Job at " + r.company)}</p>
@@ -901,7 +902,7 @@ async function loadReferrals() {
               ${contactBox}
             </div>
           </div>
-          <div class="flex flex-col items-end gap-2 shrink-0">
+          <div class="hidden sm:flex flex-col items-end gap-2 shrink-0">
             <span class="text-[11px] text-slate-400 whitespace-nowrap">${dateLabel} ${dateStr ? formatDate(dateStr) : ""}</span>
           </div>
         </div>
