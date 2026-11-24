@@ -64,6 +64,10 @@ def _send_msg_with_retry(msg, to, tries=3, timeout=120):
 
 def send_email(to: str, subject: str, html_body: str, text_body: str | None = None) -> bool:
     """Send email via the configured provider. Returns True on success."""
+    to = (to or "").strip()
+    if not to:
+        log.warning("send_email: empty recipient, skipping")
+        return False
     try:
         from config import EMAIL_PROVIDER
         if EMAIL_PROVIDER == "sendcorex_api":
@@ -139,14 +143,18 @@ def send_verification_email(to: str, code: str) -> bool:
 
 
 def send_email_with_attachment(to: str, subject: str, html_body: str, file_path: str, filename: str) -> bool:
-    """Send email with a file attachment via the configured provider."""
+    """Send email with a file attachment via SMTP.
+
+    The SendCoreX HTTP API path does not support attachments (it silently drops
+    them), so attachments always go through SMTP."""
+    to = (to or "").strip()
+    if not to:
+        log.warning("send_email_with_attachment: empty recipient, skipping")
+        return False
     try:
         from config import EMAIL_PROVIDER
         if EMAIL_PROVIDER == "sendcorex_api":
-            from utils.sendcorex_api import send as _scx_send
-            if _scx_send(to, subject, html_body, file_path=file_path, filename=filename, transactional=True):
-                return True
-            log.warning("SendCoreX API failed — falling back to SMTP")
+            log.info("SendCoreX API cannot attach files — using SMTP for %s", to)
         settings = _smtp_settings()
         if not settings:
             return False

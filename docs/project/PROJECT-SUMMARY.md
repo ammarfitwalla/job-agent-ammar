@@ -20,7 +20,7 @@ Job boards ─▶ Scrapers ─▶ Normalizer ─▶ SQLite pipeline ─▶ Scori
                                                               │
                Users / sessions ──▶ resume store ──▶ PII scrubber ──▶ LLM provider (Groq, fallback: Ollama)
                                                               └──▶ score cache [email+job+resume-hash]
-               Nightly scheduler + prewarm ──▶ /health monitor + SMTP backup mailer
+               Nightly scheduler + prewarm ──▶ /health monitor + on-demand backup download
 ```
 
 **Patterns applied (with real trade-offs):**

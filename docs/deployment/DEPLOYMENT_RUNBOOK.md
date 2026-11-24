@@ -1,7 +1,8 @@
 # PROD Deployment Runbook — job-agent / jobawn.com
 
-> Keep prod working: **`docker cp` + `docker restart`**. Nothing else. Every incident below
-> (readonly DB, 502 Bad Gateway) came from rebuilding/recreating the container instead.
+> Keep prod working: **`docker cp` + `docker restart`**. Nothing else. The 502 incidents
+> below came from rebuilding/recreating the container. Readonly-DB incidents came from code
+> landing with the wrong uid (see incident A) — fix with an in-place `chown`, never a recreate.
 
 ## Topology (what really runs)
 
@@ -29,7 +30,7 @@ Network on `appnet` (172.18.0.0/16): `job-agent` = 172.18.0.2, `nginx` = 172.18.
 
 ```powershell
 $KEY  = "$env:USERPROFILE\.ssh\oracle.key"
-$HOST = "ubuntu@130.210.34.176"
+$SRV = "ubuntu@130.210.34.176"
 $R    = "/home/ubuntu/job-agent"
 ```
 
@@ -41,24 +42,33 @@ From the repo root, `--exclude` must match the golden rules exactly relative to 
 
 ```powershell
 tar -czf "$env:TEMP\jobagent_deploy.tar.gz" `
-  backend --exclude="backend/config.py" --exclude="*.db" --exclude="*.bak" `
+  backend --exclude="backend/config.py" --exclude="*.db" --exclude="*.bak" --exclude="*.zip" `
     --exclude="backend/resume.txt" --exclude="backend/resumes" --exclude="backend/emails" `
     --exclude="backend/auto_apply" --exclude="backend/cover_letters" --exclude="backend/data" `
     --exclude="backend/env" --exclude="backend/__pycache__" --exclude="backend/.pytest_cache" `
+    --exclude="backend/archive_exports" --exclude="backend/tests" `
   frontend --exclude="frontend/backup"
 ```
 
-### 2. Upload + extract **as ubuntu with forced ownership 1000:1000**
+> `*.zip` and `backend/archive_exports` matter: a stray `backend/jobawn-backup-*.zip` (94 MB)
+> and the local export directory (25 MB) otherwise land in the bundle. `backend/tests` is
+> excluded because it is never needed in the container.
+
+### 2. Upload + extract with forced ownership 1000:1000
 
 ```powershell
-scp -i $KEY "$env:TEMP\jobagent_deploy.tar.gz" $HOST:$R/jobagent_deploy.tar.gz
-ssh -i $KEY $HOST "rm -rf $R/stage && mkdir -p $R/stage && cd $R/stage && \
-  tar -xzf $R/jobagent_deploy.tar.gz --owner=1000 --group=1000"
+scp -i $KEY "$env:TEMP\jobagent_deploy.tar.gz" $SRV:$R/jobagent_deploy.tar.gz
+ssh -i $KEY $SRV "rm -rf $R/stage && mkdir -p $R/stage && cd $R/stage && \
+  sudo tar -xzf $R/jobagent_deploy.tar.gz --owner=1000 --group=1000 && \
+  sudo chown -R 1000:1000 $R/stage"
 ```
 
-`--owner=1000 --group=1000` is the single most important line: files then arrive in the
-container owned by `user:user`, so the app can write. (Extracting as root reintroduces the
-readonly-DB bug.)
+`--owner=1000 --group=1000` only works as **root**. The host `ubuntu` user is uid **1001**
+on this server, so running `tar` without `sudo` silently leaves files owned `1001:1001`;
+`docker cp` preserves that, and uid 1000 then cannot create `-wal`/`journal`/
+`archive_exports` files in `/app/backend` → `attempt to write a readonly database`.
+Always extract with `sudo` (or `sudo chown -R 1000:1000 $R/stage` afterward) and run the
+write test in step 5.
 
 ### 3. Sanity-check the bundle BEFORE copying
 
@@ -70,25 +80,36 @@ find "$R/stage" -name "config.py" -o -name "*.db" | grep . && echo "FORBIDDEN FI
 ### 4. Copy into the container
 
 ```powershell
-ssh -i $KEY $HOST "sudo docker cp $R/stage/backend job-agent:/app/"
-ssh -i $KEY $HOST "sudo docker cp $R/stage/frontend job-agent:/app/"
+ssh -i $KEY $SRV "sudo docker cp $R/stage/backend job-agent:/app/"
+ssh -i $KEY $SRV "sudo docker cp $R/stage/frontend job-agent:/app/"
 ```
 
 ### 5. Verify inside the container (before restart)
 
 ```powershell
-ssh -i $KEY $HOST "sudo docker exec job-agent sh -c 'ls -l /app/backend/config.py /app/backend/job_agent.db; md5sum /app/backend/config.py'"
+ssh -i $KEY $SRV "sudo docker exec job-agent sh -c 'ls -ln /app/backend/config.py /app/backend/job_agent.db /app/backend/db.py; md5sum /app/backend/config.py'"
 ```
 
 - `config.py` **must still be present** and unchanged (compare md5 with the value you
   captured before step 4).
-- `job_agent.db` must still be ~225 MB and untouched.
-- New files should show owner `user`.
+- `job_agent.db` size must be unchanged.
+- `/app/backend` and the new files must be **uid 1000**, and this write test must pass:
+
+```powershell
+ssh -i $KEY $SRV "sudo docker exec -u user job-agent sh -c 'touch /app/backend/.writetest && rm /app/backend/.writetest && echo WRITE_OK'"
+```
+
+If it prints `Permission denied`, fix ownership **without recreating the container**
+(note `docker exec` runs as `user`; root needs `-u root`):
+
+```powershell
+ssh -i $KEY $SRV "sudo docker exec -u root job-agent chown -R 1000:1000 /app/backend /app/frontend"
+```
 
 ### 6. Restart + smoke test
 
 ```powershell
-ssh -i $KEY $HOST "sudo docker restart job-agent && sleep 10 && sudo docker logs job-agent --tail 30 2>&1"
+ssh -i $KEY $SRV "sudo docker restart job-agent && sleep 10 && sudo docker logs job-agent --tail 30 2>&1"
 ```
 
 Expected in logs: `Application startup complete`, `[PREWARM] Scheduler started`,
@@ -97,19 +118,61 @@ Expected in logs: `Application startup complete`, `[PREWARM] Scheduler started`,
 Then verify end-to-end (Host → nginx → container):
 
 ```powershell
-ssh -i $KEY $HOST "curl -sk -o /dev/null -w '%{http_code}' --resolve jobawn.com:443:127.0.0.1 https://jobawn.com/api/countries-used"
-ssh -i $KEY $HOST "sudo docker logs nginx --since 30s 2>&1 | grep -c ' 502 '"
+ssh -i $KEY $SRV "curl -sk -o /dev/null -w '%{http_code}' --resolve jobawn.com:443:127.0.0.1 https://jobawn.com/api/countries-used"
+ssh -i $KEY $SRV "sudo docker logs nginx --since 30s 2>&1 | grep -c ' 502 '"
 ```
 
 - HTTPS through nginx → `200`
 - `grep -c ' 502 '` → `0` (any count > 0 = stale upstream, see incident below)
 
+## Post-deploy: old-job archive (one-time, frees disk)
+
+At boot and on every prewarm pass the scheduler moves jobs older than 14 days from
+`job_cache` into `job_archive`. Nothing is deleted until an admin explicitly exports and
+clears. (Thresholds fall back to `FRESH_WINDOW_DAYS=14` / `MIN_JOBS=10` when the baked
+`config.py` does not define them, so no config change is required.)
+
+1. Open `https://jobawn.com/admin` → **DB** tab → **Old-Job Archive**.
+2. **Export archive (.jsonl.gz)** — the file downloads to your machine and is also staged in
+   `/app/backend/archive_exports/`.
+3. Verify the download: `gzip -t job_archive_*.jsonl.gz` and confirm the row count shown in
+   the UI matches the export.
+4. **Clear archive** — the server refuses unless the current `job_archive` row count still
+   matches the recorded export.
+5. **Vacuum DB** — run off-peak; it needs temporary free space roughly equal to the DB size.
+   On the 2026-10 snapshot this reclaimed ~126 MB (220 MB → 96 MB).
+
+Endpoints used by the UI (admin bearer token required):
+
+```text
+GET  /api/admin/job-archive/info
+GET  /api/admin/job-archive/exports
+POST /api/admin/job-archive/export
+GET  /api/admin/job-archive/download/{export_id}
+POST /api/admin/job-archive/clear[?export_id=N]
+POST /api/admin/job-archive/vacuum
+```
+
+After a successful clear + vacuum, staged files under `/app/backend/archive_exports/` can be
+deleted (they are kept so a failed download can be retried).
+
 ## Incidents
 
-### A. App won't boot: `attempt to write a readonly database`
+### A. App writes fail: `attempt to write a readonly database`
 
 Cause: `/app/backend` (or `job_agent.db`) not writable by uid 1000 — usually files were
-extracted/copied as another uid. Fix ownership, and **do not forget the network step**:
+extracted/copied as another uid. On 09-Nov-2026 the host `ubuntu` was uid 1001, so
+`tar --owner=1000` run as `ubuntu` was a no-op. **Fix ownership in place; do not recreate
+the container:**
+
+```bash
+sudo docker exec -u root job-agent chown -R 1000:1000 /app/backend /app/frontend
+sudo docker exec -u user job-agent sh -c 'touch /app/backend/.writetest && rm /app/backend/.writetest && echo WRITE_OK'
+sudo docker restart job-agent
+```
+
+Only if that fails (e.g. the container itself is broken) fall back to the recreate recipe.
+It **must** end with `docker network connect appnet job-agent` + `nginx -s reload`:
 
 ```bash
 IMG=job-agent:deploy-ownfix-2026-09-27     # current image, correct ownership baked in
@@ -161,5 +224,7 @@ curl -sk -o /dev/null -w '%{http_code}\n' --resolve jobawn.com:443:127.0.0.1 htt
   mounts on `job-agent`). Older docs/scripts claiming a bind-mount are stale.
 - 502 on 27-Sep-2026 was caused by recreating the container (dropped off `appnet` while
   nginx kept its cached IP). Fix was `docker network connect appnet job-agent` + `nginx -s reload`.
-- Readonly DB on 27-Sep-2026 was caused by files landing with the wrong ownership; root
-  cause removed from the flow by `--owner=1000 --group=1000` at extraction.
+- Readonly DB on 27-Sep-2026 and again on 09-Nov-2026 was caused by files landing with the
+  wrong ownership. `--owner=1000` only works as root; the host `ubuntu` is uid 1001, so
+  always extract with `sudo tar ... --owner=1000` (or `sudo chown -R 1000:1000 $R/stage`)
+  and run the write test in step 5.

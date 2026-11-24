@@ -5,7 +5,10 @@ import hashlib
 import threading
 import time
 import contextlib
-from datetime import datetime, timedelta
+import gzip
+import math
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 _DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "job_agent.db")
@@ -80,6 +83,7 @@ def init_db():
                 experience_level TEXT,
                 is_raw INTEGER DEFAULT 0,
                 date_posted TEXT DEFAULT '',
+                posted_at_ts INTEGER DEFAULT NULL,
                 company_url TEXT DEFAULT '',
                 job_level TEXT DEFAULT '',
                 matched_role TEXT DEFAULT '',
@@ -363,6 +367,41 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_email_queue_pending ON email_queue(status, id);
             CREATE UNIQUE INDEX IF NOT EXISTS idx_email_dedup ON email_queue(dedup_key) WHERE dedup_key != '';
+            CREATE TABLE IF NOT EXISTS job_archive (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                url               TEXT NOT NULL UNIQUE,
+                title             TEXT DEFAULT '',
+                company           TEXT DEFAULT '',
+                location          TEXT DEFAULT '',
+                description       TEXT DEFAULT '',
+                tags              TEXT DEFAULT '[]',
+                salary            TEXT DEFAULT '',
+                experience_level  TEXT,
+                date_posted       TEXT DEFAULT '',
+                posted_at_ts      INTEGER,
+                first_seen        TEXT DEFAULT '',
+                company_url       TEXT DEFAULT '',
+                job_level         TEXT DEFAULT '',
+                role              TEXT NOT NULL DEFAULT '',
+                site              TEXT NOT NULL DEFAULT '',
+                city              TEXT NOT NULL DEFAULT '',
+                state             TEXT NOT NULL DEFAULT '',
+                country           TEXT NOT NULL DEFAULT '',
+                internship_mode   INTEGER NOT NULL DEFAULT 0,
+                hours_old         INTEGER NOT NULL DEFAULT 168,
+                is_remote         INTEGER NOT NULL DEFAULT 0,
+                source_scraped_at TEXT DEFAULT '',
+                archived_at       TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_job_archive_posted ON job_archive(posted_at_ts);
+            CREATE TABLE IF NOT EXISTS archive_exports (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename    TEXT NOT NULL,
+                rows        INTEGER NOT NULL,
+                sha256      TEXT NOT NULL,
+                created_at  TEXT NOT NULL,
+                cleared_at  TEXT DEFAULT ''
+            );
         """)
         # Create deleted_users index if missing
         try:
@@ -567,6 +606,11 @@ def init_db():
             cur.execute("ALTER TABLE jobs ADD COLUMN date_posted TEXT DEFAULT ''")
         except Exception:
             pass
+        # Migrate jobs table — normalized posting timestamp (epoch seconds)
+        try:
+            cur.execute("ALTER TABLE jobs ADD COLUMN posted_at_ts INTEGER DEFAULT NULL")
+        except Exception:
+            pass
         try:
             cur.execute("ALTER TABLE jobs ADD COLUMN company_url TEXT DEFAULT ''")
         except Exception:
@@ -725,6 +769,123 @@ def delete_custom_role_by_id(role_id: int) -> bool:
 
 # ── Job Cache (instant-search result store, independent of sessions) ──
 
+# ── Freshness / archive helpers ──
+
+_EPOCH = datetime(1970, 1, 1)
+_DEFAULT_FRESH_WINDOW_DAYS = 14
+_DEFAULT_MIN_JOBS = 10
+
+
+def _dt_to_ts(dt: datetime) -> int:
+    """Naive-UTC datetime -> epoch seconds (deterministic, no local tz)."""
+    return int((dt - _EPOCH).total_seconds())
+
+
+def _json_safe(value):
+    """Replace non-finite floats (NaN/Inf) with None so exports are strict
+    JSON. Scrapers occasionally emit ``company_url: NaN``."""
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return value
+
+
+def _fresh_window_days() -> int:
+    try:
+        import config
+        return int(getattr(config, "FRESH_WINDOW_DAYS", _DEFAULT_FRESH_WINDOW_DAYS))
+    except Exception:
+        return _DEFAULT_FRESH_WINDOW_DAYS
+
+
+def _min_jobs() -> int:
+    try:
+        import config
+        return int(getattr(config, "MIN_JOBS", _DEFAULT_MIN_JOBS))
+    except Exception:
+        return _DEFAULT_MIN_JOBS
+
+
+def parse_posted_ts(date_posted: str, anchor_iso: str = "") -> int:
+    """Normalize a scraped ``date_posted`` value to epoch seconds.
+
+    ISO dates are parsed directly; relative strings ("3 Days Ago",
+    "Just Now", "Few Hours Ago", "30+ Days Ago") are resolved against
+    ``anchor_iso`` (the job's first_seen / scrape time). Empty or
+    unparseable values fall back to the anchor. Dates in the future are
+    clamped to now. The raw string is never modified.
+    """
+    now_dt = datetime.utcnow()
+    anchor_dt = now_dt
+    if anchor_iso:
+        try:
+            anchor_dt = datetime.fromisoformat(str(anchor_iso))
+            if anchor_dt.tzinfo:
+                anchor_dt = anchor_dt.astimezone(timezone.utc).replace(tzinfo=None)
+        except Exception:
+            anchor_dt = now_dt
+    now_ts = _dt_to_ts(now_dt)
+    anchor_ts = _dt_to_ts(anchor_dt)
+    raw = (date_posted or "").strip()
+    if not raw:
+        return anchor_ts
+    lower = raw.lower()
+
+    # ISO date / datetime (optionally with Z).
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo:
+            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return min(_dt_to_ts(dt), now_ts)
+    except Exception:
+        pass
+
+    # Date-only (YYYY-MM-DD) or year-month (YYYY-MM).
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", raw)
+    if m:
+        try:
+            return min(_dt_to_ts(datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))), now_ts)
+        except Exception:
+            pass
+    m = re.match(r"^(\d{4})-(\d{2})$", raw)
+    if m:
+        try:
+            return min(_dt_to_ts(datetime(int(m.group(1)), int(m.group(2)), 1)), now_ts)
+        except Exception:
+            pass
+
+    if "just now" in lower or lower.startswith("today"):
+        return anchor_ts
+    if "yesterday" in lower:
+        return _dt_to_ts(anchor_dt - timedelta(days=1))
+    if "few hours" in lower or "few hour" in lower:
+        return _dt_to_ts(anchor_dt - timedelta(hours=3))
+    if "few days" in lower or "few day" in lower:
+        return _dt_to_ts(anchor_dt - timedelta(days=3))
+
+    m = re.search(r"(\d+)\s*\+?\s*(hour|hours|hr|hrs)", lower)
+    if m:
+        return _dt_to_ts(anchor_dt - timedelta(hours=int(m.group(1))))
+    m = re.search(r"(\d+)\s*\+?\s*(day|days)", lower)
+    if m:
+        return _dt_to_ts(anchor_dt - timedelta(days=int(m.group(1))))
+    m = re.search(r"(\d+)\s*\+?\s*(week|weeks)", lower)
+    if m:
+        return _dt_to_ts(anchor_dt - timedelta(weeks=int(m.group(1))))
+    m = re.search(r"(\d+)\s*\+?\s*(month|months)", lower)
+    if m:
+        return _dt_to_ts(anchor_dt - timedelta(days=30 * int(m.group(1))))
+
+    return anchor_ts
+
+
+def _job_key(j: dict) -> str:
+    return j.get("url") or f"{j.get('title', '')}{j.get('company', '')}"
+
+
 _CACHE_STRIP_FIELDS = ("_cache_role", "_cache_site", "keyword_score", "total_score", "ai_score", "reason")
 
 
@@ -753,24 +914,53 @@ def save_cache_entry(role: str, site: str, city: str, state: str, country: str,
     key = _cache_key(role, site, city, state, country, internship_mode, hours_old, is_remote)
     with _write_lock:
         with _get_conn() as (conn, cur):
+            # Load the existing entry even when not keep_larger: we need each
+            # job's persisted first_seen/posted_at_ts so re-scraping never
+            # resets the freshness clock (otherwise empty date_posted jobs
+            # would look fresh forever).
+            cur.execute(
+                "SELECT jobs_json, scraped_at FROM job_cache WHERE role=? AND site=? AND city=? AND state=? AND country=? AND internship_mode=? AND hours_old=? AND is_remote=?",
+                key,
+            )
+            row = cur.fetchone()
+            existing = []
+            if row:
+                try:
+                    existing = json.loads(row["jobs_json"]) or []
+                except (json.JSONDecodeError, TypeError):
+                    existing = []
+            if not isinstance(existing, list):
+                existing = []
+            row_scraped_at = (row["scraped_at"] if row else "") or _now()
+
+            for j in existing:
+                if not j.get("first_seen"):
+                    j["first_seen"] = row_scraped_at
+                if j.get("posted_at_ts") is None:
+                    j["posted_at_ts"] = parse_posted_ts(
+                        j.get("date_posted") or j.get("posted_at") or "", j["first_seen"]
+                    )
+            existing_by_key = {_job_key(j): j for j in existing}
+
             # Merge new jobs into existing entry — dedup by URL so the cache
             # accumulates valid jobs across runs instead of replacing.
-            existing = []
-            if keep_larger:
-                cur.execute(
-                    "SELECT jobs_json FROM job_cache WHERE role=? AND site=? AND city=? AND state=? AND country=? AND internship_mode=? AND hours_old=? AND is_remote=?",
-                    key,
-                )
-                row = cur.fetchone()
-                if row:
-                    try:
-                        existing = json.loads(row["jobs_json"])
-                    except (json.JSONDecodeError, TypeError):
-                        existing = []
-            merged = {j.get("url") or f"{j.get('title','')}{j.get('company','')}": j
-                      for j in existing}
+            base = existing if keep_larger else []
+            merged = {_job_key(j): j for j in base}
             for j in clean:
-                merged[j.get("url") or f"{j.get('title','')}{j.get('company','')}"] = j
+                k = _job_key(j)
+                prev = existing_by_key.get(k) or {}
+                j = dict(j)
+                j["first_seen"] = prev.get("first_seen") or _now()
+                prev_date = (prev.get("date_posted") or prev.get("posted_at") or "").strip()
+                new_date = (j.get("date_posted") or j.get("posted_at") or "").strip()
+                # Preserve the original timestamp (a job reposted later should not
+                # look fresh) unless the first sighting had no real date and a
+                # real one has since appeared.
+                if prev.get("posted_at_ts") is not None and (prev_date or not new_date):
+                    j["posted_at_ts"] = prev["posted_at_ts"]
+                else:
+                    j["posted_at_ts"] = parse_posted_ts(new_date, j["first_seen"])
+                merged[k] = j
             clean = list(merged.values())
             if max_jobs and max_jobs > 0 and len(clean) > max_jobs:
                 clean = clean[-max_jobs:]
@@ -928,6 +1118,292 @@ def gc_job_cache(max_age_hours: int = 336, max_entries: int = 50000) -> None:
                 (max_entries,),
             )
             conn.commit()
+
+
+# ── Old-Job Archive (move >fresh-window jobs out of job_cache) ──
+
+
+def _archive_stat() -> dict:
+    with _get_conn() as (conn, cur):
+        cur.execute("SELECT COUNT(*) FROM job_archive")
+        archived = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM job_cache")
+        cache_rows = cur.fetchone()[0]
+        cur.execute("SELECT MIN(posted_at_ts), MAX(posted_at_ts) FROM job_archive")
+        row = cur.fetchone()
+        cur.execute("SELECT id, filename, rows, created_at, cleared_at FROM archive_exports ORDER BY id DESC LIMIT 1")
+        exp = cur.fetchone()
+    return {
+        "archived_jobs": archived,
+        "cache_rows": cache_rows,
+        "oldest_posted_ts": row[0],
+        "newest_posted_ts": row[1],
+        "last_export": dict(exp) if exp else None,
+    }
+
+
+def archive_stale_cache_jobs(fresh_days: int | None = None, min_jobs: int | None = None,
+                             batch_size: int | None = None) -> dict:
+    """Move jobs older than ``fresh_days`` out of ``job_cache`` into
+    ``job_archive``.
+
+    Per cache entry:
+    - no old jobs                -> skip
+    - 0 fresh remain             -> evict all old (fully-stale entry)
+    - > min_jobs fresh remain    -> evict old (Option B)
+    - 1..min_jobs fresh remain   -> keep the entry intact
+
+    Jobs are deduped by URL in the archive. The cache row is rewritten only
+    after the archive insert commits, so a failed pass never loses data.
+    """
+    import config
+
+    fresh_days = _fresh_window_days() if fresh_days is None else int(fresh_days)
+    min_jobs = _min_jobs() if min_jobs is None else int(min_jobs)
+    batch_size = max(1, int(getattr(config, "ARCHIVE_BATCH_SIZE", 100))) if batch_size is None else max(1, int(batch_size))
+    cutoff = _dt_to_ts(datetime.utcnow() - timedelta(days=fresh_days))
+
+    scanned = archived = rewritten = emptied = skipped = deduped = 0
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            # Page through entries so a huge first pass never loads every
+            # jobs_json blob into memory at once.
+            last_id = 0
+            while True:
+                cur.execute(
+                    "SELECT id, role, site, city, state, country, internship_mode, hours_old, "
+                    "is_remote, jobs_json, scraped_at FROM job_cache WHERE id > ? "
+                    "ORDER BY id LIMIT ?",
+                    (last_id, batch_size),
+                )
+                rows = cur.fetchall()
+                if not rows:
+                    break
+                for row in rows:
+                    last_id = row["id"]
+                    scanned += 1
+                    try:
+                        jobs = json.loads(row["jobs_json"]) or []
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+                    if not isinstance(jobs, list) or not jobs:
+                        continue
+
+                    old, fresh, keep = [], [], []
+                    for j in jobs:
+                        if not (j.get("url") or "").strip():
+                            # Cannot archive without a URL; retain it instead of
+                            # silently dropping data.
+                            keep.append(j)
+                            continue
+                        ts = j.get("posted_at_ts")
+                        if ts is None:
+                            j = dict(j)
+                            j["posted_at_ts"] = parse_posted_ts(
+                                j.get("date_posted") or j.get("posted_at") or "",
+                                j.get("first_seen") or row["scraped_at"],
+                            )
+                            ts = j["posted_at_ts"]
+                        (fresh if ts >= cutoff else old).append(j)
+
+                    if not old:
+                        continue
+                    if len(fresh) == 0:
+                        evict = old          # fully stale
+                    elif len(fresh) > min_jobs:
+                        evict = old          # Option B
+                    else:
+                        skipped += 1
+                        continue
+
+                    now_iso = _now()
+                    for j in evict:
+                        url = j.get("url") or ""
+                        if not url:
+                            continue
+                        tags = j.get("tags", [])
+                        if not isinstance(tags, str):
+                            tags = json.dumps(tags, ensure_ascii=False)
+                        cur.execute(
+                            """INSERT OR IGNORE INTO job_archive
+                               (url, title, company, location, description, tags, salary,
+                                experience_level, date_posted, posted_at_ts, first_seen,
+                                company_url, job_level, role, site, city, state, country,
+                                internship_mode, hours_old, is_remote, source_scraped_at, archived_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (
+                                url,
+                                j.get("title", ""),
+                                j.get("company", ""),
+                                j.get("location", ""),
+                                j.get("description", "") or "",
+                                tags,
+                                j.get("salary", "") or "",
+                                j.get("experience_level"),
+                                j.get("date_posted") or j.get("posted_at") or "",
+                                j.get("posted_at_ts"),
+                                j.get("first_seen", ""),
+                                j.get("company_url", ""),
+                                j.get("job_level", ""),
+                                row["role"], row["site"], row["city"], row["state"], row["country"],
+                                1 if row["internship_mode"] else 0,
+                                row["hours_old"],
+                                1 if row["is_remote"] else 0,
+                                row["scraped_at"],
+                                now_iso,
+                            ),
+                        )
+                        if cur.rowcount > 0:
+                            archived += 1
+                        else:
+                            deduped += 1
+
+                    retained = fresh + keep
+                    if retained:
+                        cur.execute(
+                            "UPDATE job_cache SET jobs_json = ?, job_count = ? WHERE id = ?",
+                            (json.dumps(retained, ensure_ascii=False), len(retained), row["id"]),
+                        )
+                        rewritten += 1
+                    else:
+                        cur.execute("DELETE FROM job_cache WHERE id = ?", (row["id"],))
+                        emptied += 1
+
+                conn.commit()
+            conn.commit()
+
+    return {
+        "scanned": scanned,
+        "archived": archived,
+        "deduped": deduped,
+        "rewritten": rewritten,
+        "emptied": emptied,
+        "skipped_thin": skipped,
+        "fresh_days": fresh_days,
+        "min_jobs": min_jobs,
+    }
+
+
+def _archive_export_dir() -> str:
+    import config
+
+    dest_dir = getattr(config, "ARCHIVE_EXPORT_DIR", "archive_exports")
+    if not os.path.isabs(dest_dir):
+        dest_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), dest_dir)
+    return os.path.abspath(dest_dir)
+
+
+def export_job_archive(dest_dir: str = "") -> dict:
+    """Write ``job_archive`` as gzipped JSONL, record the export, and return
+    its metadata. Nothing is deleted — clearing is a separate explicit call."""
+    dest_dir = dest_dir or _archive_export_dir()
+    os.makedirs(dest_dir, exist_ok=True)
+
+    stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"job_archive_{stamp}.jsonl.gz"
+    path = os.path.join(dest_dir, filename)
+    digest = hashlib.sha256()
+    rows = 0
+
+    with _get_conn() as (conn, cur):
+        cur.execute("SELECT * FROM job_archive ORDER BY id")
+        with gzip.open(path, "wt", encoding="utf-8") as f:
+            for row in cur:
+                line = json.dumps(_json_safe(dict(row)), ensure_ascii=False, allow_nan=False)
+                f.write(line + "\n")
+                digest.update(line.encode("utf-8"))
+                rows += 1
+
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            cur.execute(
+                "INSERT INTO archive_exports (filename, rows, sha256, created_at) VALUES (?, ?, ?, ?)",
+                (filename, rows, digest.hexdigest(), _now()),
+            )
+            conn.commit()
+            export_id = cur.lastrowid
+
+    return {
+        "id": export_id,
+        "filename": filename,
+        "path": path,
+        "size_bytes": os.path.getsize(path),
+        "rows": rows,
+        "sha256": digest.hexdigest(),
+    }
+
+
+def list_archive_exports(limit: int = 20) -> list[dict]:
+    with _get_conn() as (conn, cur):
+        cur.execute(
+            "SELECT id, filename, rows, sha256, created_at, cleared_at "
+            "FROM archive_exports ORDER BY id DESC LIMIT ?",
+            (int(limit),),
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+    base = _archive_export_dir()
+    for r in rows:
+        path = os.path.join(base, os.path.basename(r["filename"]))
+        r["size_bytes"] = os.path.getsize(path) if os.path.isfile(path) else 0
+    return rows
+
+
+def clear_job_archive(export_id: int | None = None) -> dict:
+    """Delete all archived jobs, but only if a matching export was recorded.
+
+    Refuses when the archive row count no longer equals the latest (or the
+    given) export's recorded row count — re-export first."""
+    with _write_lock:
+        with _get_conn() as (conn, cur):
+            if export_id is not None:
+                cur.execute("SELECT id, rows FROM archive_exports WHERE id = ?", (export_id,))
+            else:
+                cur.execute("SELECT id, rows FROM archive_exports ORDER BY id DESC LIMIT 1")
+            exp = cur.fetchone()
+            if not exp:
+                return {"ok": False, "error": "No export recorded; export the archive first"}
+            cur.execute("SELECT COUNT(*) FROM job_archive")
+            current = cur.fetchone()[0]
+            if current != exp["rows"]:
+                return {
+                    "ok": False,
+                    "error": (
+                        f"Archive has {current} rows but export #{exp['id']} recorded "
+                        f"{exp['rows']}; export again before clearing"
+                    ),
+                }
+            cur.execute("DELETE FROM job_archive")
+            cur.execute("UPDATE archive_exports SET cleared_at = ? WHERE id = ?", (_now(), exp["id"]))
+            conn.commit()
+    return {"ok": True, "cleared": current, "export_id": exp["id"]}
+
+
+def vacuum_db() -> dict:
+    """Reclaim disk after the archive is cleared (VACUUM needs an exclusive
+    lock and free temp space roughly equal to the DB size). Returns
+    ``{"ok": False, "error": ...}`` if the DB stays locked."""
+    before = os.path.getsize(_DB_PATH) if os.path.isfile(_DB_PATH) else 0
+    with _write_lock:
+        conn = sqlite3.connect(_DB_PATH, timeout=30)
+        try:
+            conn.execute("PRAGMA busy_timeout=30000")
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            conn.execute("VACUUM")
+        except sqlite3.OperationalError as e:
+            return {"ok": False, "error": f"VACUUM failed: {e}"}
+        finally:
+            conn.close()
+    after = os.path.getsize(_DB_PATH) if os.path.isfile(_DB_PATH) else 0
+    return {
+        "ok": True,
+        "size_before_mb": round(before / 1048576, 2),
+        "size_after_mb": round(after / 1048576, 2),
+        "reclaimed_mb": round((before - after) / 1048576, 2),
+    }
+
+
+def job_archive_stats() -> dict:
+    return _archive_stat()
 
 
 # ── Prewarm Queue (authoritative scheduler grid, persisted) ──
@@ -1285,6 +1761,8 @@ def get_session(sid: str) -> Optional[dict]:
 # ── Jobs ──
 
 def _job_to_row(sid: str, job: dict) -> dict:
+    created_at = _now()
+    date_posted = job.get("posted_at", job.get("date_posted", ""))
     return {
         "session_id": sid,
         "title": job.get("title", ""),
@@ -1300,11 +1778,12 @@ def _job_to_row(sid: str, job: dict) -> dict:
         "salary": job.get("salary"),
         "experience_level": job.get("experience_level"),
         "is_raw": 0,
-        "date_posted": job.get("posted_at", job.get("date_posted", "")),
+        "date_posted": date_posted,
+        "posted_at_ts": job.get("posted_at_ts") or parse_posted_ts(date_posted, created_at),
         "company_url": job.get("company_url", ""),
         "job_level": job.get("job_level", ""),
         "yoe_bucket": job.get("yoe_bucket", ""),
-        "created_at": _now(),
+        "created_at": created_at,
     }
 
 
@@ -1315,8 +1794,8 @@ def set_filtered_jobs(sid: str, jobs: list):
             rows = [_job_to_row(sid, j) for j in jobs]
             if rows:
                 cur.executemany("""INSERT INTO jobs
-                    (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, date_posted, company_url, job_level, yoe_bucket, created_at)
-                    VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :date_posted, :company_url, :job_level, :yoe_bucket, :created_at)""", rows)
+                    (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, date_posted, posted_at_ts, company_url, job_level, yoe_bucket, created_at)
+                    VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :date_posted, :posted_at_ts, :company_url, :job_level, :yoe_bucket, :created_at)""", rows)
             conn.commit()
             _job_count_cache.pop(sid, None)
 
@@ -1326,8 +1805,8 @@ def add_filtered_job(sid: str, job: dict):
         with _get_conn() as (conn, cur):
             row = _job_to_row(sid, job)
             cur.execute("""INSERT INTO jobs
-                (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, date_posted, company_url, job_level, yoe_bucket, created_at)
-                VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :date_posted, :company_url, :job_level, :yoe_bucket, :created_at)""", row)
+                (session_id, title, company, location, url, description, tags, ai_score, keyword_score, total_score, reason, salary, experience_level, is_raw, date_posted, posted_at_ts, company_url, job_level, yoe_bucket, created_at)
+                VALUES (:session_id, :title, :company, :location, :url, :description, :tags, :ai_score, :keyword_score, :total_score, :reason, :salary, :experience_level, :is_raw, :date_posted, :posted_at_ts, :company_url, :job_level, :yoe_bucket, :created_at)""", row)
             conn.commit()
             _job_count_cache.pop(sid, None)
 
@@ -1385,6 +1864,8 @@ def set_raw_jobs(sid: str, jobs: list):
             cur.execute("DELETE FROM jobs WHERE session_id = ? AND is_raw = 1", (sid,))
             rows = []
             for job in jobs:
+                created_at = _now()
+                date_posted = job.get("posted_at", job.get("date_posted", ""))
                 rows.append({
                     "session_id": sid,
                     "title": job.get("title", ""),
@@ -1400,21 +1881,22 @@ def set_raw_jobs(sid: str, jobs: list):
                     "salary": job.get("salary"),
                     "experience_level": job.get("experience_level"),
                     "is_raw": 1,
-                    "date_posted": job.get("posted_at", job.get("date_posted", "")),
+                    "date_posted": date_posted,
+                    "posted_at_ts": job.get("posted_at_ts") or parse_posted_ts(date_posted, created_at),
                     "company_url": job.get("company_url", ""),
                     "job_level": job.get("job_level", ""),
                     "yoe_bucket": job.get("yoe_bucket", ""),
                     "matched_role": job.get("_matched_role", ""),
-                    "created_at": _now(),
+                    "created_at": created_at,
                 })
             if rows:
                 cur.executemany("""INSERT INTO jobs
                     (session_id, title, company, location, url, description, tags,
                      ai_score, keyword_score, total_score, reason, salary,
-                     experience_level, is_raw, date_posted, company_url, job_level, yoe_bucket, matched_role, created_at)
+                     experience_level, is_raw, date_posted, posted_at_ts, company_url, job_level, yoe_bucket, matched_role, created_at)
                     VALUES (:session_id, :title, :company, :location, :url, :description, :tags,
                             :ai_score, :keyword_score, :total_score, :reason, :salary,
-                            :experience_level, :is_raw, :date_posted, :company_url, :job_level, :yoe_bucket, :matched_role, :created_at)""", rows)
+                            :experience_level, :is_raw, :date_posted, :posted_at_ts, :company_url, :job_level, :yoe_bucket, :matched_role, :created_at)""", rows)
             conn.commit()
 
 
@@ -1422,7 +1904,7 @@ def get_raw_jobs(sid: str) -> list[dict]:
     with _get_conn() as (conn, cur):
         cur.execute(
             "SELECT * FROM jobs WHERE session_id = ? AND is_raw = 1 "
-            "ORDER BY CASE WHEN date_posted = '' THEN 1 ELSE 0 END, date_posted DESC, created_at DESC",
+            "ORDER BY COALESCE(posted_at_ts, 0) DESC, created_at DESC",
             (sid,))
         rows = cur.fetchall()
         jobs = []
@@ -1432,6 +1914,8 @@ def get_raw_jobs(sid: str) -> list[dict]:
                 d["tags"] = json.loads(d["tags"])
             except (json.JSONDecodeError, TypeError):
                 d["tags"] = []
+            if d.get("posted_at_ts") is None:
+                d["posted_at_ts"] = parse_posted_ts(d.get("date_posted") or "", d.get("created_at") or "")
             del d["id"]
             del d["session_id"]
             del d["is_raw"]
@@ -1439,7 +1923,14 @@ def get_raw_jobs(sid: str) -> list[dict]:
             if "matched_role" in d:
                 d["_matched_role"] = d.pop("matched_role")
             jobs.append(d)
-        return jobs
+
+    # Show only jobs posted within the fresh window. If that leaves fewer than
+    # MIN_JOBS results, show everything for this search instead.
+    cutoff = _dt_to_ts(datetime.utcnow() - timedelta(days=_fresh_window_days()))
+    fresh = [j for j in jobs if (j.get("posted_at_ts") or 0) >= cutoff]
+    if len(fresh) >= _min_jobs():
+        return fresh
+    return jobs
 
 
 def update_raw_job_score(sid: str, url: str, ai_score, keyword_score, total_score, reason: str = ""):

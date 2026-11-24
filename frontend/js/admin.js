@@ -1132,6 +1132,7 @@ function switchTab(name, group = "main") {
   document.querySelectorAll(`.tabs[data-group="${group}"] .tab`).forEach(t => t.classList.toggle("active", t.dataset.tab === name));
   document.querySelectorAll(`.tab-content[data-group="${group}"]`).forEach(c => c.classList.toggle("active", c.dataset.tab === name));
   if (group === "db" || (group === "main" && name === "db")) loadDbReferrals();
+  if (group === "db") loadJobArchive();
 }
 
 // ── Database ──
@@ -1284,6 +1285,114 @@ async function downloadBackup() {
   }
 }
 
+// ── Old-Job Archive ──
+function _fmtMB(bytes) { return ((bytes || 0) / 1048576).toFixed(1) + " MB"; }
+
+async function loadJobArchive() {
+  const info = document.getElementById("archiveInfo");
+  if (!info) return;
+  try {
+    const r = await adminApi("/api/admin/job-archive/info", { cache: "no-cache" });
+    if (!r) return;
+    const d = await r.json();
+    if (d.error) { info.textContent = "Failed to load"; return; }
+    const last = (d.exports && d.exports[0]) || null;
+    info.innerHTML =
+      `Archived jobs: <strong>${(d.archived_jobs || 0).toLocaleString()}</strong> \u00b7 ` +
+      `Cache rows: <strong>${(d.cache_rows || 0).toLocaleString()}</strong>` +
+      (last
+        ? `<br>Last export: ${_esc(last.filename)} \u00b7 ${(last.rows || 0).toLocaleString()} rows \u00b7 ${_fmtMB(last.size_bytes)} \u00b7 ${formatDate(last.created_at)}${last.cleared_at ? " \u00b7 cleared" : ""}`
+        : `<br>No export yet`);
+  } catch {
+    info.textContent = "Failed to load";
+  }
+}
+
+async function exportJobArchive() {
+  const btn = document.getElementById("archiveExportBtn");
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-spinner"></span> Exporting...';
+  const result = document.getElementById("archiveResult");
+  if (result) { result.textContent = ""; result.className = "db-result"; }
+  try {
+    const r = await adminApi("/api/admin/job-archive/export", { method: "POST" });
+    if (!r) return;
+    const d = await r.json();
+    if (!d.ok) {
+      if (result) { result.className = "db-result error"; result.textContent = d.error || "Export failed"; }
+      return;
+    }
+    const ok = await window.downloadAuthed(d.download_url, d.filename);
+    if (result) {
+      result.className = ok ? "db-result success" : "db-result error";
+      result.textContent = ok
+        ? `Exported ${(d.rows || 0).toLocaleString()} jobs (${_fmtMB(d.size_bytes)})`
+        : `Export recorded, but the download failed (${d.filename}). Retry before clearing.`;
+    }
+    loadJobArchive();
+  } catch {
+    if (result) { result.className = "db-result error"; result.textContent = "Network error"; }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+async function clearJobArchive() {
+  if (!confirm("Delete ALL archived jobs?\n\nOnly do this after the export has downloaded and been verified. This cannot be undone.")) return;
+  const btn = document.getElementById("archiveClearBtn");
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-spinner"></span> Clearing...';
+  const result = document.getElementById("archiveResult");
+  if (result) { result.textContent = ""; result.className = "db-result"; }
+  try {
+    const r = await adminApi("/api/admin/job-archive/clear", { method: "POST" });
+    if (!r) return;
+    const d = await r.json();
+    if (d.ok) {
+      if (result) { result.className = "db-result success"; result.textContent = `Cleared ${(d.cleared || 0).toLocaleString()} archived jobs`; }
+      loadJobArchive(); loadDbInfo();
+    } else if (result) {
+      result.className = "db-result error";
+      result.textContent = d.error || "Clear failed";
+    }
+  } catch {
+    if (result) { result.className = "db-result error"; result.textContent = "Network error"; }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+async function vacuumDB() {
+  if (!confirm("Rebuild the database file to reclaim disk?\n\nThis can take a while and needs free temp space roughly equal to the DB size. Run it off-peak.")) return;
+  const btn = document.getElementById("archiveVacuumBtn");
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-spinner"></span> Vacuuming...';
+  const result = document.getElementById("archiveResult");
+  if (result) { result.textContent = ""; result.className = "db-result"; }
+  try {
+    const r = await adminApi("/api/admin/job-archive/vacuum", { method: "POST" });
+    if (!r) return;
+    const d = await r.json();
+    if (result) {
+      result.className = d.ok ? "db-result success" : "db-result error";
+      result.textContent = d.ok
+        ? `Reclaimed ${d.reclaimed_mb} MB (now ${d.size_after_mb} MB)`
+        : (d.error || "Vacuum failed");
+    }
+    loadJobArchive(); loadDbInfo();
+  } catch {
+    if (result) { result.className = "db-result error"; result.textContent = "Network error"; }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
 // ── Resume Upload ──
 window.handleResumeFiles = function handleResumeFiles(files) {
   const count = document.getElementById("resumeFileCount");
@@ -1380,6 +1489,12 @@ window.loadDbReferrals = loadDbReferrals;
 window.restoreDB = restoreDB;
 window.mergeDB = mergeDB;
 window.downloadBackup = downloadBackup;
+// admin.js is loaded as a module, so inline onclick handlers only see functions
+// explicitly attached to window.
+window.loadJobArchive = loadJobArchive;
+window.exportJobArchive = exportJobArchive;
+window.clearJobArchive = clearJobArchive;
+window.vacuumDB = vacuumDB;
 
 // ── Init ──
 // The first admin API call decides the page: 200 = dashboard, 401/403 =
@@ -1403,6 +1518,7 @@ loadRegistrations();
 loadVisits();
 loadComboUsage();
 loadDbInfo();
+loadJobArchive();
 loadCacheStats();
 loadRoles();
 loadServerStats();

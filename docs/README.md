@@ -6,6 +6,7 @@
   - [JWT_AUTH.md](architecture/JWT_AUTH.md) — JWT auth flow walkthrough
 - **`planning/`** — past plans, proposals and task lists (historical)
   - PLAN.md, PENDING_TASKS.md, DUAL_TAB_PLAN.md, SIMPLIFY_PLAN.md, jwt_auth_plan.md, loadtest-plan-2026-09-07.md, REFERRAL_MARKETPLACE.md, stop_on_old.md
+  - [resume_keyword_extraction_plan.md](planning/resume_keyword_extraction_plan.md) — resume keyword recall: 2-page PDF cap, ignored DOCX tables, prompt-bound 20-keyword ceiling
 - **`deployment/`** — ops guides and records
   - [DEPLOYMENT_RUNBOOK.md](deployment/DEPLOYMENT_RUNBOOK.md) — **current** production deploy/rollback (Oracle box)
   - jwt_deploy_runbook.md — older JWT-specific runbook (superseded by the above)

@@ -1,4 +1,3 @@
-import io
 import json
 import os
 import platform
@@ -7,8 +6,9 @@ import tempfile
 import zipfile
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 from api.deps import get_current_user
 from db import is_admin_user
@@ -654,8 +654,19 @@ async def admin_db_referrals(user: dict = Depends(get_current_user)):
     return {"referrals": rows}
 
 
+def _remove_file(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
 @router.get("/backup")
 async def admin_download_backup(user: dict = Depends(get_current_user)):
+    """Stream a fresh point-in-time snapshot of the DB (plus resumes) as a zip.
+
+    Built on disk rather than in memory so a large DB doesn't spike RAM; the
+    temp files are removed in a background task after the download finishes."""
     if not is_admin_user(user["email"]):
         return JSONResponse(status_code=403, content={"error": "Unauthorized"})
     from db import _get_conn
@@ -663,10 +674,12 @@ async def admin_download_backup(user: dict = Depends(get_current_user)):
     resumes_dir = _resumes_dir()
     has_resumes = os.path.isdir(resumes_dir) and bool(os.listdir(resumes_dir))
 
-    snapshot = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    snapshot.close()
+    fd, snapshot = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    fd, zip_path = tempfile.mkstemp(suffix=".zip")
+    os.close(fd)
     try:
-        dest = sqlite3.connect(snapshot.name)
+        dest = sqlite3.connect(snapshot)
         try:
             with _get_conn() as (src, cur):
                 src.backup(dest)
@@ -679,29 +692,27 @@ async def admin_download_backup(user: dict = Depends(get_current_user)):
         if not tables and not has_resumes:
             raise HTTPException(404, "Nothing to back up")
 
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            with open(snapshot.name, "rb") as f:
-                zf.writestr("job_agent.db", f.read())
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(snapshot, "job_agent.db")
             if has_resumes:
                 for root, _, files in os.walk(resumes_dir):
                     for fname in files:
                         fpath = os.path.join(root, fname)
                         arcname = os.path.relpath(fpath, resumes_dir)
                         zf.write(fpath, os.path.join("resumes", arcname))
-        buf.seek(0)
 
         filename = f"jobawn-backup-{date.today().isoformat()}.zip"
-        return StreamingResponse(
-            buf,
+        return FileResponse(
+            zip_path,
             media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            filename=filename,
+            background=BackgroundTask(_remove_file, zip_path),
         )
+    except Exception:
+        _remove_file(zip_path)
+        raise
     finally:
-        try:
-            os.unlink(snapshot.name)
-        except Exception:
-            pass
+        _remove_file(snapshot)
 
 
 @router.post("/db/restore")
@@ -1113,3 +1124,97 @@ async def get_server_stats():
         "hostname": platform.node(),
         "python_version": platform.python_version(),
     }
+
+
+# ── Old-job archive (manual cold staging) ──
+
+
+def _archive_export_path(filename: str) -> str:
+    from db import _archive_export_dir
+
+    base = _archive_export_dir()
+    path = os.path.abspath(os.path.join(base, os.path.basename(filename)))
+    if os.path.dirname(path) != base:
+        raise HTTPException(400, "Invalid export filename")
+    return path
+
+
+@router.get("/job-archive/info")
+async def admin_job_archive_info(user: dict = Depends(get_current_user)):
+    if not is_admin_user(user["email"]):
+        return JSONResponse(status_code=403, content={"error": "Unauthorized"})
+    from db import job_archive_stats, list_archive_exports
+
+    return {"ok": True, **job_archive_stats(), "exports": list_archive_exports(limit=10)}
+
+
+@router.get("/job-archive/exports")
+async def admin_job_archive_exports(user: dict = Depends(get_current_user)):
+    if not is_admin_user(user["email"]):
+        return JSONResponse(status_code=403, content={"error": "Unauthorized"})
+    from db import list_archive_exports
+
+    return {"ok": True, "exports": list_archive_exports(limit=50)}
+
+
+@router.post("/job-archive/export")
+async def admin_job_archive_export(user: dict = Depends(get_current_user)):
+    if not is_admin_user(user["email"]):
+        return JSONResponse(status_code=403, content={"error": "Unauthorized"})
+    from db import export_job_archive
+
+    meta = export_job_archive()
+    if not meta.get("rows"):
+        return {"ok": False, "error": "Archive is empty; nothing to export"}
+    return {
+        "ok": True,
+        "id": meta["id"],
+        "filename": meta["filename"],
+        "rows": meta["rows"],
+        "size_bytes": meta["size_bytes"],
+        "sha256": meta["sha256"],
+        "download_url": f"/api/admin/job-archive/download/{meta['id']}",
+    }
+
+
+@router.get("/job-archive/download/{export_id}")
+async def admin_job_archive_download(export_id: int, user: dict = Depends(get_current_user)):
+    if not is_admin_user(user["email"]):
+        return JSONResponse(status_code=403, content={"error": "Unauthorized"})
+    from db import list_archive_exports
+
+    rec = next((e for e in list_archive_exports(limit=200) if e["id"] == export_id), None)
+    if not rec:
+        raise HTTPException(404, "Export not found")
+    path = _archive_export_path(rec["filename"])
+    if not os.path.isfile(path):
+        raise HTTPException(410, "Export file is gone; export the archive again")
+    return FileResponse(
+        path,
+        media_type="application/gzip",
+        filename=rec["filename"],
+        headers={"X-Archive-Rows": str(rec["rows"]), "X-Archive-Sha256": rec["sha256"]},
+    )
+
+
+@router.post("/job-archive/clear")
+async def admin_job_archive_clear(user: dict = Depends(get_current_user),
+                                  export_id: int | None = None):
+    if not is_admin_user(user["email"]):
+        return JSONResponse(status_code=403, content={"error": "Unauthorized"})
+    from db import clear_job_archive
+
+    result = clear_job_archive(export_id)
+    if not result.get("ok"):
+        return JSONResponse(status_code=409, content=result)
+    return result
+
+
+@router.post("/job-archive/vacuum")
+async def admin_job_archive_vacuum(user: dict = Depends(get_current_user)):
+    if not is_admin_user(user["email"]):
+        return JSONResponse(status_code=403, content={"error": "Unauthorized"})
+    from db import vacuum_db
+
+    return {"ok": True, **vacuum_db()}
+

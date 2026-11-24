@@ -9,11 +9,9 @@ A DB-backed leader lock keeps only one process prewarming when multiple
 backend processes share the same database.
 """
 import os
-import gzip
 import socket
 import threading
-from datetime import datetime, date
-import tempfile
+from datetime import datetime
 
 from utils.logger import log
 
@@ -314,6 +312,16 @@ def run_prewarm() -> int:
         max_age_hours=config.CACHE_MAX_AGE_HOURS,
         max_entries=config.CACHE_MAX_ENTRIES,
     )
+    try:
+        stats = db.archive_stale_cache_jobs()
+        if stats.get("archived"):
+            log(
+                f"[ARCHIVE] moved {stats['archived']} stale jobs to job_archive "
+                f"({stats['rewritten']} entries rewritten, {stats['emptied']} emptied, "
+                f"{stats['skipped_thin']} kept thin)"
+            )
+    except Exception as e:
+        log(f"[ARCHIVE] stale-job pass failed: {e}")
     queue = get_prewarm_queue()
     limit = config.PREWARM_MAX_COMBOS_PER_RUN
     todo = []
@@ -340,42 +348,6 @@ def run_prewarm() -> int:
     log(f"[PREWARM] Warming {len(todo)} combo(s) with {config.PREWARM_WORKERS} worker(s)...")
     _run_workers(todo, config)
     return len(todo)
-
-
-def run_db_backup():
-    """Create a clean DB snapshot, gzip it, and email it."""
-    import config
-    try:
-        from db import _DB_PATH, _get_conn
-        from utils.smtp_sender import send_email_with_attachment
-
-        backup_tmp = os.path.join(tempfile.gettempdir(), f"backup_{date.today()}.db")
-        gz_tmp = backup_tmp + ".gz"
-
-        with _get_conn() as (conn, cur):
-            cur.execute(f"VACUUM INTO '{backup_tmp}'")
-
-        with open(backup_tmp, "rb") as f_in, gzip.open(gz_tmp, "wb") as f_out:
-            f_out.write(f_in.read())
-
-        gz_size_mb = round(os.path.getsize(gz_tmp) / 1048576, 2)
-        ok = send_email_with_attachment(
-            to=config.DB_BACKUP_EMAIL,
-            subject=f"JobAwn — DB Backup ({date.today()})",
-            html_body=f"<p>Attached is the database snapshot ({gz_size_mb} MB gzipped).</p>",
-            file_path=gz_tmp,
-            filename=f"job_agent_{date.today()}.db.gz",
-        )
-        log(f"[BACKUP] {'Sent' if ok else 'FAILED'} — {gz_size_mb} MB to {config.DB_BACKUP_EMAIL}")
-    except Exception as e:
-        log(f"[BACKUP] Error: {e}")
-    finally:
-        for p in (backup_tmp, gz_tmp):
-            try:
-                if os.path.isfile(p):
-                    os.remove(p)
-            except Exception:
-                pass
 
 
 def enqueue_confirm_reminders():
@@ -765,12 +737,6 @@ def start_scheduler():
         id="prewarm",
         replace_existing=True,
     )
-    _scheduler.add_job(
-        run_db_backup,
-        IntervalTrigger(hours=48),
-        id="db_backup",
-        replace_existing=True,
-    )
     _scheduler.start()
     log(f"[PREWARM] Scheduler started — runs every {config.SCHEDULER_INTERVAL_MINUTES} minutes")
     _start_heartbeat_loop()
@@ -788,15 +754,6 @@ def start_scheduler():
             threading.Event().wait(45)
 
     threading.Thread(target=_boot_warmup, daemon=True).start()
-
-    def _boot_backup():
-        threading.Event().wait(30)
-        try:
-            run_db_backup()
-        except Exception as e:
-            log(f"[BACKUP] Boot backup failed: {e}")
-
-    threading.Thread(target=_boot_backup, daemon=True).start()
 
 
 def shutdown_scheduler():

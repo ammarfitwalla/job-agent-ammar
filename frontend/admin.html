@@ -610,7 +610,26 @@ tr.clickable:hover td { background: #f8fafc; }
           <span class="db-result" id="dbRestoreResult"></span>
           <span class="db-result" id="dbMergeResult"></span>
           <span class="db-result" id="dbBackupResult"></span>
+          <p style="margin:12px 0 0;font-size:13px;color:var(--text-muted)">
+            Download Backup creates a fresh snapshot and downloads it as a .zip (job_agent.db + resumes). Nothing is emailed — unzip it and use Upload &amp; Restore to roll back.
+          </p>
         </div>
+      </div>
+
+      <div class="chart-box db-card" style="margin-top:24px">
+        <h3>Old-Job Archive</h3>
+        <div class="db-info" id="archiveInfo">—</div>
+        <div class="db-actions">
+          <button class="btn btn-primary" id="archiveExportBtn" onclick="exportJobArchive()">
+            <svg class="btn-icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+            Export archive (.jsonl.gz)
+          </button>
+          <button class="btn btn-secondary" id="archiveClearBtn" onclick="clearJobArchive()">Clear archive</button>
+          <button class="btn btn-secondary" id="archiveVacuumBtn" onclick="vacuumDB()">Vacuum DB</button>
+          <button class="btn btn-secondary" onclick="loadJobArchive()">Refresh</button>
+          <span class="db-result" id="archiveResult"></span>
+        </div>
+        <p style="margin:12px 0 0;font-size:13px;color:var(--text-muted)">Jobs older than 14 days are moved here by the scheduler. Download and verify the export first, then clear. Vacuum reclaims disk and needs temporary free space roughly equal to the DB size.</p>
       </div>
 
       <div class="chart-box db-card" style="margin-top:24px">

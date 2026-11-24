@@ -585,7 +585,6 @@ Both install Chromium, Playwright, Python requirements.
 | `ADZUNA_APP_ID` / `ADZUNA_KEY` | Adzuna API credentials | — |
 | `EMAIL_HOST/PORT/USER/PASSWORD/TO` | SMTP (OTP codes, reports) | Gmail defaults |
 | `SENDER_EMAIL` | Sender for emails | — |
-| `DB_BACKUP_EMAIL` | Receives DB backups | — |
 | `JWT_SECRET` | JWT signing secret (overrides config) | hardcoded in config.py |
 | `JWT_ALLOW_DEV_SECRET` | `"1"` enables dev secret + open docs | `""` |
 | `JWT_ACCESS_TOKEN_MINUTES` | Token lifetime | `1440` |

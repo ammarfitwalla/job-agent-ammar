@@ -260,6 +260,12 @@ CACHE_PREWARM_LIMIT = 30                                  # prewarm fetch/store 
 CACHE_MAX_JOBS_PER_ENTRY = 500                            # live-search cache write cap
 CACHE_MAX_AGE_HOURS = 4320                                # delete cache rows older than 180 days
 CACHE_MAX_ENTRIES = 50000                                 # row-count safety cap
+
+# ── Freshness + archive ──
+FRESH_WINDOW_DAYS = 14                                    # show/keep jobs posted within N days
+MIN_JOBS = 10                                             # below this fresh count, show all jobs
+ARCHIVE_BATCH_SIZE = 100                                  # cache entries committed per GC batch
+ARCHIVE_EXPORT_DIR = "archive_exports"                    # admin export staging dir (relative to backend/)
 CACHE_DEBUG_FANOUT = False                                # verbose country fan-out tracing (stdout + session timeline)
 
 CACHE_ROLES = ["Full Stack Developer", "Backend Developer", "Frontend Developer",

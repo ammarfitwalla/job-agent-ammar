@@ -25,6 +25,8 @@ ABBREVIATIONS = {
     "se": "software engineer",
     "sre": "site reliability engineer",
     "devops": "development operations",
+    "mlops": "machine learning operations",
+    "ops": "operations",
     "qa": "quality assurance",
     "pm": "product manager",
     "ux": "user experience",
